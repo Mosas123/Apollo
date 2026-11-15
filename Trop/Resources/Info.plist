@@ -2,11 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDisplayName</key>
+	<string>Thrum</string>
+	<key>CFBundleName</key>
+	<string>Thrum</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.686udjie.Trop.discord</string>
+			<string>com.cl0udly.Thrum.discord</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>tropdiscord</string>
