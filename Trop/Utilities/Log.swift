@@ -6,6 +6,7 @@
 //
 
 import OSLog
+@preconcurrency import SwiftyTube
 
 /// Appends log lines to Documents/log.txt (exposed as Trop/log.txt in the
 /// Files app) so issues that only show up on-device can be diagnosed without
