@@ -160,8 +160,8 @@ private final class Coordinator {
     private var isPlaying = false
     private var didReportFirstFrame = false
     private let onFirstFrame: () -> Void
-    private var backgroundObserver: NSObjectProtocol?
-    private var foregroundObserver: NSObjectProtocol?
+    nonisolated(unsafe) private var backgroundObserver: NSObjectProtocol?
+    nonisolated(unsafe) private var foregroundObserver: NSObjectProtocol?
 
     init(onFirstFrame: @escaping () -> Void) {
         self.onFirstFrame = onFirstFrame

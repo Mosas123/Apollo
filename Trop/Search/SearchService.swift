@@ -5,6 +5,7 @@
 // Created by 686udjie on 30/06/2026.
 //
 
+@preconcurrency import SwiftyTube
 import Foundation
 import GRDB
 

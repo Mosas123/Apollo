@@ -5,6 +5,7 @@
 //  Created by 686udjie on 13/07/2026.
 //
 
+@preconcurrency import SwiftyTube
 import Foundation
 
 enum HistorySource: String, CaseIterable, Sendable {

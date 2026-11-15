@@ -5,6 +5,7 @@
 //  Created by 686udjie on 03/07/2026.
 //
 
+@preconcurrency import SwiftyTube
 import SwiftUI
 
 // MARK: - View Model

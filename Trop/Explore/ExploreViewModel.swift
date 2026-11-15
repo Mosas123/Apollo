@@ -5,6 +5,7 @@
 // Created by 686udjie on 11/09/2026.
 //
 
+@preconcurrency import SwiftyTube
 import Foundation
 import SwiftUI
 

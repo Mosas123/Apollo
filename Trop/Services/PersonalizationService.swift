@@ -5,6 +5,7 @@
 //  Created by 686udjie on 01/07/2026.
 //
 
+@preconcurrency import SwiftyTube
 import Foundation
 
 actor PersonalizationService {

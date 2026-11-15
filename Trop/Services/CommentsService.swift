@@ -5,6 +5,7 @@
 //  Created by 686udjie on 05/11/2026.
 //
 
+@preconcurrency import SwiftyTube
 import Foundation
 
 enum CommentsError: LocalizedError {
