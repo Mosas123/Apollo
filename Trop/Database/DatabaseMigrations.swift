@@ -10,7 +10,7 @@ import GRDB
 
 enum DatabaseMigrations {
     /// Wraps a migration body with start/complete debug logs.
-    static func logged(_ name: String, _ block: @escaping (Database) throws -> Void) -> (Database) throws -> Void {
+    static func logged(_ name: String, _ block: @escaping @Sendable (Database) throws -> Void) -> @Sendable (Database) throws -> Void {
         { db in
             Log.db.debug("Running \(name) migration")
             try block(db)
@@ -32,7 +32,7 @@ enum DatabaseMigrations {
         }
     }
 
-    static let v1: (Database) throws -> Void = { db in
+    static let v1: @Sendable (Database) throws -> Void = { db in
         try db.create(table: "song") { t in
             t.column("id", .text).primaryKey()
             t.column("title", .text).notNull()
@@ -116,14 +116,14 @@ enum DatabaseMigrations {
         }
     }
 
-    static let v2: (Database) throws -> Void = { db in
+    static let v2: @Sendable (Database) throws -> Void = { db in
         try db.alter(table: "song") { t in
             t.add(column: "artist_name", .text)
             t.add(column: "album_name", .text)
         }
     }
 
-    static let v3: (Database) throws -> Void = logged("v3") { db in
+    static let v3: @Sendable (Database) throws -> Void = logged("v3") { db in
         try db.alter(table: "artist") { t in
             t.add(column: "channel_id", .text)
         }
@@ -163,13 +163,13 @@ enum DatabaseMigrations {
         }
     }
 
-    static let v4: (Database) throws -> Void = logged("v4") { db in
+    static let v4: @Sendable (Database) throws -> Void = logged("v4") { db in
         try db.alter(table: "playlist") { t in
             t.add(column: "thumbnail_url", .text)
         }
     }
 
-    static let v5: (Database) throws -> Void = logged("v5") { db in
+    static let v5: @Sendable (Database) throws -> Void = logged("v5") { db in
         if try db.tableExists("downloaded_track") == false {
             try createDownloadedTrackTable(db)
         } else if try db.columns(in: "downloaded_track").contains(where: { $0.name == "artist" }) == false {
@@ -180,7 +180,7 @@ enum DatabaseMigrations {
         }
     }
 
-    static let v6: (Database) throws -> Void = logged("v6") { db in
+    static let v6: @Sendable (Database) throws -> Void = logged("v6") { db in
         // Earlier schemas may have created downloaded_track with fewer columns
         // than DownloadedTrackEntity expects. Add any missing columns so inserts
         // from the app succeed on existing databases.
@@ -210,7 +210,7 @@ enum DatabaseMigrations {
         }
     }
 
-    static let v7: (Database) throws -> Void = logged("v7") { db in
+    static let v7: @Sendable (Database) throws -> Void = logged("v7") { db in
         // The existing downloaded_track table may have been created by an older
         // schema (e.g. with a file_size column) that doesn't match
         // DownloadedTrackEntity. Rebuild it to exactly match the entity,
@@ -243,7 +243,7 @@ enum DatabaseMigrations {
         }
     }
 
-    static let v8: (Database) throws -> Void = logged("v8") { db in
+    static let v8: @Sendable (Database) throws -> Void = logged("v8") { db in
         // Songs pinned to the homepage Speed Dial.
         if try !db.tableExists("speed_dial") {
             try db.create(table: "speed_dial") { t in

@@ -17,7 +17,7 @@ struct MusixmatchProvider: LyricsProvider {
     private let tokenURL = "https://apic-appmobile.musixmatch.com/ws/1.1/token.get?app_id=mac-ios-v2.0&"
 
     // Guest token is fetched once and reused across requests.
-    private static var guestToken: String?
+    nonisolated(unsafe) private static var guestToken: String?
 
     func fetch(query: LyricsQuery) async throws -> [LyricLine] {
         let token = try await fetchToken()

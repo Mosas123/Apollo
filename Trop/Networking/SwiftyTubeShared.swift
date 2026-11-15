@@ -5,7 +5,7 @@
 //  Created by 686udjie on 03/10/2026.
 //
 
-@_exported import SwiftyTube
+@preconcurrency @_exported import SwiftyTube
 
 /// Shared InnerTube client for the music service (replaces `InnerTube.shared`).
 extension InnerTubeClient {

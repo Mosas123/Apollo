@@ -11,7 +11,7 @@ import OSLog
 /// Files app) so issues that only show up on-device can be diagnosed without
 /// attaching to Xcode. Users can share this file when reporting bugs. The
 /// file rotates itself once it exceeds ~1 MB.
-final class FileLog {
+final class FileLog: @unchecked Sendable {
     static let shared = FileLog()
 
     private let queue = DispatchQueue(label: "com.686udjie.Trop.FileLog")

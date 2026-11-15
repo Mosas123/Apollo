@@ -12,7 +12,7 @@ import SwiftUI
 /// push detail pages onto the regular tab navigation. Appending to a path is
 /// plain state mutation, so it works even while views are transitioning —
 /// unlike pub/sub events, which tabs can miss during player teardown.
-final class AppRouter: ObservableObject {
+@MainActor final class AppRouter: ObservableObject {
     static let shared = AppRouter()
 
     @Published var homePath = NavigationPath()

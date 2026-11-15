@@ -8,24 +8,30 @@
 import Foundation
 import GRDB
 
-actor SearchService {
-    nonisolated static let shared = SearchService()
+final class SendableJSONObject: @unchecked Sendable {
+    let value: [String: Any]
+    init(_ value: [String: Any]) { self.value = value }
+}
+
+@MainActor
+final class SearchService {
+    static let shared = SearchService()
     private let innerTube = InnerTubeClient.tropShared
     private let db = DatabaseService.shared
-    private var searchTask: Task<[String: Any], Error>?
+    private var searchTask: Task<SendableJSONObject, Error>?
     private var searchGeneration = 0
 
     func search(query: String, params: String? = nil, client: YouTubeClient = .webRemix) async throws -> [String: Any] {
         searchTask?.cancel()
         searchGeneration += 1
         let generation = searchGeneration
-        let task = Task { () -> [String: Any] in
-            try await innerTube.search(query: query, params: params, client: client)
+        let task = Task { () -> SendableJSONObject in
+            SendableJSONObject(try await innerTube.search(query: query, params: params, client: client))
         }
         searchTask = task
         let result = try await task.value
         guard generation == searchGeneration else { throw CancellationError() }
-        return result
+        return result.value
     }
 
     struct LocalSearchResults {

@@ -132,7 +132,7 @@ struct AccentPreset: Identifiable, Hashable {
 
 @Observable
 final class SettingsStore {
-    static let shared = SettingsStore()
+    nonisolated(unsafe) static let shared = SettingsStore()
 
     // MARK: - Appearance
 
@@ -378,7 +378,7 @@ final class SettingsStore {
         static let canvasOverCellular = "settings.canvasOverCellular"
     }
 
-    private static let defaults: UserDefaults = .standard
+    nonisolated(unsafe) private static let defaults: UserDefaults = .standard
 
     private static func load<T>(_ key: String, default defaultValue: T) -> T {
         defaults.object(forKey: key) as? T ?? defaultValue
@@ -449,7 +449,7 @@ final class SettingsStore {
 // MARK: - Environment Key
 
 private struct SettingsStoreKey: EnvironmentKey {
-    static let defaultValue: SettingsStore = .shared
+    nonisolated(unsafe) static let defaultValue: SettingsStore = .shared
 }
 
 extension EnvironmentValues {

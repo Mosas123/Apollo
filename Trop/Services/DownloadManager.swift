@@ -13,7 +13,7 @@ import Network
 import Nuke
 import SwiftUI
 import UIKit
-import ffmpegkit
+@preconcurrency import ffmpegkit
 
 @MainActor
 final class DownloadManager: ObservableObject {
@@ -873,7 +873,9 @@ enum DownloadError: Error, LocalizedError {
 // MARK: - Environment
 
 private struct DownloadManagerEnvironmentKey: EnvironmentKey {
-    @MainActor static var defaultValue: DownloadManager { .shared }
+    static var defaultValue: DownloadManager {
+        MainActor.assumeIsolated { DownloadManager.shared }
+    }
 }
 
 extension EnvironmentValues {
