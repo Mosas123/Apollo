@@ -19,7 +19,6 @@ struct TropApp: App {
         PlayerController.registerRemoteControlSupport()
         observePlaybackSettings()
         Task { await InnerTubeClient.tropShared.syncTropLocale() }
-        Task { @MainActor in DiscordIntegration.shared.start() }
         Task { @MainActor in LastFMIntegration.shared.start() }
     }
 

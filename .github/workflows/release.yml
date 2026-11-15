@@ -108,12 +108,6 @@ jobs:
       - name: Make build script executable
         run: chmod +x ./build_ipa.sh
 
-      - name: Fetch Discord Social SDK
-        uses: ./.github/actions/fetch-discord-sdk
-        with:
-          url: ${{ secrets.DISCORD_SOCIAL_SDK_URL }}
-          cache-version: "1"
-
       - name: Build release IPA
         run: ./build_ipa.sh
         env:
