@@ -1,9 +1,10 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.4
 import PackageDescription
 
 let package = Package(
     name: "SwiftyTube",
     platforms: [.iOS(.v17), .macOS(.v13)],
+    swiftLanguageModes: [.v6],
     products: [
         .library(name: "SwiftyTube", type: .static, targets: ["SwiftyTube"])
     ],
