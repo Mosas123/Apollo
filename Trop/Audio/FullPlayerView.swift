@@ -83,27 +83,16 @@ struct FullPlayerView: View {
                 }
 
                 if !showLyrics && !showQueue && !np.isVideoMode {
+                    // Centered rounded-square cover (Apple Music style): the same
+                    // shape for every song, so square album art and 16:9 video
+                    // thumbnails all read consistently over the gradient.
                     artwork
-                        .frame(maxWidth: .infinity)
-                        .frame(height: min(
-                            (geometry.size.height + geometry.safeAreaInsets.top) * 0.58,
-                            geometry.size.height * 0.66
-                        ))
-                        .compositingGroup()
-                        .clipped()
-                        .mask {
-                            LinearGradient(
-                                stops: [
-                                    .init(color: .white, location: 0),
-                                    .init(color: .white, location: 0.62),
-                                    .init(color: .clear, location: 1)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        }
-                        .offset(y: -geometry.safeAreaInsets.top)
-                        .frame(maxHeight: .infinity, alignment: .top)
+                        .aspectRatio(1, contentMode: .fit)
+                        .frame(maxWidth: min(geometry.size.width - 48, 520))
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .shadow(color: .black.opacity(0.4), radius: 28, y: 16)
+                        .padding(.top, geometry.safeAreaInsets.top + 36)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
 
                 VStack(spacing: 0) {
