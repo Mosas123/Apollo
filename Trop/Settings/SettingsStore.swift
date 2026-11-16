@@ -398,7 +398,12 @@ final class SettingsStore: @unchecked Sendable {
     // MARK: - Spotify Canvas
 
     var canvasEnabled: Bool {
-        didSet { Self.defaults.set(canvasEnabled, forKey: Keys.canvasEnabled) }
+        didSet {
+            Self.defaults.set(canvasEnabled, forKey: Keys.canvasEnabled)
+            if !canvasEnabled {
+                Task { @MainActor in CanvasPlayerPreloader.shared.release() }
+            }
+        }
     }
 
     var canvasOverCellular: Bool {

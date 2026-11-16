@@ -81,6 +81,34 @@ final class CanvasPlayerPreloader {
     private var prerollURL: URL?
     private var readinessObservation: NSKeyValueObservation?
 
+    private init() {
+        // A memory warning while Canvas is off should drop the retained
+        // AVFoundation player/buffers. When Canvas is on, the clip may be
+        // actively displayed, so leave it alone.
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in
+                guard !SettingsStore.shared.canvasEnabled else { return }
+                CanvasPlayerPreloader.shared.release()
+            }
+        }
+    }
+
+    /// Releases the prepared player, looper and their AVFoundation buffers.
+    func release() {
+        readinessObservation?.invalidate()
+        readinessObservation = nil
+        preparedPlayer?.pause()
+        preparedPlayer?.removeAllItems()
+        preparedPlayer = nil
+        looper = nil
+        preparedURL = nil
+        prerollURL = nil
+    }
+
     func preload(url: URL) {
         guard prerollURL != url else { return }
         let player = player(for: url)
