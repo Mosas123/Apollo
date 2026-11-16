@@ -56,7 +56,6 @@ actor PlaybackManager {
         )
     }
 
-
     /// Qobuz uses fresh, authorized, short-lived FLAC links. Its IDs must
     /// never enter the YouTube stream resolver.
     private func resolveQobuz(videoId: String) async throws -> PlaybackResult {

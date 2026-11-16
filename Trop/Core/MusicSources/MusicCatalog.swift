@@ -58,7 +58,6 @@ protocol MusicCatalogProvider: Sendable {
     func streamURL(for track: MusicCatalogTrack) throws -> URL
 }
 
- 
 /// Existing queues store raw YouTube video IDs; external providers use a
 /// namespaced ID such as `audius:D7KyD`. Keep routing deterministic.
 enum MusicPlaybackIdentity {

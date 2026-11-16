@@ -152,7 +152,10 @@ struct ContentSettingsView: View {
             } header: {
                 Text("For You (AI)")
             } footer: {
-                Text("Optional. An AI model suggests songs from your history; each suggestion is verified on YouTube Music before it appears. Uses your own API key.")
+                Text(
+                    "Optional. An AI model suggests songs from your history; each suggestion is verified "
+                    + "on YouTube Music before it appears. Uses your own API key."
+                )
             }
 
             Section {
@@ -163,7 +166,10 @@ struct ContentSettingsView: View {
             } header: {
                 Text("Podcasts (Podcast Index)")
             } footer: {
-                Text("Optional. Create a free key at podcastindex.org to enrich podcast art and metadata. Without it, the app falls back to iTunes podcast search.")
+                Text(
+                    "Optional. Create a free key at podcastindex.org to enrich podcast art and metadata. "
+                    + "Without it, the app falls back to iTunes podcast search."
+                )
             }
 
             Section {

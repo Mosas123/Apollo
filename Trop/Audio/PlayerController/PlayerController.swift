@@ -78,10 +78,18 @@ final class PlayerController {
     private var detectedCropRepeatCount = 0
     var currentLoudnessDb: Double?
     var pendingURL: String?
+    struct PendingMetadata {
+        let title: String
+        let artist: String?
+        let videoId: String
+        let artists: [YTArtist]
+        let thumbnailUrl: String?
+    }
+
     /// Deferred title/artwork metadata, applied when mpv actually starts the
     /// new file (FILE_LOADED) so the UI never shows a new title while the
     /// previous song is still audibly playing.
-    private var pendingMetadata: (title: String, artist: String?, videoId: String, artists: [YTArtist], thumbnailUrl: String?)?
+    private var pendingMetadata: PendingMetadata?
     private var wasPlayingBeforeInterruption = false
 
     /// Video-mode state. Reads happen on the event loop thread from event handlers;
@@ -220,11 +228,11 @@ extension PlayerController {
         }
 
         if let videoId, let title, videoId != NowPlaying.shared.videoId {
-            pendingMetadata = (title, artist, videoId, artists, thumbnailUrl)
+            pendingMetadata = PendingMetadata(title: title, artist: artist, videoId: videoId, artists: artists, thumbnailUrl: thumbnailUrl)
             NowPlaying.shared.videoId = videoId
         }
 
-        var skipStart = 0.0
+        var skipStart: Double = 0
         if MusicPlaybackIdentity.isYouTube(videoId) {
             skipStart = await SponsorBlockIntegration.shared.preloadedStartOffset(for: videoId)
         }
@@ -528,7 +536,13 @@ extension PlayerController {
             guard let self else { return }
             if let meta = self.pendingMetadata {
                 self.pendingMetadata = nil
-                NowPlaying.shared.update(title: meta.title, artist: meta.artist, videoId: meta.videoId, artists: meta.artists, thumbnailUrl: meta.thumbnailUrl)
+                NowPlaying.shared.update(
+                    title: meta.title,
+                    artist: meta.artist,
+                    videoId: meta.videoId,
+                    artists: meta.artists,
+                    thumbnailUrl: meta.thumbnailUrl
+                )
             }
             Log.player.debug("TRANSITION FILE_LOADED videoId=\(pendingVideoId ?? "nil") playing=\(actuallyPlaying)")
             self.playState.send(actuallyPlaying ? .playing : .paused)

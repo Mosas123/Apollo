@@ -30,7 +30,10 @@ struct QobuzSettingsView: View {
             } header: {
                 Text("Your Qobuz account")
             } footer: {
-                Text("Use credentials you are authorized to use. Full-track streaming requires an eligible Qobuz account and permission to use the API. No community tokens are bundled.")
+                Text(
+                    "Use credentials you are authorized to use. Full-track streaming requires "
+                    + "an eligible Qobuz account and permission to use the API. No community tokens are bundled."
+                )
             }
 
             Section {
