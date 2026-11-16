@@ -459,9 +459,9 @@ final class ReportCommentModel {
             // Prefer the step the new entity says is current; fall back to
             // the furthest step when the server omits `currentStepId`.
             let currentId = flowState?["currentStepId"] as? String
+            guard !steps.isEmpty else { return }
             let chosen = steps.first { ($0["stepId"] as? String) == currentId }
-                ?? steps.last
-                ?? steps[0]
+                ?? steps[steps.count - 1]
             apply(step: CommentsParser.parseReportStep(chosen))
         }
     }

@@ -100,6 +100,10 @@ final class NowPlaying {
 
     private var timer: Timer?
     private var icyTick = 0
+    private var progressTick = 0
+    /// Bumped whenever the user starts/changes playback, so deferred autoplay
+    /// work can abort instead of hijacking the new track.
+    private var playbackGeneration = 0
     var sleepTimerEndsAt: Date?
     @ObservationIgnored private var sleepTimerTask: Task<Void, Never>?
     @ObservationIgnored private var artworkLoadTask: Task<Void, Never>?
@@ -164,6 +168,7 @@ final class NowPlaying {
     }
 
     func setQueue(_ songs: [SongItem], startIndex: Int) {
+        playbackGeneration += 1
         queueSongs = songs
         queueIndex = min(max(startIndex, 0), max(songs.count - 1, 0))
         originalQueue = nil
@@ -273,6 +278,7 @@ final class NowPlaying {
         afterResolve: (() -> Void)? = nil
     ) {
         guard queueSongs.indices.contains(queueIndex) else { return }
+        playbackGeneration += 1
         if manageResolvingFlag {
             isResolvingNext = true
         }
@@ -438,8 +444,10 @@ final class NowPlaying {
     /// AI for a fresh batch so it keeps choosing based on the listener's taste.
     private func continueSurprise() {
         let seed = videoId
+        let generation = playbackGeneration
         Task {
             let items = await SurpriseMeService.musicQueue(seedVideoId: seed, refreshAI: true)
+            guard generation == playbackGeneration else { return }
             guard !items.isEmpty else {
                 isPlaying = false
                 stopTimer()
@@ -458,9 +466,11 @@ final class NowPlaying {
     /// Continues playback with a radio queue built from the last song when the
     /// queue runs out and "Autoplay Similar" is enabled.
     private func autoplaySimilar(from videoId: String) {
+        let generation = playbackGeneration
         Task {
             do {
                 let radio = try await PersonalizationService.shared.fetchRadio(videoId: videoId)
+                guard generation == playbackGeneration else { return }
                 let songs = radio.songs
                 guard !songs.isEmpty else {
                     isPlaying = false
@@ -474,6 +484,7 @@ final class NowPlaying {
                 try await PlaybackManager.shared.resolveAndPlay(videoId: first.videoId)
                 self.persistQueueState()
             } catch {
+                guard generation == playbackGeneration else { return }
                 Log.nowPlaying.error("Autoplay similar failed: \(error)")
                 isPlaying = false
             }
@@ -751,7 +762,10 @@ final class NowPlaying {
     private func timerTick() {
         currentTime = PlayerController.shared.currentTime
         duration = PlayerController.shared.duration
-        PlayerController.shared.updateNowPlayingProgress()
+        progressTick += 1
+        if progressTick % 4 == 0 {
+            PlayerController.shared.updateNowPlayingProgress()
+        }
         if MusicPlaybackIdentity.isYouTube(videoId) {
             SponsorBlockIntegration.shared.tick()
         }
