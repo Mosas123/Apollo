@@ -159,7 +159,7 @@ struct LibraryView: View {
             rowDivider
             libraryRow(icon: "square.stack", title: "Albums", route: .libraryAlbums)
             rowDivider
-            libraryRow(icon: "music.note", title: "Songs", route: .autoPlaylist(.likedSongs))
+            libraryRow(icon: "music.note", title: "Songs", route: .librarySongs)
             rowDivider
             libraryRow(icon: "antenna.radiowaves.left.and.right", title: "Podcasts", route: .libraryPodcasts)
             rowDivider
