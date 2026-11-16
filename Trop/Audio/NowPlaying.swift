@@ -100,6 +100,8 @@ final class NowPlaying {
     @ObservationIgnored private var sleepTimerTask: Task<Void, Never>?
     var lastManualSkipTime: Date?
     private var isResolvingNext = false
+    private var consecutiveFailures = 0
+    private static let maxConsecutiveFailures = 3
     /// Timestamps of the last mid-play failure per videoId, to bound retries.
     private var lastFailureAt: [String: Date] = [:]
 
@@ -265,10 +267,13 @@ final class NowPlaying {
         update(with: song)
         persistQueueState()
         Task {
+            var failed = false
             do {
                 try await PlaybackManager.shared.resolveAndPlay(videoId: song.videoId)
+                consecutiveFailures = 0
             } catch {
-                Log.nowPlaying.error("\(logContext) failed: \(error)")
+                failed = true
+                Log.nowPlaying.error("\(logContext) failed for \(song.videoId): \(error)")
                 if self.videoId == song.videoId {
                     isPlaying = false
                 }
@@ -277,6 +282,9 @@ final class NowPlaying {
                 isResolvingNext = false
             }
             afterResolve?()
+            if failed {
+                handlePlaybackFailure(failedVideoId: song.videoId)
+            }
         }
     }
 
@@ -407,6 +415,30 @@ final class NowPlaying {
     /// A stream that died mid-play (not EOF, not a manual skip): drop the
     /// possibly-expired cached URL and re-resolve once. Repeated failures for
     /// the same video are only retried after a cooldown to avoid a loop.
+    /// One bad song (resolve failed, expired stream, region block) must not kill
+    /// the session: skip past it, but stop after a few consecutive failures so a
+    /// systemic outage doesn't hammer YouTube or loop forever.
+    /// Called by the player when a stream resolved but mpv couldn't start it.
+    func reportPlaybackFailure(videoId: String) {
+        guard self.videoId == videoId else { return }
+        handlePlaybackFailure(failedVideoId: videoId)
+    }
+
+    private func handlePlaybackFailure(failedVideoId: String) {
+        consecutiveFailures += 1
+        let canSkip = hasNext && consecutiveFailures < Self.maxConsecutiveFailures
+        Log.nowPlaying.notice(
+            "Playback failure \(consecutiveFailures)/\(Self.maxConsecutiveFailures) for \(failedVideoId); "
+                + (canSkip ? "skipping to next" : "stopping")
+        )
+        if canSkip {
+            playNext(automatic: true)
+        } else {
+            consecutiveFailures = 0
+            isPlaying = false
+        }
+    }
+
     private func recoverFromPlaybackFailure(videoId: String?) {
         guard let videoId else {
             isPlaying = false

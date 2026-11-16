@@ -273,6 +273,12 @@ extension PlayerController {
         if cmdResult != 0 {
             Log.player.error("mpv_command loadfile failed result=\(cmdResult)")
             sharedState.withLock { $0.pendingVideoId = nil }
+            if let videoId {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(300))
+                    NowPlaying.shared.reportPlaybackFailure(videoId: videoId)
+                }
+            }
             return
         }
         if isNewSong {
