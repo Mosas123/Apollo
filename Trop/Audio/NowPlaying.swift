@@ -425,6 +425,23 @@ final class NowPlaying {
                 return
             }
             loadThumbnailFromCDN(videoId: videoId, thumbnailUrl: thumb)
+            enrichArtwork(videoId: videoId)
+        }
+    }
+
+    /// Background metadata enrichment: fetch a canonical cover (iTunes first,
+    /// then MusicBrainz / Cover Art Archive) and swap it in if the track is
+    /// still current. Keeps the player showing clean, consistent album art.
+    private func enrichArtwork(videoId: String) {
+        let title = title
+        let artist = artist
+        guard !title.isEmpty, !artist.isEmpty else { return }
+        Task {
+            guard let resolved = await MetadataResolver.enrich(title: title, artist: artist),
+                  let artworkURL = resolved.artworkURL,
+                  let image = try? await ArtworkLoader.image(for: artworkURL) else { return }
+            guard lastLoadedVideoId == videoId else { return }
+            publishArtwork(image)
         }
     }
 
