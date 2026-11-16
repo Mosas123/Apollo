@@ -160,6 +160,8 @@ private final class Coordinator: @unchecked Sendable {
     private var isPlaying = false
     private var didReportFirstFrame = false
     private let onFirstFrame: () -> Void
+    private var backgroundObserver: NSObjectProtocol?
+    private var foregroundObserver: NSObjectProtocol?
 
     init(onFirstFrame: @escaping () -> Void) {
         self.onFirstFrame = onFirstFrame

@@ -68,11 +68,11 @@ final class PlayerController {
         return MPMediaItemArtwork(boundsSize: image.size) { _ in box.image }
     }
 
-    nonisolated private var _mpv: SendableBox<OpaquePointer>?
+    nonisolated private let mpvHandle = Mutex<SendableBox<OpaquePointer>?>(nil)
     /// Serial queue for all mpv property read/write calls
     let mpvAccessQueue = DispatchQueue(label: "com.686udjie.PlayerController.mpvAccess")
 
-    nonisolated private var eventLoopThread: SendableBox<Thread>?
+    nonisolated private let mpvThread = Mutex<SendableBox<Thread>?>(nil)
 
     private var lastDetectedCrop: String?
     private var detectedCropRepeatCount = 0
@@ -150,13 +150,13 @@ final class PlayerController {
 
     deinit {
         sharedState.withLock { $0.isRunning = false }
-        if let box = _mpv { mpv_wakeup(box.value) }
+        mpvHandle.withLock { if let box = $0 { mpv_wakeup(box.value) } }
     }
 
     nonisolated func withMpv<T: Sendable>(_ body: @escaping @Sendable (OpaquePointer) -> T) -> T? {
         var result: T?
-        mpvAccessQueue.sync {
-            guard let box = _mpv else { return }
+        mpvHandle.withLock { box in
+            guard let box else { return }
             result = body(box.value)
         }
         return result
@@ -382,7 +382,7 @@ extension PlayerController {
             Self.applyPostInitProperties(mpv)
             Self.applyObservedProperties(mpv)
 
-            self._mpv = SendableBox(mpv)
+            mpvHandle.withLock { $0 = SendableBox(mpv) }
             Log.player.info("mpv handle published — event loop starting")
 
             Task { @MainActor [weak self] in
@@ -403,7 +403,7 @@ extension PlayerController {
                 self.sharedState.withLock { $0.isRunning = true }
                 self.eventLoop(mpv)
             }
-            self.eventLoopThread = SendableBox(thread)
+            mpvThread.withLock { $0 = SendableBox(thread) }
             thread.name = "com.686udjie.PlayerController.eventLoop"
             thread.start()
         }
@@ -474,7 +474,7 @@ extension PlayerController {
                 break
             }
         }
-        mpvAccessQueue.sync { self._mpv = nil }
+        mpvHandle.withLock { $0 = nil }
         mpv_destroy(mpv)
     }
 
