@@ -10,7 +10,19 @@ import os
 
 /// Library logging. Set `handler` to capture, else os.Logger (subsystem "SwiftyTube").
 public enum SwiftyTubeLog: Sendable {
-    public static var handler: (@Sendable (String, Level) -> Void)?
+    private static let handlerLock = NSLock()
+    nonisolated(unsafe) private static var storedHandler: (@Sendable (String, Level) -> Void)?
+
+    public static var handler: (@Sendable (String, Level) -> Void)? {
+        get {
+            handlerLock.lock(); defer { handlerLock.unlock() }
+            return storedHandler
+        }
+        set {
+            handlerLock.lock(); defer { handlerLock.unlock() }
+            storedHandler = newValue
+        }
+    }
 
     public enum Level: String, Sendable {
         case debug

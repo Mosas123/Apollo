@@ -14,8 +14,8 @@ public extension Notification.Name {
 
 /// Thread-safe video durations with in-flight marking.
 public enum DurationCache: Sendable {
-    private static var cache: [String: Int] = [:]
-    private static var pending: Set<String> = []
+    nonisolated(unsafe) private static var cache: [String: Int] = [:]
+    nonisolated(unsafe) private static var pending: Set<String> = []
     private static let lock = NSLock()
 
     public static func isPending(_ videoId: String) -> Bool {
