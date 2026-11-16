@@ -33,6 +33,7 @@ final class SponsorBlockIntegration {
     private var segments: [Segment] = []
     private var skipped: Set<Int> = []
     private var prefetchedSegments: [String: [Segment]] = [:]
+    private var prefetchOrder: [String] = []
     private var fetchTasks: [String: Task<[Segment], Never>] = [:]
 
     private init() {}
@@ -102,8 +103,12 @@ final class SponsorBlockIntegration {
             guard let self else { return }
             self.fetchTasks.removeValue(forKey: videoId)
             self.prefetchedSegments[videoId] = found
-            if self.prefetchedSegments.count > 64 {
-                self.prefetchedSegments.removeAll(keepingCapacity: true)
+            if !self.prefetchOrder.contains(videoId) {
+                self.prefetchOrder.append(videoId)
+            }
+            while self.prefetchedSegments.count > 64, let oldest = self.prefetchOrder.first {
+                self.prefetchOrder.removeFirst()
+                self.prefetchedSegments.removeValue(forKey: oldest)
             }
             if self.videoId == videoId {
                 self.segments = found
