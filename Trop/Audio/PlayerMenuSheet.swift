@@ -37,8 +37,9 @@ struct PlayerMenuSheet: View {
         SheetChrome {
             Group {
                 eqVolumeCard
-                actionGrid
-                MenuCard {
+                if MusicPlaybackIdentity.isYouTube(song.videoId) {
+                    actionGrid
+                    MenuCard {
                     viewArtistRow
                     if let albumId = song.firstAlbumBrowseId {
                         Divider()
@@ -77,6 +78,7 @@ struct PlayerMenuSheet: View {
                         title: "Customize Radio",
                         subtitle: "Style, size & explicit filter"
                     ) { showRadioOptions = true }
+                }
                 }
             }
             .navigationDestination(for: Destination.self) { dest in

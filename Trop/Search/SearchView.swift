@@ -235,11 +235,50 @@ struct SearchView: View {
                         }
                     }
                 }
+
+                if viewModel.showsAudiusResults && !viewModel.audiusTracks.isEmpty {
+                    sectionHeader("Audius")
+                    ForEach(viewModel.audiusTracks, id: \.id) { track in
+                        audiusTrackRow(track)
+                    }
+                }
             }
             .padding(.bottom, 16)
         }
         .scrollIndicators(.automatic)
         .miniPlayerTracksScroll()
+    }
+
+    /// Play external-catalogue tracks using the provider-scoped queue adapter.
+    /// Do not expose YouTube's song menu or navigation actions on this row.
+    private func audiusTrackRow(_ track: MusicCatalogTrack) -> some View {
+        Button {
+            let songs = viewModel.audiusTracks.map { $0.asQueueSong() }
+            PlaybackQueue.play(track.asQueueSong(), in: songs, log: Log.searchView, context: "Audius search")
+        } label: {
+            HStack(spacing: 12) {
+                AsyncImageView(url: track.artworkURL?.absoluteString)
+                    .frame(width: 52, height: 52)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(track.title)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(track.artist)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Image(systemName: "play.fill")
+                    .foregroundStyle(settings.accentColor)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// Section title with chevron — taps drill into (or clear) the filter.

@@ -36,8 +36,9 @@ struct SongMenuSheet: View {
         SheetChrome {
             Group {
                 headerCard
-                actionGrid
-                MenuCard {
+                if MusicPlaybackIdentity.isYouTube(song.videoId) {
+                    actionGrid
+                    MenuCard {
                     MenuRow(
                         icon: isLiked ? "heart.slash" : "heart",
                         title: isLiked ? "Unlike" : "Like"
@@ -108,6 +109,12 @@ struct SongMenuSheet: View {
                         title: "Customize Radio",
                         subtitle: "Style, size & explicit filter"
                     ) { showRadioOptions = true }
+                } else {
+                    MenuCard {
+                        MenuRow(icon: "text.insert", title: "Play Next") { playNext() }
+                        Divider()
+                        MenuRow(icon: "list.bullet", title: "Add to Queue") { addToQueue() }
+                    }
                 }
             }
             .navigationDestination(for: Destination.self) { dest in

@@ -63,6 +63,8 @@ final class SearchViewModel {
     private(set) var submittedQuery = ""
 
     private(set) var results: [SearchSection] = []
+    /// Source-specific results never enter YouTube's YTItem parser.
+    private(set) var audiusTracks: [MusicCatalogTrack] = []
 
     // MARK: - Local matches (populated per submission, for Library filter)
 
@@ -134,6 +136,7 @@ final class SearchViewModel {
         var filters = ["Library"]
         let titles = Set(results.map(\.title))
         filters.append(contentsOf: Self.displayOrder.filter { titles.contains($0) })
+        if !audiusTracks.isEmpty { filters.append("Audius") }
         return filters
     }
 
@@ -146,6 +149,10 @@ final class SearchViewModel {
         return ordered.map { section in
             SearchSection(title: section.title, items: sortedItems(section))
         }
+    }
+
+    var showsAudiusResults: Bool {
+        !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "Audius")
     }
 
     var filteredResults: [SearchSection] {
@@ -278,6 +285,7 @@ final class SearchViewModel {
         isShowingLibrary = false
         heroArtist = nil
         heroSongs = []
+        audiusTracks = []
 
         updateHistory(query: query)
         cancelTasks()
@@ -288,32 +296,41 @@ final class SearchViewModel {
     }
 
     private func fetchResults(for query: String) async {
+        // Both catalogues run concurrently. A failed provider must not hide
+        // successful results from the other provider.
+        async let localResults = try? SearchService.shared.localSearch(query: query)
+        async let audiusResult = try? AudiusClient().searchTracks(query: query, limit: 25)
+        var rawYouTube: [String: Any]?
+        var youtubeFailure: Error?
         do {
-            async let localResults = try? SearchService.shared.localSearch(query: query)
-            let searchRaw = try await SearchService.shared.search(query: query)
-            guard query == submittedQuery else { return }
-
-            if let local = await localResults {
-                localSongs = local.songs
-                localArtists = local.artists
-                localAlbums = local.albums
-                localPlaylists = local.playlists
-            }
-
-            results = SearchParser.parseSearchResults(from: searchRaw)
-            selectedSectionFilter = nil
-            isShowingLibrary = false
-            extractHero()
-            let summary = results.map { "\($0.title):\($0.items.count)" }.joined(separator: ", ")
-            Log.search.debug("Results for '\(query)': [\(summary)] hero=\(heroArtist?.name ?? "none") heroSongs=\(heroSongs.count)")
-            phase = results.isEmpty && heroArtist == nil ? .noResults : .results
+            rawYouTube = try await SearchService.shared.search(query: query)
         } catch {
-            guard query == submittedQuery else { return }
-            if !Self.isCancellation(error) {
-                Log.search.error("Submit failed: \(error)")
-                self.error = error
-                phase = .failed
-            }
+            youtubeFailure = error
+        }
+        let remoteAudius = await audiusResult ?? []
+        let local = await localResults
+
+        guard !Task.isCancelled, query == submittedQuery else { return }
+        if let youtubeFailure, Self.isCancellation(youtubeFailure) { return }
+
+        if let local {
+            localSongs = local.songs
+            localArtists = local.artists
+            localAlbums = local.albums
+            localPlaylists = local.playlists
+        }
+        results = rawYouTube.map { SearchParser.parseSearchResults(from: $0) } ?? []
+        audiusTracks = remoteAudius
+        selectedSectionFilter = nil
+        isShowingLibrary = false
+        extractHero()
+
+        if results.isEmpty && heroArtist == nil && audiusTracks.isEmpty {
+            error = youtubeFailure
+            phase = youtubeFailure == nil ? .noResults : .failed
+        } else {
+            error = youtubeFailure
+            phase = .results
         }
     }
 
@@ -362,6 +379,7 @@ final class SearchViewModel {
         cancelTasks()
         submittedQuery = ""
         results = []
+        audiusTracks = []
         localSongs = []
         localArtists = []
         localAlbums = []
