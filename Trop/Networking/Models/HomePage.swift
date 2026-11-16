@@ -118,7 +118,7 @@ enum HomeSection: Identifiable {
 
     var displayTitle: String {
         switch self {
-        case .quickPicks: return "Quick Picks"
+        case .quickPicks: return "Quick picks"
         case .keepListening: return "Keep Listening"
         case .forgottenFavorites: return "Forgotten Favorites"
         case .homePageSection(let section, _): return section.title
