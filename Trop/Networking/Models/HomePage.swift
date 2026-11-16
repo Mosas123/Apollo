@@ -146,6 +146,13 @@ enum HomeSection: Identifiable {
         }
     }
 
+    var category: ContentCategory {
+        switch self {
+        case .homePageSection(let section, _): return section.category
+        default: return .music
+        }
+    }
+
     var isSongsOnly: Bool {
         switch self {
         case .quickPicks, .forgottenFavorites, .dailyDiscover: return true

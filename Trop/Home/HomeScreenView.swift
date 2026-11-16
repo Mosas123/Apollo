@@ -264,8 +264,8 @@ struct HomeScreenView: View {
 
     /// Sections for the active Home filter. "All" mixes everything but is
     /// capped so the feed doesn't feel overloaded.
-    private var visibleSections: [HomePage.Section] {
-        var sections: [HomePage.Section]
+    private var visibleSections: [HomeSection] {
+        var sections: [HomeSection]
         switch selectedCategory {
         case .all:
             sections = Array(viewModel.homeSections.prefix(10))
@@ -274,21 +274,25 @@ struct HomeScreenView: View {
         case .podcast, .audiobook:
             // Each of these is its own feed (podcast/audiobook shelves); fall
             // back to the matching home sections until it loads.
-            sections = viewModel.categoryFeeds[selectedCategory]
-                ?? viewModel.homeSections.filter { $0.category == selectedCategory }
+            sections = (viewModel.categoryFeeds[selectedCategory] ?? [])
+                .enumerated()
+                .map { HomeSection.homePageSection($0.element, index: $0.offset) }
+            if sections.isEmpty {
+                sections = viewModel.homeSections.filter { $0.category == selectedCategory }
+            }
         }
 
         if selectedCategory == .all || selectedCategory == .music {
             if !forYouSongs.isEmpty {
                 sections.insert(
-                    HomePage.Section(title: "For You", items: forYouSongs.map(YTItem.song)),
+                    .similarRecommendation(items: forYouSongs.map(YTItem.song), title: "For You"),
                     at: 0
                 )
             }
             if !discoverArtists.isEmpty {
                 let index = forYouSongs.isEmpty ? 0 : 1
                 sections.insert(
-                    HomePage.Section(title: "Artistas para ti", items: discoverArtists.map(YTItem.artist)),
+                    .similarRecommendation(items: discoverArtists.map(YTItem.artist), title: "Artistas para ti"),
                     at: min(index, sections.count)
                 )
             }
