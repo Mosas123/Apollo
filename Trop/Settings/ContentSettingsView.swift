@@ -98,7 +98,7 @@ struct ContentSettingsView: View {
                                 settings.aiModel = ""
                                 showCustomModel = false
                             }
-                            ForEach(modelOptions, id: \.self) { model in
+                            ForEach(modelOptions.filter { $0 != provider.defaultModel }, id: \.self) { model in
                                 Button(model) {
                                     settings.aiModel = model
                                     showCustomModel = false
