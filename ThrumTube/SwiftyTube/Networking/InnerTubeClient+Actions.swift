@@ -94,14 +94,14 @@ public extension InnerTubeClient {
     /// All pages via continuations. Throws on repeats/cap instead of
     /// returning partial data: callers sweep remote state against the result,
     /// so a truncated page must fail the section, not corrupt the library.
-    func paginate<T>(
+    func paginate<T: Sendable>(
         browseId: String,
         params: String? = nil,
         maxPages: Int = 50,
         client: YouTubeClient? = nil,
         locale: YouTubeLocale? = nil,
-        parse: @escaping ([String: Any]) -> [T],
-        continuation: @escaping ([String: Any]) -> String?
+        parse: @escaping @Sendable ([String: Any]) -> [T],
+        continuation: @escaping @Sendable ([String: Any]) -> String?
     ) async throws -> [T] {
         var allItems: [T] = []
         var token: String?

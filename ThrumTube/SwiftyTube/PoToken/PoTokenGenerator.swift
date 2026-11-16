@@ -329,8 +329,16 @@ private final class PoTokenMessageHandler: NSObject, WKScriptMessageHandler {
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return
         }
+        let boxed = SendableJSONBox(value: json)
         Task { [weak self] in
-            await self?.generator?.handleMessage(json: json)
+            await self?.generator?.handleMessage(json: boxed.value)
         }
     }
+}
+
+
+/// Carries raw JSON into a Task: the dictionary is only touched inside the
+/// task, so no other isolation can observe it.
+private struct SendableJSONBox: @unchecked Sendable {
+    let value: [String: Any]
 }

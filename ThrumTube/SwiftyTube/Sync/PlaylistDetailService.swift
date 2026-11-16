@@ -92,7 +92,7 @@ public actor PlaylistDetailService {
         playlistId: String,
         maxPages: Int = 100,
         throwOnTruncation: Bool = false,
-        onPage: (([String: Any], [[String: Any]]) async -> Void)? = nil
+        onPage: (@Sendable ([String: Any], [[String: Any]]) async -> Void)? = nil
     ) async throws -> PlaylistPage {
         // Stored ids may already carry the prefix (library rows keep the
         // endpoint's VL… id); blindly prepending yields VLVL… and the server

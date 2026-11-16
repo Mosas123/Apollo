@@ -123,10 +123,10 @@ extension LibrarySyncService {
 // MARK: Pagination
 
 extension LibrarySyncService {
-    private func fetchAllPages<T>(
+    private func fetchAllPages<T: Sendable>(
         browseId: String,
         params: String? = nil,
-        parse: @escaping ([String: Any]) -> [T]
+        parse: @escaping @Sendable ([String: Any]) -> [T]
     ) async throws -> [T] {
         try await client.paginate(
             browseId: browseId,

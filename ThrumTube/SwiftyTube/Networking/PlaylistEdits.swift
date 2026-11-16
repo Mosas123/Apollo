@@ -53,8 +53,8 @@ public enum PlaylistEditAction: Sendable {
 /// Apply → remote → rollback + rethrow.
 public enum OptimisticMutation: Sendable {
     public static func attemptingRemote(
-        _ remote: () async throws -> Void,
-        rollback: () async -> Void
+        _ remote: @Sendable () async throws -> Void,
+        rollback: @Sendable () async -> Void
     ) async throws {
         do {
             try await remote()

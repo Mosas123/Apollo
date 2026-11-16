@@ -8,7 +8,7 @@
 import Foundation
 
 /// Session source for `loadState`. Not `Sendable` (app stores vary).
-public protocol AuthStateProvider {
+public protocol AuthStateProvider: Sendable {
     func cookies() async -> [String: String]
     func sapisid() async -> String?
     func visitorData() async -> String?
