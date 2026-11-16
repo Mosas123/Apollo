@@ -152,6 +152,11 @@ private final class CanvasPlayerUIView: UIView {
 
 /// Owns the queue player + looper for one clip URL. Torn down with the view.
 @MainActor
+private final class ObserverToken: @unchecked Sendable {
+    let token: NSObjectProtocol
+    init(_ token: NSObjectProtocol) { self.token = token }
+}
+
 private final class Coordinator: @unchecked Sendable {
     private weak var view: CanvasPlayerUIView?
     private var player: AVQueuePlayer?
@@ -160,29 +165,29 @@ private final class Coordinator: @unchecked Sendable {
     private var isPlaying = false
     private var didReportFirstFrame = false
     private let onFirstFrame: () -> Void
-    private var backgroundObserver: NSObjectProtocol?
-    private var foregroundObserver: NSObjectProtocol?
+    private var backgroundObserver: ObserverToken?
+    private var foregroundObserver: ObserverToken?
 
     init(onFirstFrame: @escaping () -> Void) {
         self.onFirstFrame = onFirstFrame
-        backgroundObserver = NotificationCenter.default.addObserver(
+        backgroundObserver = ObserverToken(NotificationCenter.default.addObserver(
             forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in self?.player?.pause() }
-        }
-        foregroundObserver = NotificationCenter.default.addObserver(
+        })
+        foregroundObserver = ObserverToken(NotificationCenter.default.addObserver(
             forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, isPlaying else { return }
                 player?.play()
             }
-        }
+        })
     }
 
     deinit {
-        if let backgroundObserver { NotificationCenter.default.removeObserver(backgroundObserver) }
-        if let foregroundObserver { NotificationCenter.default.removeObserver(foregroundObserver) }
+        if let backgroundObserver { NotificationCenter.default.removeObserver(backgroundObserver.token) }
+        if let foregroundObserver { NotificationCenter.default.removeObserver(foregroundObserver.token) }
     }
 
     func attach(to view: CanvasPlayerUIView, url: URL, isPlaying: Bool) {
