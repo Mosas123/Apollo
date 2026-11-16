@@ -12,6 +12,7 @@ struct SettingsView: View {
     @Bindable private var accountState = AccountSheetState.shared
 
     var body: some View {
+        @Bindable var settings = settings
         List {
             accountSection
 
@@ -21,6 +22,15 @@ struct SettingsView: View {
                 }
             } header: {
                 Text("Appearance")
+            }
+
+            Section {
+                Toggle("Show Radio tab", isOn: $settings.showRadioTab)
+                Toggle("Show Explore tab", isOn: $settings.showExploreTab)
+            } header: {
+                Text("Tab Bar")
+            } footer: {
+                Text("Home, Library and Search are always shown.")
             }
 
             Section {

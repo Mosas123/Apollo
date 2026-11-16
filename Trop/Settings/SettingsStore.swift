@@ -167,6 +167,18 @@ final class SettingsStore: @unchecked Sendable {
         didSet { Self.defaults.set(defaultTab, forKey: Keys.defaultTab) }
     }
 
+    // MARK: - Tab bar customization
+
+    /// Shows the Radio tab (Radio Browser).
+    var showRadioTab: Bool {
+        didSet { Self.defaults.set(showRadioTab, forKey: Keys.showRadioTab) }
+    }
+
+    /// Shows the Explore tab (YouTube moods/genres/charts).
+    var showExploreTab: Bool {
+        didSet { Self.defaults.set(showExploreTab, forKey: Keys.showExploreTab) }
+    }
+
     // MARK: - Lyrics appearance
 
     var lyricsFontSize: Double {
@@ -348,6 +360,8 @@ final class SettingsStore: @unchecked Sendable {
         static let playerBackgroundStyle = "settings.playerBackgroundStyle"
         static let defaultTab = "settings.defaultTab"
         static let defaultTabMigrated = "settings.defaultTabMigrated"
+        static let showRadioTab = "settings.showRadioTab"
+        static let showExploreTab = "settings.showExploreTab"
         static let lyricsFontSize = "settings.lyricsFontSize"
         static let lyricsAlignment = "settings.lyricsAlignment"
         static let lyricsOffsetSeconds = "settings.lyricsOffsetSeconds"
@@ -418,6 +432,8 @@ final class SettingsStore: @unchecked Sendable {
             Self.defaults.set(true, forKey: Keys.defaultTabMigrated)
         }
         defaultTab = Self.load(Keys.defaultTab, default: 0)
+        showRadioTab = Self.load(Keys.showRadioTab, default: true)
+        showExploreTab = Self.load(Keys.showExploreTab, default: false)
         lyricsFontSize = Self.load(Keys.lyricsFontSize, default: 17)
         lyricsAlignment = Self.loadEnum(Keys.lyricsAlignment, default: .center)
         lyricsOffsetSeconds = Self.load(Keys.lyricsOffsetSeconds, default: 0)

@@ -21,12 +21,20 @@ struct ContentView: View {
                 HomeScreenView()
             }
 
-            Tab("Radio", systemImage: "dot.radiowaves.left.and.right", value: 1) {
-                RadioView()
+            if settings.showRadioTab {
+                Tab("Radio", systemImage: "dot.radiowaves.left.and.right", value: 1) {
+                    RadioView()
+                }
             }
 
             Tab("Library", systemImage: "music.note.square.stack", value: 2) {
                 LibraryView()
+            }
+
+            if settings.showExploreTab {
+                Tab("Explore", systemImage: "flame", value: 4) {
+                    ExploreView()
+                }
             }
 
             Tab("Search", systemImage: "magnifyingglass", value: 3, role: .search) {
@@ -62,7 +70,17 @@ struct ContentView: View {
                 }
             }
             .environment(scrollState)
-        .onAppear { AppRouter.shared.selectedTabIndex = selectedTab }
+        .onAppear {
+            if selectedTab == 1 && !settings.showRadioTab { selectedTab = 0 }
+            if selectedTab == 4 && !settings.showExploreTab { selectedTab = 0 }
+            AppRouter.shared.selectedTabIndex = selectedTab
+        }
+        .onChange(of: settings.showRadioTab) { _, shown in
+            if !shown, selectedTab == 1 { selectedTab = 0 }
+        }
+        .onChange(of: settings.showExploreTab) { _, shown in
+            if !shown, selectedTab == 4 { selectedTab = 0 }
+        }
         .onChange(of: selectedTab) { _, newValue in
             AppRouter.shared.selectedTabIndex = newValue
         }

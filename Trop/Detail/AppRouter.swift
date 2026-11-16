@@ -30,6 +30,7 @@ import SwiftUI
         switch selectedTabIndex {
         case 2: libraryPath.count
         case 3: searchPath.count
+        case 4: explorePath.count
         default: homePath.count
         }
     }
@@ -39,6 +40,7 @@ import SwiftUI
         switch selectedTabIndex {
         case 2: libraryPath.removeLast()
         case 3: searchPath.removeLast()
+        case 4: explorePath.removeLast()
         default: homePath.removeLast()
         }
     }
@@ -51,6 +53,7 @@ import SwiftUI
         switch selectedTabIndex {
         case 2: libraryPath.append(route)
         case 3: searchPath.append(route)
+        case 4: explorePath.append(route)
         default: homePath.append(route)
         }
         activeRoute = route
