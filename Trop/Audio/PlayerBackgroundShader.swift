@@ -4,7 +4,7 @@ import UIKit
 /// Animated, blurred cover backdrop for the full player: a Metal distortion
 /// shader driven by `TimelineView` (WWDC "Compose advanced graphics effects").
 struct PlayerBackgroundShader: View {
-    let image: UIImage?
+    let image: Image?
     let isPlaying: Bool
 
     var body: some View {
@@ -13,7 +13,7 @@ struct PlayerBackgroundShader: View {
                 let time = context.date.timeIntervalSinceReferenceDate
                 Group {
                     if let image {
-                        Image(uiImage: image)
+                        image
                             .resizable()
                             .scaledToFill()
                             .frame(width: geometry.size.width, height: geometry.size.height)

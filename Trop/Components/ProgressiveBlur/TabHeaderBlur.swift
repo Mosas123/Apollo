@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Shared measurement for floating tab headers.
 struct TabHeaderHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
+    static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
     }
