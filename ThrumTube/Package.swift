@@ -14,5 +14,6 @@ let package = Package(
             resources: [.copy("po_token.html"), .copy("player_configs.json")]
         ),
         .testTarget(name: "SwiftyTubeTests", dependencies: ["SwiftyTube"])
-    ]
+    ],
+    swiftLanguageModes: [.v5]
 )
