@@ -7,6 +7,13 @@
 
 import SwiftUI
 
+private struct HomeHeaderHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 struct HomeScreenView: View {
     @Environment(SettingsStore.self) private var settings
     @ObservedObject private var router = AppRouter.shared
@@ -19,29 +26,33 @@ struct HomeScreenView: View {
     @State private var forYouSongs: [SongItem] = []
     @State private var discoverArtists: [ArtistItem] = []
     @State private var podcastSuggestions: [YTItem] = []
+    @State private var headerHeight: CGFloat = 76
 
     var body: some View {
         NavigationStack(path: $router.homePath) {
-            VStack(spacing: 0) {
-                TabHeaderView(
-                    title: "Home",
-                    accountIsLoggedIn: accountState.isLoggedIn,
-                    accountImageUrl: accountState.accountImageUrl,
-                    onAccount: { router.homePath.append(DetailRoute.settings) },
-                    accountInitial: accountState.accountName.first.map(String.init)
-                )
-
-                if viewModel.isLoading {
-                    Spacer()
-                    ShimmerLoadingView()
-                    Spacer()
-                } else if let error = viewModel.error {
-                    errorView(error)
-                } else {
-                    homescreenContent
+            ZStack(alignment: .top) {
+                Group {
+                    if viewModel.isLoading {
+                        VStack {
+                            Spacer()
+                            ShimmerLoadingView()
+                            Spacer()
+                        }
+                    } else if let error = viewModel.error {
+                        errorView(error)
+                    } else {
+                        homescreenContent
+                    }
                 }
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    Color.clear.frame(height: headerHeight)
+                }
+
+                progressiveBlur
+                progressiveHeader
             }
             .frame(maxHeight: .infinity, alignment: .top)
+            .onPreferenceChange(HomeHeaderHeightKey.self) { headerHeight = $0 }
             .toolbar(.hidden, for: .navigationBar)
             .detailRouteDestinations()
             .onChange(of: pendingRoute) { _, route in
@@ -72,6 +83,40 @@ struct HomeScreenView: View {
                 await ImagePreloader.shared.preload(urls)
             }
         }
+    }
+
+    private var progressiveHeader: some View {
+        TabHeaderView(
+            title: "Home",
+            accountIsLoggedIn: accountState.isLoggedIn,
+            accountImageUrl: accountState.accountImageUrl,
+            onAccount: { router.homePath.append(DetailRoute.settings) },
+            accountInitial: accountState.accountName.first.map(String.init)
+        )
+        .background {
+            GeometryReader { geo in
+                Color.clear.preference(key: HomeHeaderHeightKey.self, value: geo.size.height)
+            }
+        }
+    }
+
+    private var progressiveBlur: some View {
+        let total = headerHeight + 64
+        return VariableBlurView(maxBlurRadius: 5, direction: .blurredTopClearBottom)
+            .overlay {
+                LinearGradient(
+                    stops: [
+                        .init(color: Color(.systemBackground).opacity(0.85), location: 0),
+                        .init(color: Color(.systemBackground).opacity(0.55), location: min(90 / max(total, 1), 0.9)),
+                        .init(color: .clear, location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .frame(height: total)
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
     }
 
     private var homescreenContent: some View {
@@ -110,6 +155,7 @@ struct HomeScreenView: View {
         }
         .scrollIndicators(.automatic)
         .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
+        .scrollEdgeEffectHidden(true, for: .top)
         .task(id: selectedCategory) {
             await viewModel.loadCategoryFeed(selectedCategory)
         }
