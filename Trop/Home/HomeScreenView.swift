@@ -174,7 +174,23 @@ struct HomeScreenView: View {
                 EmptyView()
             } else {
                 VStack(alignment: .leading, spacing: 4) {
-                    NavigationTitleView(title: section.displayTitle)
+                    HStack {
+                        Text(section.displayTitle)
+                            .font(.title2.bold())
+                        Spacer()
+                        Button {
+                            PlaybackQueue.play(combinedQueue, log: Log.homeScreenView, context: "Quick picks play all")
+                        } label: {
+                            Text("Play all")
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 6)
+                                .background(Capsule().fill(.quaternary))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
 
                     LazyVGrid(
                         columns: [
@@ -223,19 +239,40 @@ struct HomeScreenView: View {
         }
     }
 
+    private func quickPickSubtitle(_ song: SongItem) -> String {
+        var parts: [String] = []
+        let artist = song.artistNamesDisplay
+        if !artist.isEmpty { parts.append(artist) }
+        if let views = song.viewCount, views > 0 {
+            parts.append("\(compactCount(views)) plays")
+        } else if song.duration > 0 {
+            parts.append(song.duration.formattedDuration)
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func compactCount(_ value: Int64) -> String {
+        let v = Double(value)
+        func trim(_ s: String) -> String { s.replacingOccurrences(of: ".0", with: "") }
+        if v >= 1_000_000_000 { return trim(String(format: "%.1fB", v / 1_000_000_000)) }
+        if v >= 1_000_000 { return trim(String(format: "%.1fM", v / 1_000_000)) }
+        if v >= 1_000 { return trim(String(format: "%.1fK", v / 1_000)) }
+        return "\(value)"
+    }
+
     private func quickPickCell(_ song: SongItem, queue: [SongItem]) -> some View {
         HStack(spacing: 10) {
             AsyncImageView(url: song.thumbnailUrl)
-                .frame(width: 48, height: 48)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .frame(width: 56, height: 56)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(song.title)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.headline)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                Text(song.subtitleLine(duration: song.duration))
-                    .font(.caption)
+                Text(quickPickSubtitle(song))
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -247,7 +284,7 @@ struct HomeScreenView: View {
             } label: {
                 Text("⋮")
                     .font(.body.weight(.black))
-                    .foregroundStyle(settings.accentColor)
+                    .foregroundStyle(.primary)
                     .frame(width: 28, height: 44)
                     .contentShape(Rectangle())
             }
