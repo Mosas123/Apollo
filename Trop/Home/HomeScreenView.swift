@@ -169,54 +169,93 @@ struct HomeScreenView: View {
         let quickSongs = visibleItems.compactMap { if case .song(let s) = $0 { return s } else { return nil } }
         let combinedQueue = pinnedSongs + quickSongs
 
-        if combinedQueue.isEmpty {
-            EmptyView()
-        } else {
-            HorizontalSection(title: section.displayTitle, vSpacing: 8, contentVerticalPadding: 0) {
-                LazyHGrid(rows: Array(repeating: GridItem(.fixed(60)), count: 4), spacing: 12) {
-                    ForEach(speedDialEntries, id: \.videoId) { entry in
-                        let song = entry.toSongItem()
-                        YouTubeListItemView(
-                            item: .song(song),
-                            onTap: { handleSongTap(song, in: combinedQueue) },
-                            onNavigate: { pendingRoute = $0 }
-                        )
-                        .frame(width: 280)
-                        .overlay(alignment: .topTrailing) {
-                            Image(systemName: "pin.fill")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(settings.accentColor)
-                                .padding(6)
-                        }
-                        .contextMenu {
-                            Button(role: .destructive) {
-                                Task {
-                                    try? await DatabaseService.shared.removeFromSpeedDial(videoId: entry.videoId)
-                                    await reloadSpeedDial()
+        return Group {
+            if combinedQueue.isEmpty {
+                EmptyView()
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    NavigationTitleView(title: section.displayTitle)
+
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(), spacing: 8),
+                            GridItem(.flexible(), spacing: 8)
+                        ],
+                        spacing: 4
+                    ) {
+                        ForEach(speedDialEntries, id: \.videoId) { entry in
+                            let song = entry.toSongItem()
+                            quickPickCell(song, queue: combinedQueue)
+                                .overlay(alignment: .topTrailing) {
+                                    Image(systemName: "pin.fill")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundStyle(settings.accentColor)
+                                        .padding(4)
                                 }
-                            } label: {
-                                Label("Unpin", systemImage: "pin.slash")
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        Task {
+                                            try? await DatabaseService.shared.removeFromSpeedDial(videoId: entry.videoId)
+                                            await reloadSpeedDial()
+                                        }
+                                    } label: {
+                                        Label("Unpin", systemImage: "pin.slash")
+                                    }
+                                }
+                        }
+
+                        ForEach(visibleItems.indices, id: \.self) { i in
+                            let item = visibleItems[i]
+                            if case .song(let s) = item {
+                                quickPickCell(s, queue: combinedQueue)
+                            } else {
+                                YouTubeListItemView(
+                                    item: item,
+                                    onTap: { handleItemTap(item) },
+                                    onNavigate: { pendingRoute = $0 }
+                                )
                             }
                         }
                     }
-
-                    ForEach(visibleItems.indices, id: \.self) { i in
-                        let item = visibleItems[i]
-                        if case .song(let s) = item {
-                            YouTubeListItemView(
-                                item: item,
-                                onTap: { handleSongTap(s, in: combinedQueue) },
-                                onNavigate: { pendingRoute = $0 }
-                            )
-                                .frame(width: 280)
-                        } else {
-                            YouTubeListItemView(item: item, onTap: { handleItemTap(item) }, onNavigate: { pendingRoute = $0 })
-                                .frame(width: 280)
-                        }
-                    }
+                    .padding(.horizontal, 12)
                 }
             }
         }
+    }
+
+    private func quickPickCell(_ song: SongItem, queue: [SongItem]) -> some View {
+        HStack(spacing: 10) {
+            AsyncImageView(url: song.thumbnailUrl)
+                .frame(width: 48, height: 48)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(song.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Text(song.subtitleLine(duration: song.duration))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 2)
+
+            Menu {
+                SongContextMenuButtons(song: song)
+            } label: {
+                Text("⋮")
+                    .font(.body.weight(.black))
+                    .foregroundStyle(settings.accentColor)
+                    .frame(width: 28, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("More")
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { handleSongTap(song, in: queue) }
+        .contextMenu { SongContextMenuButtons(song: song) }
     }
 
     private func songsSection(_ section: HomeSection) -> some View {
