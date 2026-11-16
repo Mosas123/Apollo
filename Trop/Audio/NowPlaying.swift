@@ -494,6 +494,10 @@ final class NowPlaying {
             isPlaying = false
             return
         }
+        // Only failures from the last cooldown are useful; this also bounds the
+        // dictionary over a long session.
+        let cutoff = Date().addingTimeInterval(-30)
+        lastFailureAt = lastFailureAt.filter { $0.value > cutoff }
         lastFailureAt[videoId] = Date()
         isPlaying = false
         Log.nowPlaying.notice("Stream failed mid-play, re-resolving \(videoId)")

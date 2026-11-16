@@ -29,6 +29,10 @@ private final class StickyArtworkCache: @unchecked Sendable {
         let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
         cache.setObject(image, forKey: key as NSString, cost: cost)
     }
+
+    func clear() {
+        cache.removeAllObjects()
+    }
 }
 
 private enum StickyArtwork {
@@ -49,6 +53,11 @@ struct AsyncImageView: View {
     @Environment(\.displayScale) private var displayScale
     @State private var loadedImage: UIImage?
     @State private var loadedKey: String?
+
+    /// Empties the sticky artwork cache (used by the memory-warning handler).
+    static func clearArtworkCache() {
+        StickyArtwork.cache.clear()
+    }
 
     var body: some View {
         GeometryReader { geometry in

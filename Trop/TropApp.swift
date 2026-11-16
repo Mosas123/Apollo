@@ -7,6 +7,7 @@
 
 import Nuke
 import SwiftUI
+import UIKit
 
 @main
 struct TropApp: App {
@@ -15,6 +16,14 @@ struct TropApp: App {
     init() {
         configureNuke()
         ensureDirectories()
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            ImageCache.shared.removeAll()
+            AsyncImageView.clearArtworkCache()
+        }
         Log.wireSwiftyTube()
         PlayerController.registerRemoteControlSupport()
         observePlaybackSettings()

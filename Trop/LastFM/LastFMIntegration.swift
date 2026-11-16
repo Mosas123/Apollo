@@ -35,7 +35,11 @@ final class LastFMIntegration {
 
     var isLoggedIn: Bool { LastFMTokenStore.shared.retrieveSessionKey() != nil }
 
+    private var hasStarted = false
+
     func start() {
+        guard !hasStarted else { return }
+        hasStarted = true
         // Observe NowPlaying via periodic polling + playState publisher
         periodicTask?.cancel()
         periodicTask = Task { [weak self] in
