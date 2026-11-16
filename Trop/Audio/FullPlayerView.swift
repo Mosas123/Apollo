@@ -195,6 +195,7 @@ struct FullPlayerView: View {
 
                         SecondaryActionsRow(
                             showQueue: $showQueue,
+                            showLyrics: $showLyrics,
                             isRepeatOn: $np.isRepeatOn
                         )
                         .scaleEffect(isCompact ? 0.92 : 1)
