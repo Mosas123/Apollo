@@ -92,7 +92,7 @@ public actor PlaylistDetailService {
         playlistId: String,
         maxPages: Int = 100,
         throwOnTruncation: Bool = false,
-        onPage: (@Sendable ([String: Any], [[String: Any]]) async -> Void)? = nil
+        onPage: (@Sendable (PlaylistRowsChunk) async -> Void)? = nil
     ) async throws -> PlaylistPage {
         // Stored ids may already carry the prefix (library rows keep the
         // endpoint's VL… id); blindly prepending yields VLVL… and the server
@@ -120,7 +120,7 @@ public actor PlaylistDetailService {
                 hadShelf = true
                 allItems += items
                 if let onPage {
-                    await onPage(json, items)
+                    await onPage(PlaylistRowsChunk(json: json, items: items))
                 }
             }
             token = extractPlaylistContinuation(from: json)
