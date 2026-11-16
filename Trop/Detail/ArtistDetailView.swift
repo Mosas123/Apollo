@@ -470,7 +470,7 @@ struct ArtistDetailView: View {
             }
 
             if !artist.songs.isEmpty {
-                songsSection(songs: artist.songs)
+                songsSection(artist: artist)
             }
 
             if !artist.albums.isEmpty {
@@ -771,17 +771,27 @@ struct ArtistDetailView: View {
     }
 
     @ViewBuilder
-    private func songsSection(songs: [SongItem]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Text("Top Songs")
-                    .font(.title3.weight(.bold))
-                Image(systemName: "chevron.right")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
+    private func songsSection(artist: ArtistDetailInfo) -> some View {
+        let songs = artist.songs
+        return VStack(alignment: .leading, spacing: 4) {
+            NavigationLink {
+                ArtistTopSongsView(songs: artist.songs, artistName: artist.name)
+            } label: {
+                HStack(spacing: 6) {
+                    Text("Top Songs")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(.primary)
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 24)
+                .padding(.bottom, 8)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 24)
+            .buttonStyle(.plain)
 
             ForEach(Array(songs.enumerated()), id: \.offset) { index, song in
                 SongRowView(
