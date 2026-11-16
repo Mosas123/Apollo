@@ -33,6 +33,7 @@ class LikeStore: ObservableObject {
     }
 
     func toggle(song: SongItem) async {
+        guard MusicPlaybackIdentity.isYouTube(song.videoId) else { return }
         let videoId = song.videoId
         let target = !isLiked(videoId: videoId)
 

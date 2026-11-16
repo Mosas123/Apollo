@@ -65,6 +65,7 @@ final class SearchViewModel {
     private(set) var results: [SearchSection] = []
     /// Source-specific results never enter YouTube's YTItem parser.
     private(set) var audiusTracks: [MusicCatalogTrack] = []
+    private(set) var qobuzTracks: [MusicCatalogTrack] = []
 
     // MARK: - Local matches (populated per submission, for Library filter)
 
@@ -137,6 +138,7 @@ final class SearchViewModel {
         let titles = Set(results.map(\.title))
         filters.append(contentsOf: Self.displayOrder.filter { titles.contains($0) })
         if !audiusTracks.isEmpty { filters.append("Audius") }
+        if !qobuzTracks.isEmpty { filters.append("Qobuz") }
         return filters
     }
 
@@ -153,6 +155,10 @@ final class SearchViewModel {
 
     var showsAudiusResults: Bool {
         !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "Audius")
+    }
+
+    var showsQobuzResults: Bool {
+        !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "Qobuz")
     }
 
     var filteredResults: [SearchSection] {
@@ -286,6 +292,7 @@ final class SearchViewModel {
         heroArtist = nil
         heroSongs = []
         audiusTracks = []
+        qobuzTracks = []
 
         updateHistory(query: query)
         cancelTasks()
@@ -300,6 +307,7 @@ final class SearchViewModel {
         // successful results from the other provider.
         async let localResults = try? SearchService.shared.localSearch(query: query)
         async let audiusResult = try? AudiusClient().searchTracks(query: query, limit: 25)
+        async let qobuzResult = QobuzCatalogService.shared.searchIfConfigured(query: query, limit: 25)
         var rawYouTube: [String: Any]?
         var youtubeFailure: Error?
         do {
@@ -308,6 +316,7 @@ final class SearchViewModel {
             youtubeFailure = error
         }
         let remoteAudius = await audiusResult ?? []
+        let remoteQobuz = await qobuzResult
         let local = await localResults
 
         guard !Task.isCancelled, query == submittedQuery else { return }
@@ -321,11 +330,12 @@ final class SearchViewModel {
         }
         results = rawYouTube.map { SearchParser.parseSearchResults(from: $0) } ?? []
         audiusTracks = remoteAudius
+        qobuzTracks = remoteQobuz
         selectedSectionFilter = nil
         isShowingLibrary = false
         extractHero()
 
-        if results.isEmpty && heroArtist == nil && audiusTracks.isEmpty {
+        if results.isEmpty && heroArtist == nil && audiusTracks.isEmpty && qobuzTracks.isEmpty {
             error = youtubeFailure
             phase = youtubeFailure == nil ? .noResults : .failed
         } else {
@@ -380,6 +390,7 @@ final class SearchViewModel {
         submittedQuery = ""
         results = []
         audiusTracks = []
+        qobuzTracks = []
         localSongs = []
         localArtists = []
         localAlbums = []
