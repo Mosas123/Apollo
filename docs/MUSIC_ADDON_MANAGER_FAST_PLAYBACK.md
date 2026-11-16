@@ -31,6 +31,17 @@ Settings → Integrations → Music Addons:
   explicit approval flow.
 - No remote executable scripts, no addon endpoint requests, no playback
   routing, no account tokens, no imported libraries in this phase.
+- A clearly labelled **offline demo addon** can be installed without network
+  to test the UI and persistent enable/reorder/delete operations. It has no
+  playable audio and cannot refresh its sample URL.
+- Stremio `resources/types/catalogs` manifests are detected and rejected
+  with a specific compatibility explanation, not a generic JSON failure.
+  This includes Flix-Music (https://flix-music.vercel.app/manifest.json),
+  which advertises Stremio `catalog/meta/stream` resources and a `movie`
+  content type for its Last.fm-based music catalogs. Trop currently accepts
+  only its own v1 declarative manifest format. Stremio compatibility needs
+  a dedicated protocol adapter and a source/rights review; silently mapping
+  Stremio endpoints to Trop's schema would create unusable addons.
 
 ## Manifest fetch restrictions
 
