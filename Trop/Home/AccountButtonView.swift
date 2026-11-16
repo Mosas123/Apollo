@@ -16,7 +16,7 @@ struct AccountButtonView: View {
         Button(action: onTap) {
             if isLoggedIn {
                 AsyncImageView(url: accountImageUrl)
-                    .frame(width: 28, height: 28)
+                    .frame(width: 32, height: 32)
                     .clipShape(Circle())
             } else {
                 fallback
@@ -28,7 +28,7 @@ struct AccountButtonView: View {
     private var fallback: some View {
         Circle()
             .fill(Color(.systemGray4))
-            .frame(width: 28, height: 28)
+            .frame(width: 32, height: 32)
             .overlay(
                 Text("T")
                     .font(.caption)

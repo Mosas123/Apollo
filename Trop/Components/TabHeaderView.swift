@@ -22,10 +22,10 @@ struct TabHeaderView: View {
                 .font(.largeTitle)
                 .fontWeight(.bold)
             Spacer()
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 Button(action: onHistory) {
                     Image(systemName: "clock.arrow.circlepath")
-                        .font(.title3)
+                        .font(.system(size: 22, weight: .regular))
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
