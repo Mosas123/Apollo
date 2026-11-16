@@ -56,13 +56,12 @@ struct SongRowView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(song.title)
-                    .font(index == nil ? .subheadline : .body)
-                    .fontWeight(index == nil ? .medium : .regular)
+                    .font(index == nil ? .headline : .body)
                     .foregroundColor(.primary)
                     .lineLimit(1)
 
                 Text(song.subtitleLine(duration: durations.effectiveDuration(known: song.duration)))
-                    .font(index == nil ? .caption : .subheadline)
+                    .font(.subheadline)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }

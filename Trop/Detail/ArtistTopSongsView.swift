@@ -40,7 +40,7 @@ struct ArtistTopSongsView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(song.title)
-                    .font(.body.weight(.medium))
+                    .font(.headline)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                 Text(subtitle(for: song))

@@ -45,14 +45,13 @@ struct YouTubeGridItemView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
 
                 Text(item.title)
-                    .font(.caption)
-                    .fontWeight(.medium)
+                    .font(.subheadline.weight(.medium))
                     .foregroundColor(.primary)
                     .lineLimit(2)
 
                 if !subtitleText.isEmpty {
                     Text(subtitleText)
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
@@ -107,13 +106,12 @@ struct YouTubeListItemView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.title)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
+                        .font(.headline)
                         .foregroundColor(.primary)
                         .lineLimit(1)
 
                     Text(albumSubtitleText)
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }

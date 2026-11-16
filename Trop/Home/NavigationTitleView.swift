@@ -31,7 +31,7 @@ struct NavigationTitleView: View {
                                 .foregroundColor(.secondary)
                         }
                         Text(LocalizedStringKey(title))
-                            .font(.title3)
+                            .font(.title2)
                             .fontWeight(.bold)
                             .foregroundColor(.primary)
                             .lineLimit(1)

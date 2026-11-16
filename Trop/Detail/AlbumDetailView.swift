@@ -426,7 +426,7 @@ struct AlbumDetailView: View {
     private func carousel<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.title3.bold())
+                .font(.title2.bold())
                 .padding(.horizontal, 20)
                 .padding(.top, 24)
             ScrollView(.horizontal, showsIndicators: false) {

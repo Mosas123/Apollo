@@ -161,9 +161,11 @@ struct LibraryListScreen: View {
                 }
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).lineLimit(1)
+                Text(title)
+                    .font(.headline)
+                    .lineLimit(1)
                 if let subtitle {
-                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                    Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
                 }
             }
         }
