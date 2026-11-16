@@ -43,6 +43,12 @@ struct SettingsView: View {
             }
 
             Section {
+                SettingsNavigationRow("History", icon: "clock.arrow.circlepath") {
+                    HistoryScreenView()
+                }
+            }
+
+            Section {
                 SettingsNavigationRow("About", icon: "info.circle.fill") {
                     AboutSettingsView()
                 }

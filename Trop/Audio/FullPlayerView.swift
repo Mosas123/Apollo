@@ -42,20 +42,6 @@ struct FullPlayerView: View {
         min(1, max(0, sheet.dragOffset / 120))
     }
 
-    private var activeLyricText: String? {
-        let synchronizedLines = currentLyrics.filter {
-            $0.startTime != nil &&
-                !$0.text.trimmingCharacters(in: CharacterSet(charactersIn: "♪*· ")).isEmpty
-        }
-        guard let firstLine = synchronizedLines.first else { return nil }
-
-        let lyricTime = np.currentTime + settings.lyricsOffsetSeconds
-        return synchronizedLines.last { line in
-            guard let startTime = line.startTime else { return false }
-            return startTime <= lyricTime
-        }?.text ?? firstLine.text
-    }
-
     var body: some View {
         GeometryReader { geometry in
             let horizontalPadding: CGFloat = geometry.size.width < 375 ? 24 : 32

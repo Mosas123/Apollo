@@ -203,7 +203,8 @@ private struct EqualizerGraph: View {
 
     private func linePath(_ points: [CGPoint]) -> Path {
         var path = Path()
-        path.move(to: points[0])
+        guard let first = points.first else { return path }
+        path.move(to: first)
         for point in points.dropFirst() {
             path.addLine(to: point)
         }

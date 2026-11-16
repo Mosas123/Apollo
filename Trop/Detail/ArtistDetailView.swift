@@ -549,7 +549,7 @@ struct ArtistDetailView: View {
             // Fades the photo into the artist's dominant color so the page reads
             // as one surface (Apple Music artist page).
             LinearGradient(
-                colors: [.clear, backdropColor.opacity(0.35), backdropColor.opacity(0.55)],
+                colors: [.clear, backdropColor.opacity(0.35), backdropColor.opacity(0.45)],
                 startPoint: .center,
                 endPoint: .bottom
             )
@@ -614,8 +614,8 @@ struct ArtistDetailView: View {
     private var artistBackdrop: some View {
         LinearGradient(
             stops: [
-                .init(color: backdropColor.opacity(0.55), location: 0),
-                .init(color: backdropColor.opacity(0.55), location: 0.55),
+                .init(color: backdropColor.opacity(0.45), location: 0),
+                .init(color: backdropColor.opacity(0.45), location: 0.55),
                 .init(color: Color(.systemBackground), location: 1)
             ],
             startPoint: .top,
@@ -637,7 +637,7 @@ struct ArtistDetailView: View {
                     .clipped()
 
                     LinearGradient(
-                        colors: [.clear, backdropColor.opacity(0.45), backdropColor.opacity(0.55)],
+                        colors: [.clear, backdropColor.opacity(0.45), backdropColor.opacity(0.45)],
                         startPoint: .center,
                         endPoint: .bottom
                     )

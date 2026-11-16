@@ -11,6 +11,11 @@ enum ArtistGenreResolver {
         guard !key.isEmpty else { return nil }
         if let cached = cache[key] { return cached }
         let genre = await fetch(artist)
+        if cache.count >= 500, cache[key] == nil {
+            for victim in Array(cache.keys.prefix(100)) {
+                cache.removeValue(forKey: victim)
+            }
+        }
         cache[key] = genre
         return genre
     }
