@@ -42,7 +42,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/Mosas123/ThrumTube.git",
       "state" : {
-        "revision" : "04e9d0b152947c202815fb8b47311a597cba92df",
+        "revision" : "4320e7033eb53085f556c07ea50082915eb80b8a",
         "version" : "0.0.9"
       }
     }

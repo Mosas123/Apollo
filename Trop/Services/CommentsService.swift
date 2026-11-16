@@ -130,7 +130,7 @@ actor CommentsService {
     /// classifies the response: new steps, the server's failure toast, or
     /// a no-op 200.
     func advanceReportFlow(
-        flowState: [String: Any],
+        flowState: TubeJSON,
         flowStateEntityKey: String,
         flowId: String,
         targetId: String

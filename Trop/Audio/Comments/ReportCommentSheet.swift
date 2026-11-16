@@ -420,7 +420,7 @@ final class ReportCommentModel {
         defer { isAdvancing = false }
         do {
             let update = try await CommentsService.shared.advanceReportFlow(
-                flowState: state,
+                flowState: TubeJSON(state),
                 flowStateEntityKey: flowStateKey,
                 flowId: flowId,
                 targetId: targetId
