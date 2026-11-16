@@ -142,17 +142,21 @@ struct QueueView<ProgressSlider: View>: View {
             Spacer()
 
             if let song = np.queueSongs.indices.contains(np.queueIndex) ? np.queueSongs[np.queueIndex] : nil {
-                PlayerLikeButton(isLiked: likeStore.isLiked(videoId: song.videoId)) {
-                    Task { await likeStore.toggle(song: song) }
-                }
-                PlayerOptionsButton(color: .white.opacity(0.6)) {
-                    showSongMenu = true
-                }
-                .sheet(isPresented: $showSongMenu) {
-                    SongMenuSheet(
-                        song: song,
-                        onNavigate: { pendingRoute.wrappedValue = $0 }
-                    )
+                GlassEffectContainer(spacing: 2) {
+                    HStack(spacing: 8) {
+                        PlayerLikeButton(isLiked: likeStore.isLiked(videoId: song.videoId)) {
+                            Task { await likeStore.toggle(song: song) }
+                        }
+                        PlayerOptionsButton(color: .white.opacity(0.6)) {
+                            showSongMenu = true
+                        }
+                        .sheet(isPresented: $showSongMenu) {
+                            SongMenuSheet(
+                                song: song,
+                                onNavigate: { pendingRoute.wrappedValue = $0 }
+                            )
+                        }
+                    }
                 }
             }
         }

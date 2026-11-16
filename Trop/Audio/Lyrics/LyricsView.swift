@@ -379,17 +379,21 @@ struct LyricsView<ProgressSlider: View>: View {
 
             Spacer()
 
-            PlayerLikeButton(
-                isLiked: isLiked,
-                fontSize: 18
-            ) {
-                guard let song = np.queueSongs.indices.contains(np.queueIndex) ? np.queueSongs[np.queueIndex] : nil else { return }
-                Task { await likeStore.toggle(song: song) }
-            }
+            GlassEffectContainer(spacing: 2) {
+                HStack(spacing: 8) {
+                    PlayerLikeButton(
+                        isLiked: isLiked,
+                        fontSize: 18
+                    ) {
+                        guard let song = np.queueSongs.indices.contains(np.queueIndex) ? np.queueSongs[np.queueIndex] : nil else { return }
+                        Task { await likeStore.toggle(song: song) }
+                    }
 
-            if np.queueSongs.indices.contains(np.queueIndex) {
-                PlayerOptionsButton(color: .white.opacity(0.6)) {
-                    showSongMenu = true
+                    if np.queueSongs.indices.contains(np.queueIndex) {
+                        PlayerOptionsButton(color: .white.opacity(0.6)) {
+                            showSongMenu = true
+                        }
+                    }
                 }
             }
         }

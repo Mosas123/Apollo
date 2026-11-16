@@ -15,9 +15,9 @@ private struct PlayerGlassModifier: ViewModifier {
     func body(content: Content) -> some View {
         switch settings.glassStyle {
         case .clear:
-            content.glassEffect(.clear, in: Circle())
+            content.glassEffect(.clear.interactive(), in: Circle())
         case .regular:
-            content.glassEffect(.regular, in: Circle())
+            content.glassEffect(.regular.interactive(), in: Circle())
         case .opaque:
             content.background(Color.black.opacity(0.4), in: Circle())
         }
