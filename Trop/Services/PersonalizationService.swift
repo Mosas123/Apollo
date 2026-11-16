@@ -111,7 +111,7 @@ actor PersonalizationService {
     func buildAccountPlaylists() async -> HomeSection {
         guard await isLoggedIn() else { return .accountPlaylists(items: []) }
         do {
-            let json = try await innerTube.browse(browseId: "FEmusic_liked_playlists")
+            let json = try await innerTube.browse(browseId: "FEmusic_liked_playlists").value
             let playlists = LibraryBrowseParser.parsePlaylists(from: json)
             let items = playlists.map {
                 YTItem.playlist(PlaylistItem(
@@ -162,7 +162,7 @@ actor PersonalizationService {
         var sections: [HomeSection] = []
         for artist in topArtists.prefix(3) {
             guard sections.count < 3 else { break }
-            guard let related = try? await innerTube.browse(browseId: artist.id),
+            guard let related = try? await innerTube.browse(browseId: artist.id).value,
                   let items = parseRelatedItems(from: related), !items.isEmpty else { continue }
             let title = String(
                 format: NSLocalizedString("Similar to %@", comment: "Similar artist section title"),
@@ -184,7 +184,7 @@ actor PersonalizationService {
 
         for artist in topArtists {
             guard communityPlaylists.count < 5 else { break }
-            guard let json = try? await innerTube.browse(browseId: artist.id) else { continue }
+            guard let json = try? await innerTube.browse(browseId: artist.id).value else { continue }
             let playlists = LibraryBrowseParser.extractCommunityPlaylists(from: json)
             for playlist in playlists {
                 let pid = LibraryBrowseParser.normalizePlaylistId(playlist.browseId)
@@ -228,7 +228,7 @@ actor PersonalizationService {
     private func fetchSongMetadata(videoId: String) async throws -> SongMetadata? {
         let json: [String: Any]
         do {
-            json = try await innerTube.player(videoId: videoId)
+            json = try await innerTube.player(videoId: videoId).value
         } catch {
             return nil
         }
@@ -257,7 +257,7 @@ actor PersonalizationService {
 
     func fetchRadio(videoId: String, options: RadioOptions) async throws -> (songs: [SongItem], currentIndex: Int) {
         let playlistId = "RDAMVM\(videoId)"
-        let json = try await innerTube.next(videoId: videoId, playlistId: playlistId)
+        let json = try await innerTube.next(videoId: videoId, playlistId: playlistId).value
         let panel = try extractPlaylistPanel(from: json)
         var songs: [(SongItem, Bool)] = []
         for entry in panel.contents {
@@ -326,7 +326,7 @@ actor PersonalizationService {
               let watchPlaylist = navEndpoint["watchPlaylistEndpoint"] as? [String: Any],
               let playlistId = watchPlaylist["playlistId"] as? String else { return nil }
         let autoVideoId = watchPlaylist["videoId"] as? String
-        guard let autoJson = try? await innerTube.next(videoId: autoVideoId, playlistId: playlistId),
+        guard let autoJson = try? await innerTube.next(videoId: autoVideoId, playlistId: playlistId).value,
               let autoPanel = try? extractPlaylistPanel(from: autoJson) else { return nil }
         var songs: [SongItem] = []
         for entry in autoPanel.contents {

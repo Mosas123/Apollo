@@ -177,7 +177,7 @@ final class HomeViewModel {
             attempts += 1
             isLoadingMore = true
             do {
-                let json = try await InnerTubeClient.tropShared.browse(continuation: continuation)
+                let json = try await InnerTubeClient.tropShared.browse(continuation: continuation).value
                 guard let (newSections, next) = HomePageParser.parseContinuationSections(from: json) else {
                     isLoadingMore = false
                     break
@@ -202,7 +202,7 @@ final class HomeViewModel {
 
     private func fetchHomePage(generation: Int) async {
         do {
-            let json = try await InnerTubeClient.tropShared.browse(browseId: "FEmusic_home")
+            let json = try await InnerTubeClient.tropShared.browse(browseId: "FEmusic_home").value
             guard let page = HomePageParser.parseHomePage(from: json) else {
                 if generation == loadGeneration {
                     error = InnerTubeError.decodingFailed
@@ -274,7 +274,7 @@ final class HomeViewModel {
                 let json = try await InnerTubeClient.tropShared.browse(
                     browseId: "FEmusic_home",
                     params: chip?.params
-                )
+                ).value
                 guard !Task.isCancelled, generation == loadGeneration else { return }
                 if let page = HomePageParser.parseHomePage(from: json) {
                     homePage?.sections = page.sections
@@ -302,7 +302,7 @@ final class HomeViewModel {
         Task {
             defer { isLoadingMore = false }
             do {
-                let json = try await InnerTubeClient.tropShared.browse(continuation: continuation)
+                let json = try await InnerTubeClient.tropShared.browse(continuation: continuation).value
                 if let (newSections, newContinuation) = HomePageParser.parseContinuationSections(from: json) {
                     homePage?.sections.append(contentsOf: newSections)
                     homePage?.continuation = newContinuation

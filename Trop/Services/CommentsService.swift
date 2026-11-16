@@ -57,12 +57,12 @@ actor CommentsService {
     func performCommentAction(action: String) async throws -> Bool {
         do {
             await syncAuth(into: musicClient)
-            let json = try await musicClient.performCommentAction(action: action, client: .web)
+            let json = try await musicClient.performCommentAction(action: action, client: .web).value
             return Self.voteSucceeded(json)
         } catch {
             await syncAuth(into: youtubeClient)
             do {
-                let json = try await youtubeClient.performCommentAction(action: action, client: .web)
+                let json = try await youtubeClient.performCommentAction(action: action, client: .web).value
                 return Self.voteSucceeded(json)
             } catch {
                 throw CommentsError.underlying(error)
@@ -77,11 +77,11 @@ actor CommentsService {
         let json: [String: Any]
         do {
             await syncAuth(into: musicClient)
-            json = try await musicClient.createComment(params: params, text: text, client: .web)
+            json = try await musicClient.createComment(params: params, text: text, client: .web).value
         } catch {
             await syncAuth(into: youtubeClient)
             do {
-                json = try await youtubeClient.createComment(params: params, text: text, client: .web)
+                json = try await youtubeClient.createComment(params: params, text: text, client: .web).value
             } catch {
                 throw CommentsError.underlying(error)
             }
@@ -95,11 +95,11 @@ actor CommentsService {
         let json: [String: Any]
         do {
             await syncAuth(into: musicClient)
-            json = try await musicClient.updateComment(params: params, text: text, client: .web)
+            json = try await musicClient.updateComment(params: params, text: text, client: .web).value
         } catch {
             await syncAuth(into: youtubeClient)
             do {
-                json = try await youtubeClient.updateComment(params: params, text: text, client: .web)
+                json = try await youtubeClient.updateComment(params: params, text: text, client: .web).value
             } catch {
                 throw CommentsError.underlying(error)
             }
@@ -118,7 +118,7 @@ actor CommentsService {
         let json = try await reportPOST { client in
             try await client.abuseReportPanel(params: params, client: .web)
         }
-        guard let panel = CommentsParser.parseReportPanel(json) else {
+        guard let panel = CommentsParser.parseReportPanel(json.value) else {
             throw CommentsError.rejected(
                 NSLocalizedString("Couldn't load report options", comment: "")
             )
@@ -144,7 +144,7 @@ actor CommentsService {
                 client: .web
             )
         }
-        return CommentsParser.parseReportFlowUpdate(json)
+        return CommentsParser.parseReportFlowUpdate(json.value)
     }
 
     private static func postFailureMessage(_ json: [String: Any]) -> String? {
@@ -185,7 +185,7 @@ actor CommentsService {
     private func commentsToken(videoId: String, client: InnerTubeClient) async -> String? {
         do {
             await syncAuth(into: client)
-            let json = try await client.next(videoId: videoId, client: .web)
+            let json = try await client.next(videoId: videoId, client: .web).value
             return CommentsParser.findInitialCommentsToken(in: json)
         } catch {
             return nil
@@ -204,8 +204,8 @@ actor CommentsService {
     /// (400 `error.message`) is surfaced verbatim; everything else falls
     /// back to www before being wrapped.
     private func reportPOST(
-        _ call: @escaping (InnerTubeClient) async throws -> [String: Any]
-    ) async throws -> [String: Any] {
+        _ call: @escaping (InnerTubeClient) async throws -> TubeJSON
+    ) async throws -> TubeJSON {
         do {
             await syncAuth(into: musicClient)
             return try await call(musicClient)
@@ -236,11 +236,11 @@ actor CommentsService {
         let json: [String: Any]
         do {
             await syncAuth(into: musicClient)
-            json = try await musicClient.next(continuation: continuation, client: .web)
+            json = try await musicClient.next(continuation: continuation, client: .web).value
         } catch {
             await syncAuth(into: youtubeClient)
             do {
-                json = try await youtubeClient.next(continuation: continuation, client: .web)
+                json = try await youtubeClient.next(continuation: continuation, client: .web).value
             } catch {
                 throw CommentsError.underlying(error)
             }

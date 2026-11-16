@@ -31,7 +31,7 @@ final class ArtistDetailViewModel {
         error = nil
 
         do {
-            let json = try await innerTube.browse(browseId: browseId)
+            let json = try await innerTube.browse(browseId: browseId).value
             let parsed = Self.parseArtistDetail(from: json, browseId: browseId)
             Self.preloadHeroArtwork(for: parsed.thumbnailUrl)
             artist = parsed

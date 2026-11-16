@@ -49,7 +49,7 @@ final class ExploreViewModel {
             let json = try await InnerTubeClient.tropShared.browse(
                 browseId: HomePageParser.exploreBrowseId,
                 formData: ["selectedValues": [region]]
-            )
+            ).value
             Log.explore.debug("Explore fetch ok topKeys=\((json.keys.sorted()))")
             sections = HomePageParser.parseExploreSections(from: json)
             await applyRegionalTrending(region: region)
@@ -78,7 +78,7 @@ final class ExploreViewModel {
             return
         }
         guard let playlistId = try? await RegionalCharts.trendingPlaylistId(country: region, using: InnerTubeClient.tropShared),
-              let (_, rows) = try? await SyncBridge.playlistDetail.fetchPlaylistRows(playlistId: playlistId) else { return }
+              let rows = (try? await SyncBridge.playlistDetail.fetchPlaylistRows(playlistId: playlistId))?.rows else { return }
         let songs = rows.compactMap { item -> SongItem? in
             guard let renderer = item["musicResponsiveListItemRenderer"] as? [String: Any] else { return nil }
             return SongItem.from(renderer)
@@ -97,7 +97,7 @@ final class ExploreViewModel {
             let json = try await InnerTubeClient.tropShared.browse(
                 browseId: HomePageParser.moodsCategoryBrowseId,
                 params: mood.params
-            )
+            ).value
             let sections = HomePageParser.parseExploreSections(from: json)
             Log.explore.debug(
                 "Explore mood '\(mood.title)': " +

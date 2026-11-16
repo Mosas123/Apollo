@@ -32,7 +32,7 @@ final class AlbumDetailViewModel {
         error = nil
 
         do {
-            let json = try await innerTube.browse(browseId: browseId)
+            let json = try await innerTube.browse(browseId: browseId).value
             Log.albumDetailViewModel.debug("Got browse response, parsing...")
             let parsed = Self.parseAlbumDetail(from: json, browseId: browseId)
             album = parsed

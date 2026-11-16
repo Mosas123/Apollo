@@ -53,8 +53,8 @@ final class PlaylistDetailViewModel {
 
         do {
             let browseId = playlistId.hasPrefix("VL") ? playlistId : "VL\(playlistId)"
-            let (firstPage, rows) = try await SyncBridge.playlistDetail.fetchPlaylistRows(playlistId: playlistId)
-            let parsed = Self.parsePlaylistDetail(firstPage: firstPage, rows: rows, playlistId: playlistId)
+            let page = try await SyncBridge.playlistDetail.fetchPlaylistRows(playlistId: playlistId)
+            let parsed = Self.parsePlaylistDetail(firstPage: page.firstPage, rows: page.rows, playlistId: playlistId)
 
             // Persist songs to the song table so they become searchable in the library
             let pid = playlistId

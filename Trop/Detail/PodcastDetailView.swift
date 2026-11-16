@@ -30,7 +30,7 @@ final class PodcastDetailViewModel {
         error = nil
 
         do {
-            let json = try await innerTube.browse(browseId: browseId)
+            let json = try await innerTube.browse(browseId: browseId).value
             let parsed = Self.parsePodcastDetail(from: json, browseId: browseId)
             Log.podcastDetail.debug("title=\(parsed.title) author=\(parsed.author ?? "nil") episodes=\(parsed.episodes.count)")
             podcast = parsed
