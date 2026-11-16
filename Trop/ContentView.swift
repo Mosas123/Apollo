@@ -12,10 +12,61 @@ struct ContentView: View {
     @Environment(SettingsStore.self) private var settings
     @State private var nowPlaying = NowPlaying.shared
     @State private var selectedTab = SettingsStore.shared.defaultTab
-    @State private var isExpanded = false
+    @State private var sheet = PlayerSheetState.shared
     @State private var scrollState = MiniPlayerScrollState()
 
     var body: some View {
+        ZStack {
+            tabContent
+                .scaleEffect(1 - 0.08 * backgroundProgress, anchor: .center)
+                .clipShape(RoundedRectangle(cornerRadius: 38 * backgroundProgress, style: .continuous))
+                .overlay {
+                    if backgroundProgress > 0 {
+                        Color.black
+                            .opacity(0.22 * backgroundProgress)
+                            .ignoresSafeArea()
+                            .allowsHitTesting(false)
+                    }
+                }
+
+            if sheet.isExpanded {
+                FullPlayerView(onCollapse: collapsePlayer)
+                    .transition(.move(edge: .bottom))
+            }
+        }
+        .environment(scrollState)
+        .onAppear {
+            if selectedTab == 1 && !settings.showRadioTab { selectedTab = 0 }
+            if selectedTab == 4 && !settings.showExploreTab { selectedTab = 0 }
+            AppRouter.shared.selectedTabIndex = selectedTab
+        }
+        .onChange(of: settings.showRadioTab) { _, shown in
+            if !shown, selectedTab == 1 { selectedTab = 0 }
+        }
+        .onChange(of: settings.showExploreTab) { _, shown in
+            if !shown, selectedTab == 4 { selectedTab = 0 }
+        }
+        .onChange(of: selectedTab) { _, newValue in
+            AppRouter.shared.selectedTabIndex = newValue
+        }
+        .onReceive(AppRouter.shared.$activeRoute) { route in
+            // A detail page was opened from an overlay: collapse the player so
+            // the pushed page is visible underneath.
+            if route != nil {
+                withAnimation(.smooth(duration: 0.3)) {
+                    sheet.isExpanded = false
+                }
+            }
+        }
+        .onReceive(AppRouter.shared.$playerExpandToken.dropFirst()) { _ in
+            withAnimation(.smooth(duration: 0.3)) {
+                sheet.isExpanded = true
+            }
+        }
+        .simultaneousGesture(backSwipeGesture)
+    }
+
+    private var tabContent: some View {
         TabView(selection: $selectedTab) {
             Tab("Home", systemImage: "music.note.house.fill", value: 0) {
                 HomeScreenView()
@@ -42,70 +93,49 @@ struct ContentView: View {
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
-            .tabViewBottomAccessory(isEnabled: nowPlaying.isBarPresented) {
-                MiniPlayerBarView(onExpand: {
-                    // Dismiss the keyboard before expanding the player so the reveal is visible on the first tap.
-                    UIApplication.shared.sendAction(
-                        #selector(UIResponder.resignFirstResponder),
-                        to: nil,
-                        from: nil,
-                        for: nil
-                    )
-                    withAnimation(.smooth(duration: 0.3)) {
-                        isExpanded = true
-                    }
-                })
-            }
-            .background {
-                backgroundLayer
-            }
-            .overlay {
-                if isExpanded {
-                    FullPlayerView(onCollapse: {
-                        withAnimation(.smooth(duration: 0.3)) {
-                            isExpanded = false
-                        }
-                    })
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .environment(scrollState)
-        .onAppear {
-            if selectedTab == 1 && !settings.showRadioTab { selectedTab = 0 }
-            if selectedTab == 4 && !settings.showExploreTab { selectedTab = 0 }
-            AppRouter.shared.selectedTabIndex = selectedTab
-        }
-        .onChange(of: settings.showRadioTab) { _, shown in
-            if !shown, selectedTab == 1 { selectedTab = 0 }
-        }
-        .onChange(of: settings.showExploreTab) { _, shown in
-            if !shown, selectedTab == 4 { selectedTab = 0 }
-        }
-        .onChange(of: selectedTab) { _, newValue in
-            AppRouter.shared.selectedTabIndex = newValue
-        }
-        .onReceive(AppRouter.shared.$activeRoute) { route in
-            // A detail page was opened from an overlay: collapse the player so
-            // the pushed page is visible underneath.
-            if route != nil {
+        .tabViewBottomAccessory(isEnabled: nowPlaying.isBarPresented) {
+            MiniPlayerBarView(onExpand: {
+                // Dismiss the keyboard before expanding the player so the reveal is visible on the first tap.
+                UIApplication.shared.sendAction(
+                    #selector(UIResponder.resignFirstResponder),
+                    to: nil,
+                    from: nil,
+                    for: nil
+                )
                 withAnimation(.smooth(duration: 0.3)) {
-                    isExpanded = false
+                    sheet.isExpanded = true
                 }
+            })
+        }
+        .background {
+            backgroundLayer
+        }
+    }
+
+    /// 0 when the player is fully expanded, 1 after dragging it a full screen.
+    private var backgroundProgress: CGFloat {
+        let height = max(UIScreen.main.bounds.height, 1)
+        return min(1, max(0, sheet.dragOffset / height))
+    }
+
+    private func collapsePlayer() {
+        withAnimation(.smooth(duration: 0.3)) {
+            sheet.isExpanded = false
+        }
+        // Let the card finish sliding out before the background relaxes.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(320))
+            withAnimation(.easeOut(duration: 0.2)) {
+                sheet.dragOffset = 0
             }
         }
-        .onReceive(AppRouter.shared.$playerExpandToken.dropFirst()) { _ in
-            withAnimation(.smooth(duration: 0.3)) {
-                isExpanded = true
-            }
-        }
-        .simultaneousGesture(backSwipeGesture)
     }
 
     private var backSwipeGesture: some Gesture {
         DragGesture(minimumDistance: 20)
             .onEnded { value in
                 let isHorizontal = abs(value.translation.width) > abs(value.translation.height)
-                guard !isExpanded,
+                guard !sheet.isExpanded,
                       value.startLocation.x <= 28,
                       isHorizontal,
                       value.translation.width > 80 else { return }
@@ -114,7 +144,7 @@ struct ContentView: View {
                 let depth = router.activePathDepth
                 guard depth > 0 else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    guard !isExpanded, router.activePathDepth == depth else { return }
+                    guard !sheet.isExpanded, router.activePathDepth == depth else { return }
                     router.popActiveRoute()
                 }
             }
@@ -122,7 +152,10 @@ struct ContentView: View {
 
     @ViewBuilder
     private var backgroundLayer: some View {
-        if settings.playerBackgroundStyle == .solid {
+        if sheet.isExpanded || sheet.dragOffset > 0 {
+            Color(.systemBackground)
+                .ignoresSafeArea()
+        } else if settings.playerBackgroundStyle == .solid {
             Color.black.ignoresSafeArea()
         } else if let accent = nowPlaying.accentColor {
             accent

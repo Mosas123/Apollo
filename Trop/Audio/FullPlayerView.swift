@@ -15,7 +15,7 @@ struct FullPlayerView: View {
     @Bindable private var np = NowPlaying.shared
     @State private var editingProgress: Float = 0
     @State private var isEditingSlider = false
-    @State private var collapseOffset: CGFloat = 0
+    @State private var sheet = PlayerSheetState.shared
 
     @ObservedObject private var likeStore = LikeStore.shared
     private var isLiked: Bool {
@@ -203,8 +203,15 @@ struct FullPlayerView: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .offset(y: collapseOffset)
-            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: collapseOffset)
+            .ignoresSafeArea(edges: .bottom)
+            .clipShape(
+                UnevenRoundedRectangle(
+                    topLeadingRadius: 38,
+                    topTrailingRadius: 38,
+                    style: .continuous
+                )
+            )
+            .offset(y: sheet.dragOffset)
             .animation(.easeInOut(duration: 0.35), value: showQueue)
             .simultaneousGesture(collapseDrag)
             .onChange(of: np.videoId) { _, _ in
@@ -270,13 +277,18 @@ struct FullPlayerView: View {
             .onChanged { value in
                 guard value.translation.height > 0,
                       value.translation.height > abs(value.translation.width) else { return }
-                collapseOffset = value.translation.height
+                // Track the finger 1:1; the tab content behind scales in step.
+                sheet.dragOffset = value.translation.height
             }
             .onEnded { value in
-                defer { collapseOffset = 0 }
                 let isVertical = value.translation.height > abs(value.translation.width)
                 if isVertical, value.translation.height > 140 {
+                    // collapsePlayer relaxes dragOffset after the card slides out.
                     onCollapse()
+                } else {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        sheet.dragOffset = 0
+                    }
                 }
             }
     }
