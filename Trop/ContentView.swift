@@ -29,7 +29,7 @@ struct ContentView: View {
                 ExploreView()
             }
 
-            Tab("Search", systemImage: "magnifyingglass", value: 3) {
+            Tab("Search", systemImage: "magnifyingglass", value: 3, role: .search) {
                 SearchView()
             }
         }
