@@ -12,9 +12,18 @@ import Nuke
 import SwiftUI
 
 @Observable
+/// What is currently playing, used to route metadata and label the UI.
+enum PlaybackKind: Sendable {
+    case music
+    case podcast
+    case radio
+}
+
 @MainActor
 final class NowPlaying {
     static let shared = NowPlaying()
+    /// Synchronous radio streams use a synthetic `radio:<uuid>` video id.
+    static let radioPrefix = "radio:"
 
     var title = ""
     var artist = ""
@@ -60,6 +69,16 @@ final class NowPlaying {
 
     var isBarPresented: Bool {
         videoId != nil
+    }
+
+    /// Whether the current playback is music, a podcast, or internet radio.
+    var playbackKind: PlaybackKind {
+        if videoId?.hasPrefix(Self.radioPrefix) == true { return .radio }
+        if queueSongs.indices.contains(queueIndex) {
+            let kind = queueSongs[queueIndex].contentKind
+            if kind == .episode || kind == .podcast { return .podcast }
+        }
+        return .music
     }
 
     private var timer: Timer?
@@ -433,6 +452,9 @@ final class NowPlaying {
     /// then MusicBrainz / Cover Art Archive) and swap it in if the track is
     /// still current. Keeps the player showing clean, consistent album art.
     private func enrichArtwork(videoId: String) {
+        // Radio stations already carry their own name and favicon; never match
+        // them against music/podcast catalogues.
+        guard playbackKind != .radio else { return }
         let title = title
         let artist = artist
         let kind = queueSongs.first { $0.videoId == videoId }?.contentKind

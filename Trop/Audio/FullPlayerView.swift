@@ -301,13 +301,21 @@ struct FullPlayerView: View {
 
     private var titleAndActionsRow: some View {
         HStack(alignment: .center, spacing: 12) {
-            PlayerTitleBlock(
-                title: np.title,
-                artist: np.displayArtist,
-                spacing: 4,
-                titleFont: .title3.weight(.bold),
-                titleHeight: 28
-            )
+            VStack(alignment: .leading, spacing: 4) {
+                if np.playbackKind != .music {
+                    Text(np.playbackKind == .radio ? "RADIO" : "PODCAST")
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(1.2)
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+                PlayerTitleBlock(
+                    title: np.title,
+                    artist: np.displayArtist,
+                    spacing: 4,
+                    titleFont: .title3.weight(.bold),
+                    titleHeight: 28
+                )
+            }
             .frame(maxWidth: .infinity, alignment: .leading)
             .layoutPriority(1)
 

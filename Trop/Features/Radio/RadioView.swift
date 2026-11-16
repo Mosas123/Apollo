@@ -155,7 +155,7 @@ struct RadioView: View {
                 url: stream,
                 title: station.name,
                 artist: station.subtitle.isEmpty ? nil : station.subtitle,
-                videoId: "radio:\(station.stationuuid)",
+                videoId: NowPlaying.radioPrefix + station.stationuuid,
                 duration: nil,
                 thumbnailUrl: station.iconURL
             )
