@@ -12,7 +12,6 @@ struct SettingsView: View {
     @Bindable private var accountState = AccountSheetState.shared
 
     var body: some View {
-        @Bindable var settings = settings
         List {
             accountSection
 
