@@ -65,6 +65,10 @@ struct FullPlayerView: View {
                     )
                     .ignoresSafeArea(.container)
                     .animation(.easeInOut(duration: 0.8), value: playerBackgroundColors)
+                    .overlay {
+                        PlayerBackgroundShader(image: np.thumbnailImage, isPlaying: np.isPlaying)
+                            .opacity(0.45)
+                    }
                     .overlay(alignment: .top) {
                         Circle()
                             .fill(playerBackgroundColors.first ?? .blue)
