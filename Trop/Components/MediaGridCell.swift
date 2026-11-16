@@ -47,9 +47,10 @@ struct MediaGridCell: View {
 struct HeroArtworkView: View {
     var url: String?
     var size: CGFloat = DesignTokens.heroArtwork
+    var onImageLoaded: ((UIImage) -> Void)? = nil
 
     var body: some View {
-        AsyncImageView(url: url)
+        AsyncImageView(url: url, onImageLoaded: onImageLoaded)
             .frame(width: size, height: size)
             .clipShape(RoundedRectangle(cornerRadius: DesignTokens.tileRadius))
             .shadow(color: .black.opacity(0.2), radius: 12, y: 4)

@@ -338,9 +338,6 @@ struct AlbumDetailView: View {
             guard viewModel.isLoading else { return }
             await viewModel.load()
         }
-        .task(id: viewModel.album?.thumbnailUrl) {
-            await loadBackdrop(for: viewModel.album?.thumbnailUrl)
-        }
         .detailRouteSheet(item: $pendingRoute)
     }
 
@@ -365,19 +362,6 @@ struct AlbumDetailView: View {
         .ignoresSafeArea()
     }
 
-    private func loadBackdrop(for urlString: String?) async {
-        guard let urlString, let url = URL(string: urlString) else { return }
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            guard let image = UIImage(data: data) else { return }
-            let colors = image.extractDominantColors()
-            withAnimation(.easeInOut(duration: 0.4)) {
-                backdropColors = colors
-            }
-        } catch {
-            Log.albumDetail.debug("Backdrop color extraction failed: \(error)")
-        }
-    }
 
     @ViewBuilder
     private func albumContent(for album: AlbumDetailInfo) -> some View {
@@ -506,7 +490,15 @@ struct AlbumDetailView: View {
     private func header(for album: AlbumDetailInfo) -> some View {
         VStack(spacing: 12) {
             // Album artwork
-            HeroArtworkView(url: album.thumbnailUrl)
+            HeroArtworkView(
+                url: album.thumbnailUrl,
+                onImageLoaded: { image in
+                    guard backdropColors.isEmpty else { return }
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        backdropColors = image.extractDominantColors()
+                    }
+                }
+            )
 
             // Album title
             Text(album.title)

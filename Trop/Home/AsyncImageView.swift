@@ -50,6 +50,9 @@ private enum StickyArtwork {
 struct AsyncImageView: View {
     let url: String?
     var contentMode: ContentMode = .fill
+    /// Called with the image once it is shown (sticky hit or fresh load), so
+    /// callers can derive colors without downloading the artwork again.
+    var onImageLoaded: ((UIImage) -> Void)? = nil
     @Environment(\.displayScale) private var displayScale
     @State private var loadedImage: UIImage?
     @State private var loadedKey: String?
@@ -106,6 +109,7 @@ struct AsyncImageView: View {
         if loadedImage == nil, let sticky = StickyArtwork.image(for: normalized) {
             loadedImage = sticky
             loadedKey = normalized
+            onImageLoaded?(sticky)
         }
 
         guard let imageURL = URL(string: normalized) else { return }
@@ -123,6 +127,7 @@ struct AsyncImageView: View {
             withAnimation(.easeInOut(duration: 0.2)) {
                 loadedImage = image
             }
+            onImageLoaded?(image)
             return
         }
         guard !Task.isCancelled else { return }
@@ -136,6 +141,7 @@ struct AsyncImageView: View {
             withAnimation(.easeInOut(duration: 0.2)) {
                 loadedImage = image
             }
+            onImageLoaded?(image)
         }
     }
 

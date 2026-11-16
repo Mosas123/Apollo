@@ -338,9 +338,6 @@ struct ArtistDetailView: View {
                 guard viewModel.isLoading else { return }
                 await viewModel.load()
             }
-            .task(id: viewModel.artist?.thumbnailUrl) {
-                await loadBackdrop(for: viewModel.artist?.thumbnailUrl)
-            }
 
             customTopBar
         }
@@ -538,7 +535,13 @@ struct ArtistDetailView: View {
 
             AsyncImageView(
                 url: ArtworkURLs.sized(artist.thumbnailUrl, width: 1200, height: 1200),
-                contentMode: .fill
+                contentMode: .fill,
+                onImageLoaded: { image in
+                    guard backdropColors.isEmpty else { return }
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        backdropColors = image.extractDominantColors()
+                    }
+                }
             )
             .frame(width: size.width, height: size.height)
             .clipped()
@@ -615,15 +618,6 @@ struct ArtistDetailView: View {
         .ignoresSafeArea()
     }
 
-    private func loadBackdrop(for urlString: String?) async {
-        guard let urlString, let url = URL(string: urlString) else { return }
-        guard let (data, _) = try? await URLSession.shared.data(from: url),
-              let image = UIImage(data: data) else { return }
-        let colors = image.extractDominantColors()
-        withAnimation(.easeInOut(duration: 0.4)) {
-            backdropColors = colors
-        }
-    }
 
     private func artistInfoSheet(for artist: ArtistDetailInfo) -> some View {
         ScrollView {
