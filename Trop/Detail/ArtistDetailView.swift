@@ -554,6 +554,12 @@ struct ArtistDetailView: View {
                 endPoint: .bottom
             )
 
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.25), .black.opacity(0.45)],
+                startPoint: .center,
+                endPoint: .bottom
+            )
+
             VStack(spacing: 16) {
                 Text(artist.name)
                     .font(.system(size: 34, weight: .bold))
@@ -632,6 +638,12 @@ struct ArtistDetailView: View {
 
                     LinearGradient(
                         colors: [.clear, backdropColor.opacity(0.45), backdropColor.opacity(0.55)],
+                        startPoint: .center,
+                        endPoint: .bottom
+                    )
+
+                    LinearGradient(
+                        colors: [.clear, .black.opacity(0.3), .black.opacity(0.5)],
                         startPoint: .center,
                         endPoint: .bottom
                     )

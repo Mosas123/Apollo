@@ -236,7 +236,7 @@ struct HomeScreenView: View {
                             }
                         }
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 8)
                 }
             }
         }
@@ -266,8 +266,8 @@ struct HomeScreenView: View {
     private func quickPickCell(_ song: SongItem, queue: [SongItem]) -> some View {
         HStack(spacing: 10) {
             AsyncImageView(url: song.thumbnailUrl)
-                .frame(width: 56, height: 56)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .frame(width: 48, height: 48)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(song.title)
@@ -288,7 +288,7 @@ struct HomeScreenView: View {
                 Text("⋮")
                     .font(.body.weight(.black))
                     .foregroundStyle(.primary)
-                    .frame(width: 28, height: 44)
+                    .frame(width: 24, height: 44)
                     .contentShape(Rectangle())
             }
             .accessibilityLabel("More")
