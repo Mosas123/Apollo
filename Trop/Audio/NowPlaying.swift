@@ -491,6 +491,7 @@ final class NowPlaying {
             thumb = queueSongs.first { $0.videoId == videoId }?.thumbnailUrl
         }
 
+        let hasTrackArtwork = !(thumb?.isEmpty ?? true)
         Task {
             // For downloaded songs, try to extract embedded artwork from the local file first.
             if !MusicPlaybackIdentity.isExternal(videoId),
@@ -499,17 +500,21 @@ final class NowPlaying {
                 return
             }
             loadThumbnailFromCDN(videoId: videoId, thumbnailUrl: thumb)
-            enrichArtwork(videoId: videoId)
+            // Only fill in a cover when the track has none: replacing an existing
+            // YT Music cover with a resolver match can swap in the wrong release.
+            enrichArtwork(videoId: videoId, replaceArtwork: !hasTrackArtwork)
         }
     }
 
     /// Background metadata enrichment: fetch a canonical cover (iTunes first,
     /// then MusicBrainz / Cover Art Archive) and swap it in if the track is
     /// still current. Keeps the player showing clean, consistent album art.
-    private func enrichArtwork(videoId: String) {
+    private func enrichArtwork(videoId: String, replaceArtwork: Bool) {
         // Radio stations already carry their own name and favicon; never match
         // them against music/podcast catalogues.
         guard playbackKind != .radio, !MusicPlaybackIdentity.isExternal(videoId) else { return }
+        // Keep the track's own artwork when it has one.
+        guard replaceArtwork else { return }
         let title = title
         let artist = artist
         let kind = queueSongs.first { $0.videoId == videoId }?.contentKind
