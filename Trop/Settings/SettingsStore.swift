@@ -117,6 +117,8 @@ struct AccentPreset: Identifiable, Hashable {
     }
 
     static let all: [AccentPreset] = [
+        // Apple Music's signature pink-red, used as the default accent.
+        AccentPreset(name: "Apple Music", color: Color(red: 0.98, green: 0.18, blue: 0.28)),
         AccentPreset(name: "Red", color: Color(red: 0.91, green: 0.22, blue: 0.22)),
         AccentPreset(name: "Blue", color: Color(red: 0, green: 0.48, blue: 1)),
         AccentPreset(name: "Orange", color: Color(red: 0.95, green: 0.45, blue: 0.13)),
