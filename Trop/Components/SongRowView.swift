@@ -95,68 +95,7 @@ struct SongRowView: View {
 
     @ViewBuilder
     private var songContextMenu: some View {
-        Button {
-            PlaybackQueue.play([song], log: Log.homeScreenView, context: "Song menu play")
-        } label: {
-            Label("Play", systemImage: "play")
-        }
-
-        Button {
-            let np = NowPlaying.shared
-            let index = min(np.queueIndex + 1, np.queueSongs.count)
-            np.queueSongs.insert(song, at: index)
-            np.repairQueueIndex()
-            np.persistQueueState()
-        } label: {
-            Label("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward")
-        }
-
-        Button {
-            NowPlaying.shared.queueSongs.append(song)
-            NowPlaying.shared.persistQueueState()
-        } label: {
-            Label("Play After", systemImage: "text.line.last.and.arrowtriangle.forward")
-        }
-
-        Button {
-            Task { await LikeStore.shared.toggle(song: song) }
-        } label: {
-            Label(
-                LikeStore.shared.isLiked(videoId: song.videoId) ? "Unfavorite" : "Favorite",
-                systemImage: LikeStore.shared.isLiked(videoId: song.videoId) ? "heart.fill" : "heart"
-            )
-        }
-
-        if let onNavigate, let artistId = song.artists.first(where: { $0.id != nil })?.id {
-            Button {
-                onNavigate(.artist(browseId: artistId))
-            } label: {
-                Label("Go to Artist", systemImage: "music.mic")
-            }
-        }
-
-        if let onNavigate, let albumId = song.albumId, !albumId.isEmpty {
-            Button {
-                onNavigate(.album(browseId: albumId))
-            } label: {
-                Label("Go to Album", systemImage: "square.stack")
-            }
-        }
-
-        if MusicPlaybackIdentity.isYouTube(song.videoId) {
-            Button {
-                PlaybackQueue.startRadio(for: song)
-            } label: {
-                Label("Start Radio", systemImage: "dot.radiowaves.left.and.right")
-            }
-        }
-
-        if let url = URL(string: song.webUrl) {
-            ShareLink(item: url) {
-                Label("Share", systemImage: "square.and.arrow.up")
-            }
-        }
-
+        SongContextMenuButtons(song: song)
         Button {
             Task { @MainActor in showSongMenu = true }
         } label: {
