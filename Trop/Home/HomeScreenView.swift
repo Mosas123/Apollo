@@ -18,6 +18,7 @@ struct HomeScreenView: View {
     @State private var selectedCategory: ContentCategory = .all
     @State private var forYouSongs: [SongItem] = []
     @State private var discoverArtists: [ArtistItem] = []
+    @State private var podcastSuggestions: [YTItem] = []
 
     var body: some View {
         NavigationStack(path: $router.homePath) {
@@ -115,6 +116,7 @@ struct HomeScreenView: View {
         .task {
             forYouSongs = await ForYouService.musicSongs()
             discoverArtists = await ForYouService.artists()
+            podcastSuggestions = await ForYouService.podcasts()
         }
         .refreshable {
             await viewModel.refresh()
@@ -265,39 +267,47 @@ struct HomeScreenView: View {
     /// Sections for the active Home filter. "All" mixes everything but is
     /// capped so the feed doesn't feel overloaded.
     private var visibleSections: [HomeSection] {
-        var sections: [HomeSection]
         switch selectedCategory {
         case .all:
-            sections = Array(viewModel.homeSections.prefix(10))
+            // Decluttered: only Quick Picks and Keep Listening; everything else
+            // is AI discovery (songs, new artists, podcasts) right after Quick Picks.
+            let quick = viewModel.homeSections.filter { if case .quickPicks = $0 { return true }; return false }
+            let keep = viewModel.homeSections.filter { if case .keepListening = $0 { return true }; return false }
+            var sections = quick + keep
+            sections.insert(contentsOf: aiSections(music: true, podcasts: true), at: min(1, sections.count))
+            return sections
         case .music:
-            sections = viewModel.homeSections.filter { $0.category == .music }
+            var sections = viewModel.homeSections.filter { $0.category == .music }
+            sections.insert(contentsOf: aiSections(music: true, podcasts: false), at: 0)
+            return sections
         case .podcast, .audiobook:
-            // Each of these is its own feed (podcast/audiobook shelves); fall
-            // back to the matching home sections until it loads.
-            sections = (viewModel.categoryFeeds[selectedCategory] ?? [])
+            // Each of these is its own feed; fall back to matching home sections.
+            var sections = (viewModel.categoryFeeds[selectedCategory] ?? [])
                 .enumerated()
                 .map { HomeSection.homePageSection($0.element, index: $0.offset) }
             if sections.isEmpty {
                 sections = viewModel.homeSections.filter { $0.category == selectedCategory }
             }
+            if selectedCategory == .podcast {
+                sections.insert(contentsOf: aiSections(music: false, podcasts: true), at: 0)
+            }
+            return sections
         }
+    }
 
-        if selectedCategory == .all || selectedCategory == .music {
-            if !forYouSongs.isEmpty {
-                sections.insert(
-                    .similarRecommendation(items: forYouSongs.map(YTItem.song), title: "For You"),
-                    at: 0
-                )
-            }
-            if !discoverArtists.isEmpty {
-                let index = forYouSongs.isEmpty ? 0 : 1
-                sections.insert(
-                    .similarRecommendation(items: discoverArtists.map(YTItem.artist), title: "Artistas para ti"),
-                    at: min(index, sections.count)
-                )
-            }
+    /// AI discovery shelves: songs, new artists and podcasts.
+    private func aiSections(music: Bool, podcasts: Bool) -> [HomeSection] {
+        var result: [HomeSection] = []
+        if music, !forYouSongs.isEmpty {
+            result.append(.similarRecommendation(items: forYouSongs.map(YTItem.song), title: "For You"))
         }
-        return sections
+        if music, !discoverArtists.isEmpty {
+            result.append(.similarRecommendation(items: discoverArtists.map(YTItem.artist), title: "Artistas para ti"))
+        }
+        if podcasts, !podcastSuggestions.isEmpty {
+            result.append(.similarRecommendation(items: podcastSuggestions, title: "Podcasts para ti"))
+        }
+        return result
     }
 
     private var surpriseCard: some View {
@@ -368,7 +378,7 @@ struct HomeScreenView: View {
                 ForEach(ContentCategory.allCases) { category in
                     let isOn = selectedCategory == category
                     Button {
-                        withAnimation(.easeInOut(duration: 0.2)) { selectedCategory = category }
+                        selectedCategory = category
                     } label: {
                         Text(category.title)
                             .font(.system(size: 15, weight: .semibold))

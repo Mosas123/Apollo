@@ -8,6 +8,7 @@ import Foundation
 enum ForYouService {
     private static var cachedSongs: (date: Date, songs: [SongItem])?
     private static var cachedArtists: (date: Date, artists: [ArtistItem])?
+    private static var cachedPodcasts: (date: Date, items: [YTItem])?
     private static let ttl: TimeInterval = 60 * 60 * 6
 
     // MARK: - Songs
@@ -108,6 +109,55 @@ enum ForYouService {
             return resolved
         }
         return cachedArtists?.artists ?? []
+    }
+
+    // MARK: - Podcasts
+
+    static func podcasts(force: Bool = false) async -> [YTItem] {
+        if !force, let cached = cachedPodcasts, Date().timeIntervalSince(cached.date) < ttl {
+            return cached.items
+        }
+        guard let client = AIProviderClient.configured() else {
+            return cachedPodcasts?.items ?? []
+        }
+
+        let profile = await loadProfile()
+        guard !profile.artists.isEmpty || !profile.liked.isEmpty else {
+            return cachedPodcasts?.items ?? []
+        }
+
+        let prompt = """
+        You are a podcast discovery engine. The listener follows: \(profile.artists.prefix(6).joined(separator: ", ")).
+        Suggest 10 podcasts they might enjoy, spanning their interests. Reply ONLY with a JSON array of podcast names: ["Podcast", ...]. No prose.
+        """
+
+        guard let text = try? await client.complete(prompt),
+              let names = parseNames(text), !names.isEmpty else {
+            return cachedPodcasts?.items ?? []
+        }
+
+        var items: [YTItem] = []
+        var seen = Set<String>()
+        for name in names {
+            guard let raw = try? await SearchService.shared.search(query: name) else { continue }
+            let episode = SearchParser.parseSearchResults(from: raw)
+                .flatMap(\.items)
+                .compactMap { item -> EpisodeItem? in
+                    if case .episode(let episode) = item { return episode }
+                    return nil
+                }
+                .first
+            if let episode, seen.insert(episode.videoId).inserted {
+                items.append(.episode(episode))
+            }
+            if items.count >= 8 { break }
+        }
+
+        if !items.isEmpty {
+            cachedPodcasts = (Date(), items)
+            return items
+        }
+        return cachedPodcasts?.items ?? []
     }
 
     // MARK: - Helpers
