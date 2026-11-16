@@ -30,6 +30,7 @@ struct FullPlayerView: View {
     @State private var artworkEntryOffset: CGFloat = 0
     @State private var currentLyrics: [LyricLine] = []
     @State private var canvasDominantColors: [Color]?
+    @State private var showGoToMenu = false
 
     private var playerBackgroundColors: [Color] {
         canvasDominantColors ?? np.dominantColors
@@ -203,6 +204,11 @@ struct FullPlayerView: View {
                 }
                 .frame(maxWidth: .infinity)
             }
+            .overlay {
+                if showGoToMenu {
+                    goToMenuOverlay
+                }
+            }
             .ignoresSafeArea(edges: .bottom)
             .clipShape(
                 UnevenRoundedRectangle(
@@ -243,6 +249,88 @@ struct FullPlayerView: View {
                     .detailRouteSheet(item: $pendingRoute)
             )
         }
+    }
+
+    // MARK: - Go to album/artist
+
+    private var currentSong: SongItem? {
+        np.queueSongs.indices.contains(np.queueIndex) ? np.queueSongs[np.queueIndex] : nil
+    }
+
+    private var currentAlbumSubtitle: String? {
+        if let album = np.albumTitle, !album.isEmpty { return album }
+        if let album = currentSong?.album, !album.isEmpty { return album }
+        return nil
+    }
+
+    private var goToMenuOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.25)
+                .ignoresSafeArea()
+                .onTapGesture { showGoToMenu = false }
+
+            VStack(spacing: 0) {
+                Button { goToAlbum() } label: {
+                    goToMenuRow(
+                        icon: "square.stack",
+                        title: "Go to Album",
+                        subtitle: currentAlbumSubtitle
+                    )
+                }
+                .disabled(currentSong?.albumId?.isEmpty ?? true)
+                .opacity(currentSong?.albumId?.isEmpty ?? true ? 0.4 : 1)
+
+                Divider()
+
+                Button { goToArtist() } label: {
+                    goToMenuRow(
+                        icon: "music.mic",
+                        title: "Go to Artist",
+                        subtitle: np.displayArtist
+                    )
+                }
+                .disabled(currentSong?.artists.contains { $0.id != nil } != true)
+                .opacity(currentSong?.artists.contains { $0.id != nil } != true ? 0.4 : 1)
+            }
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .padding(.horizontal, 28)
+        }
+    }
+
+    private func goToMenuRow(icon: String, title: String, subtitle: String?) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(.primary)
+                .frame(width: 30)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.body)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .contentShape(Rectangle())
+    }
+
+    private func goToAlbum() {
+        guard let albumId = currentSong?.albumId, !albumId.isEmpty else { return }
+        showGoToMenu = false
+        pendingRoute = .album(browseId: albumId)
+    }
+
+    private func goToArtist() {
+        guard let artist = currentSong?.artists.first(where: { $0.id != nil }),
+              let id = artist.id else { return }
+        showGoToMenu = false
+        pendingRoute = .artist(browseId: id)
     }
 
     // MARK: - Gestures
@@ -400,6 +488,8 @@ struct FullPlayerView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .layoutPriority(1)
+            .contentShape(Rectangle())
+            .onTapGesture { showGoToMenu = true }
 
             HStack(spacing: 8) {
                 PlayerLikeButton(isLiked: isLiked) {
