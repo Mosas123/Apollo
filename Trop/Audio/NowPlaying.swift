@@ -102,6 +102,9 @@ final class NowPlaying {
     private var icyTick = 0
     var sleepTimerEndsAt: Date?
     @ObservationIgnored private var sleepTimerTask: Task<Void, Never>?
+    @ObservationIgnored private var artworkLoadTask: Task<Void, Never>?
+    @ObservationIgnored private var enrichTask: Task<Void, Never>?
+    @ObservationIgnored private var liveResolveTask: Task<Void, Never>?
     var lastManualSkipTime: Date?
     private var isResolvingNext = false
     private var consecutiveFailures = 0
@@ -300,6 +303,8 @@ final class NowPlaying {
 
     func update(title: String, artist: String?, videoId: String, album: String? = nil, artists: [YTArtist] = [], thumbnailUrl: String? = nil) {
         self.isPlaying = true
+        enrichTask?.cancel()
+        liveResolveTask?.cancel()
         self.title = title
         self.artists = artists
         self.artist = cleanArtistDisplay(artist ?? "")
@@ -541,7 +546,8 @@ final class NowPlaying {
         }
 
         let hasTrackArtwork = !(thumb?.isEmpty ?? true)
-        Task {
+        artworkLoadTask?.cancel()
+        artworkLoadTask = Task {
             // For downloaded songs, try to extract embedded artwork from the local file first.
             if !MusicPlaybackIdentity.isExternal(videoId),
                let localURL = await DownloadManager.shared.localURL(for: videoId) {
@@ -568,7 +574,9 @@ final class NowPlaying {
         let artist = artist
         let kind = queueSongs.first { $0.videoId == videoId }?.contentKind
         guard !title.isEmpty, !artist.isEmpty else { return }
-        Task {
+        enrichTask?.cancel()
+        enrichTask = Task {
+            guard !Task.isCancelled else { return }
             let resolved: ResolvedMetadata?
             if kind == .episode || kind == .podcast {
                 resolved = await PodcastMetadataResolver.enrich(title: title, author: artist)
@@ -754,7 +762,9 @@ final class NowPlaying {
     private func resolveLiveSong(_ raw: String) {
         let parts = Self.splitICY(raw)
         liveSongInfo = LiveSongInfo(title: parts.title, artist: parts.artist, album: nil, artwork: nil)
-        Task {
+        liveResolveTask?.cancel()
+        liveResolveTask = Task {
+            guard !Task.isCancelled else { return }
             guard let resolved = await MetadataResolver.enrich(title: parts.title, artist: parts.artist) else { return }
             var artwork: Data?
             if let url = resolved.artworkURL {
