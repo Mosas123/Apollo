@@ -40,45 +40,45 @@ struct PlayerMenuSheet: View {
                 if MusicPlaybackIdentity.isYouTube(song.videoId) {
                     actionGrid
                     MenuCard {
-                    viewArtistRow
-                    if let albumId = song.firstAlbumBrowseId {
-                        Divider()
-                        MenuRow(icon: "record.circle", title: "View Album", subtitle: song.album) {
-                            navigate(.album(browseId: albumId))
+                        viewArtistRow
+                        if let albumId = song.firstAlbumBrowseId {
+                            Divider()
+                            MenuRow(icon: "record.circle", title: "View Album", subtitle: song.album) {
+                                navigate(.album(browseId: albumId))
+                            }
                         }
+                        Divider()
+                        pinRow
+                        Divider()
+                        downloadRow
                     }
-                    Divider()
-                    pinRow
-                    Divider()
-                    downloadRow
-                }
-                MenuCard {
-                    MenuRow(
-                        icon: "bubble.left.and.bubble.right",
-                        title: "Comments",
-                        subtitle: "Top & newest from YouTube"
-                    ) { showComments = true }
-                    Divider()
-                    NavigationLink(value: Destination.details) {
-                        MenuRowLabel(icon: "info.circle", title: "Details", subtitle: "Metadata & stream information")
+                    MenuCard {
+                        MenuRow(
+                            icon: "bubble.left.and.bubble.right",
+                            title: "Comments",
+                            subtitle: "Top & newest from YouTube"
+                        ) { showComments = true }
+                        Divider()
+                        NavigationLink(value: Destination.details) {
+                            MenuRowLabel(icon: "info.circle", title: "Details", subtitle: "Metadata & stream information")
+                        }
+                        .buttonStyle(.plain)
+                        Divider()
+                        NavigationLink(value: Destination.similar) {
+                            MenuRowLabel(
+                                icon: "dot.radiowaves.left.and.right",
+                                title: "Similar to this song",
+                                subtitle: String(format: NSLocalizedString("More like “%@”", comment: "Similar songs subtitle"), song.title)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        Divider()
+                        MenuRow(
+                            icon: "slider.horizontal.3",
+                            title: "Customize Radio",
+                            subtitle: "Style, size & explicit filter"
+                        ) { showRadioOptions = true }
                     }
-                    .buttonStyle(.plain)
-                    Divider()
-                    NavigationLink(value: Destination.similar) {
-                        MenuRowLabel(
-                            icon: "dot.radiowaves.left.and.right",
-                            title: "Similar to this song",
-                            subtitle: String(format: NSLocalizedString("More like “%@”", comment: "Similar songs subtitle"), song.title)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    Divider()
-                    MenuRow(
-                        icon: "slider.horizontal.3",
-                        title: "Customize Radio",
-                        subtitle: "Style, size & explicit filter"
-                    ) { showRadioOptions = true }
-                }
                 }
             }
             .navigationDestination(for: Destination.self) { dest in
