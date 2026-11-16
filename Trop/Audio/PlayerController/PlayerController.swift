@@ -541,7 +541,8 @@ extension PlayerController {
                     artist: meta.artist,
                     videoId: meta.videoId,
                     artists: meta.artists,
-                    thumbnailUrl: meta.thumbnailUrl
+                    thumbnailUrl: meta.thumbnailUrl,
+                    preserveMissingArtist: true
                 )
             }
             Log.player.debug("TRANSITION FILE_LOADED videoId=\(pendingVideoId ?? "nil") playing=\(actuallyPlaying)")

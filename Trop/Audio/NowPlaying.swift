@@ -301,13 +301,29 @@ final class NowPlaying {
         }
     }
 
-    func update(title: String, artist: String?, videoId: String, album: String? = nil, artists: [YTArtist] = [], thumbnailUrl: String? = nil) {
+    func update(
+        title: String,
+        artist: String?,
+        videoId: String,
+        album: String? = nil,
+        artists: [YTArtist] = [],
+        thumbnailUrl: String? = nil,
+        preserveMissingArtist: Bool = false
+    ) {
         self.isPlaying = true
         enrichTask?.cancel()
         liveResolveTask?.cancel()
         self.title = title
-        self.artists = artists
-        self.artist = cleanArtistDisplay(artist ?? "")
+        // A deferred metadata update can arrive without artist credits (the
+        // resolved stream only carries a title). Never let that wipe a name
+        // that the queue already provided.
+        if !preserveMissingArtist || !artists.isEmpty {
+            self.artists = artists
+        }
+        let cleaned = cleanArtistDisplay(artist ?? "")
+        if !preserveMissingArtist || !cleaned.isEmpty {
+            self.artist = cleaned
+        }
         self.albumTitle = album ?? ""
         self.currentTime = 0
         self.duration = 0
