@@ -55,8 +55,10 @@ struct MusicAddonChecks {
         try registry.install(data: bytes, from: url)
         precondition(registry.installations.count == 1)
         precondition(!registry.installations[0].isEnabled)
-        do { try registry.install(data: bytes, from: url); preconditionFailure("duplicate") }
-        catch MusicAddonError.alreadyInstalled {}
+        do {
+            try registry.install(data: bytes, from: url)
+            preconditionFailure("duplicate")
+        } catch MusicAddonError.alreadyInstalled {}
         let key = registry.installations[0].key
         try registry.setEnabled(true, for: key)
         precondition(registry.installations[0].isEnabled)
@@ -68,13 +70,17 @@ struct MusicAddonChecks {
             .replacingOccurrences(of: "[\"search\",\"lyrics\"]", with: "[\"search\",\"lyrics\",\"stream\"]")
             .replacingOccurrences(of: "\"lyrics\":\"/api/lyrics\"", with: "\"lyrics\":\"/api/lyrics\",\"stream\":\"/api/stream\"")
             .utf8)
-        do { try registry.update(data: escalated, from: url); preconditionFailure("capability escalation") }
-        catch MusicAddonError.requiresCapabilityApproval {}
+        do {
+            try registry.update(data: escalated, from: url)
+            preconditionFailure("capability escalation")
+        } catch MusicAddonError.requiresCapabilityApproval {}
         precondition(registry.installations[0].manifest.version == "1.2.4")
         try registry.remove(key: key)
         precondition(registry.installations.isEmpty)
-        do { try registry.remove(key: key); preconditionFailure("missing") }
-        catch MusicAddonError.notInstalled {}
+        do {
+            try registry.remove(key: key)
+            preconditionFailure("missing")
+        } catch MusicAddonError.notInstalled {}
         print("Music addon manifest and registry checks passed")
     }
 }
