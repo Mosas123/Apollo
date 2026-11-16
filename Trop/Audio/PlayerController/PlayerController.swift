@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Synchronization
 import Libmpv
 import MediaPlayer
 import Combine
@@ -24,9 +25,26 @@ struct DetectedCrop {
 
 // MARK: - PlayerController
 
+/// Mutable state shared between the mpv event-loop thread and the main actor.
+/// Guarded by a single mutex; `String?` fields are read cross-thread, which is
+/// the one thing a torn read can actually crash on.
+private struct MPVSharedState: Sendable {
+    var isRunning = false
+    var currentVideoId: String?
+    var pendingVideoId: String?
+    var desiredPlaying = false
+    var videoFlipAwaitingRestart = false
+}
+
 @MainActor
 final class PlayerController {
     static let shared = PlayerController()
+
+    nonisolated private let sharedState = Mutex(MPVSharedState())
+
+    /// MainActor-safe reads for external consumers (e.g. SponsorBlock).
+    var currentVideoId: String? { sharedState.withLock { $0.currentVideoId } }
+    var pendingVideoId: String? { sharedState.withLock { $0.pendingVideoId } }
 
     /// `UIImage` is not Sendable, but `MPMediaItemArtwork`'s request handler runs
     /// on a background queue. Wrap the rendered image so the `@Sendable` handler
@@ -49,14 +67,10 @@ final class PlayerController {
 
     nonisolated(unsafe) private var eventLoopThread: Thread?
 
-    nonisolated(unsafe) var isRunning = false
-    nonisolated(unsafe) var currentVideoId: String?
-    nonisolated(unsafe) var pendingVideoId: String?
     private var lastDetectedCrop: String?
     private var detectedCropRepeatCount = 0
     var currentLoudnessDb: Double?
     var pendingURL: String?
-    nonisolated(unsafe) var desiredPlaying = false
     private var wasPlayingBeforeInterruption = false
 
     /// Video-mode state. Reads happen on the event loop thread from event handlers;
@@ -72,7 +86,6 @@ final class PlayerController {
     nonisolated(unsafe) var hasPresentedVideo = false
     nonisolated(unsafe) var voInitDrawableSize: CGSize = .zero
     private var lastGeometryRefreshAt = Date.distantPast
-    nonisolated(unsafe) var videoFlipAwaitingRestart = false
     private var videoAttachTask: Task<Bool, Never>?
     private var videoAttachTaskId: String?
 
@@ -125,7 +138,7 @@ final class PlayerController {
     }
 
     deinit {
-        isRunning = false
+        sharedState.withLock { $0.isRunning = false }
         if let mpv = _mpv { mpv_wakeup(mpv) }
     }
 
@@ -194,10 +207,10 @@ extension PlayerController {
             return
         }
 
-        let prevVideoId = currentVideoId
+        let prevVideoId = sharedState.withLock { $0.currentVideoId }
         let isNewSong = prevVideoId != nil && videoId != prevVideoId
 
-        desiredPlaying = true
+        sharedState.withLock { $0.desiredPlaying = true }
         assertAudioSession()
         loadedMuxedURL = nil
         loadedVideoOnlyURL = nil
@@ -207,7 +220,7 @@ extension PlayerController {
         pendingResumeAt = 0
         pendingSeek = nil
         videoModeSwitchInFlight = false
-        videoFlipAwaitingRestart = false
+        sharedState.withLock { $0.videoFlipAwaitingRestart = false }
         NowPlaying.shared.isVideoMode = false
         NowPlaying.shared.isVideoReady = false
         if hasPresentedVideo { clearVideoLayer() }
@@ -215,14 +228,14 @@ extension PlayerController {
         guard isReady else {
             Log.player.info("mpv not ready yet, parking URL for deferred load")
             pendingURL = url.absoluteString
-            pendingVideoId = videoId
+            sharedState.withLock { $0.pendingVideoId = videoId }
             return
         }
 
         applyPlaybackSettings()
         setVideoCrop(.none)
 
-        pendingVideoId = videoId
+        sharedState.withLock { $0.pendingVideoId = videoId }
         let loadStart = skipStart > 0 ? Int(skipStart.rounded(.up)) : 0
         let loadArguments = loadStart > 0
             ? ["loadfile", url.absoluteString, "replace", "-1", "start=\(loadStart)"]
@@ -237,7 +250,7 @@ extension PlayerController {
         } ?? -1
         if cmdResult != 0 {
             Log.player.error("mpv_command loadfile failed result=\(cmdResult)")
-            pendingVideoId = nil
+            sharedState.withLock { $0.pendingVideoId = nil }
             return
         }
         if isNewSong {
@@ -262,7 +275,7 @@ extension PlayerController {
     }
 
     func setPaused(_ paused: Bool) {
-        desiredPlaying = !paused
+        sharedState.withLock { $0.desiredPlaying = !paused }
         let currentlyPaused = playState.value != .playing
         guard currentlyPaused != paused else {
             updateNowPlayingProgress()
@@ -375,7 +388,7 @@ extension PlayerController {
 
             let thread = Thread { [weak self] in
                 guard let self else { return }
-                self.isRunning = true
+                self.sharedState.withLock { $0.isRunning = true }
                 self.eventLoop(mpv)
             }
             self.eventLoopThread = thread
@@ -426,7 +439,7 @@ extension PlayerController {
     }
 
     nonisolated fileprivate func eventLoop(_ mpv: OpaquePointer) {
-        while isRunning {
+        while sharedState.withLock({ $0.isRunning }) {
             guard let event = mpv_wait_event(mpv, 0.2) else { continue }
             switch event.pointee.event_id {
             case MPV_EVENT_NONE:
@@ -473,27 +486,27 @@ extension PlayerController {
     nonisolated private func handleFileLoaded(_ mpv: OpaquePointer) {
         var pauseFlag = Int32(1)
         mpv_get_property(mpv, "pause", MPV_FORMAT_FLAG, &pauseFlag)
-        if pauseFlag != 0, desiredPlaying {
+        if pauseFlag != 0, sharedState.withLock({ $0.desiredPlaying }) {
             var unpause = Int32(0)
             mpv_set_property(mpv, "pause", MPV_FORMAT_FLAG, &unpause)
             mpv_get_property(mpv, "pause", MPV_FORMAT_FLAG, &pauseFlag)
         }
         let actuallyPlaying = pauseFlag == 0
-        let pendingVideoId = self.pendingVideoId
+        let pendingVideoId = self.sharedState.withLock { $0.pendingVideoId }
         Task { @MainActor [weak self] in
             guard let self else { return }
             Log.player.debug("TRANSITION FILE_LOADED videoId=\(pendingVideoId ?? "nil") playing=\(actuallyPlaying)")
             self.playState.send(actuallyPlaying ? .playing : .paused)
             NowPlaying.shared.isPlaying = actuallyPlaying
-            self.currentVideoId = pendingVideoId
-            self.pendingVideoId = nil
+            self.sharedState.withLock { $0.currentVideoId = pendingVideoId }
+            self.sharedState.withLock { $0.pendingVideoId = nil }
             self.assertAudioSession()
             self.setNowPlayingMetadata()
             self.applyPendingResumeIfNeeded()
             let checkId = pendingVideoId
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
-                guard self.currentVideoId == checkId else { return }
+                guard self.sharedState.withLock({ $0.currentVideoId }) == checkId else { return }
                 self.updateNowPlayingArtwork()
                 self.updateNowPlayingProgress()
             }
@@ -548,11 +561,11 @@ extension PlayerController {
     }
 
     nonisolated private func handlePlaybackRestart() {
-        let flipPending = self.videoFlipAwaitingRestart
+        let flipPending = self.sharedState.withLock { $0.videoFlipAwaitingRestart }
         Task { @MainActor in
             guard flipPending else { return }
             let ok = self.muxedActive && NowPlaying.shared.videoId == self.muxedVideoId
-            self.videoFlipAwaitingRestart = false
+            self.sharedState.withLock { $0.videoFlipAwaitingRestart = false }
             guard ok else { return }
             if self.videoModeSwitchInFlight { NowPlaying.shared.isVideoMode = true }
             NowPlaying.shared.isVideoReady = true
@@ -566,7 +579,7 @@ extension PlayerController {
         let reason = endFile.reason
         let isEof = reason == MPV_END_FILE_REASON_EOF
         let isError = reason == MPV_END_FILE_REASON_ERROR
-        let stoppedVideoId = self.currentVideoId
+        let stoppedVideoId = self.sharedState.withLock { $0.currentVideoId }
         Task { @MainActor [weak self] in
             guard let self else { return }
             let videoId = stoppedVideoId
@@ -580,7 +593,7 @@ extension PlayerController {
                 self.playState.send(.stopped)
                 NowPlaying.shared.stopped(videoId: videoId, isEof: true)
             } else if isError {
-                self.currentVideoId = nil
+                self.sharedState.withLock { $0.currentVideoId = nil }
                 self.playState.send(.stopped)
                 NowPlaying.shared.stopped(videoId: videoId, isEof: false)
             } else {
@@ -639,7 +652,7 @@ extension PlayerController {
                 Log.player.debug("video attach failed, falling back to EDL replace: \(error)")
             }
             do {
-                videoFlipAwaitingRestart = false
+                sharedState.withLock { $0.videoFlipAwaitingRestart = false }
                 let resumeAt = currentTime
                 let url: String
                 if let loaded = loadedMuxedURL {
@@ -653,7 +666,7 @@ extension PlayerController {
                 setVideoTrack()
                 Log.player.debug("TRANSITION entering video mode videoId=\(videoId) url=\(url.prefix(80))")
                 muxedVideoId = videoId
-                pendingVideoId = videoId
+                sharedState.withLock { $0.pendingVideoId = videoId }
                 loadFileReplacing(url, startAt: resumeAt)
                 muxedActive = true
             } catch {
@@ -709,20 +722,20 @@ extension PlayerController {
             voInitDrawableSize = videoLayer.drawableSize
             // video-add starts at 0 while audio is live — seek both to now.
             let syncAt = currentTime
-            videoFlipAwaitingRestart = true
+            sharedState.withLock { $0.videoFlipAwaitingRestart = true }
             let seekResult = withMpv { mpv in
                 ["seek", String(syncAt), "absolute"].withUnsafeCArg { mpv_command(mpv, $0) }
             } ?? -1
             guard seekResult == 0 else {
-                videoFlipAwaitingRestart = false
+                sharedState.withLock { $0.videoFlipAwaitingRestart = false }
                 throw StreamError.noSuitableFormat
             }
             _ = await waitForFlipRestart(videoId: videoId)
             guard NowPlaying.shared.videoId == videoId else { return false }
-            videoFlipAwaitingRestart = false
+            sharedState.withLock { $0.videoFlipAwaitingRestart = false }
             return true
         } catch {
-            videoFlipAwaitingRestart = false
+            sharedState.withLock { $0.videoFlipAwaitingRestart = false }
             Log.player.debug("video attach failed videoId=\(videoId): \(error)")
             return false
         }
@@ -745,7 +758,7 @@ extension PlayerController {
     private func waitForFlipRestart(videoId: String) async -> Bool {
         for _ in 0..<50 {
             guard NowPlaying.shared.videoId == videoId else { return false }
-            if !videoFlipAwaitingRestart { return true }
+            if !sharedState.withLock({ $0.videoFlipAwaitingRestart }) { return true }
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
         return false
@@ -781,7 +794,7 @@ extension PlayerController {
         muxedActive = false
         muxedVideoId = nil
         videoModeSwitchInFlight = false
-        videoFlipAwaitingRestart = false
+        sharedState.withLock { $0.videoFlipAwaitingRestart = false }
         NowPlaying.shared.isVideoMode = false
         NowPlaying.shared.isVideoReady = false
     }
@@ -948,11 +961,11 @@ extension PlayerController {
         switch type {
         case .began:
             Log.player.info("AUDIO_INTERRUPTION began")
-            wasPlayingBeforeInterruption = desiredPlaying || playState.value == .playing
+            wasPlayingBeforeInterruption = sharedState.withLock({ $0.desiredPlaying }) || playState.value == .playing
             if playState.value == .playing {
                 Task { @MainActor in
                     self.setPaused(true)
-                    self.desiredPlaying = self.wasPlayingBeforeInterruption
+                    self.sharedState.withLock { $0.desiredPlaying = self.wasPlayingBeforeInterruption }
                 }
             }
         case .ended:
@@ -987,7 +1000,7 @@ extension PlayerController {
         Task { @MainActor in
             self.assertAudioSession()
             self.setNowPlayingMetadata()
-            if self.desiredPlaying, self.playState.value != .playing {
+            if self.sharedState.withLock({ $0.desiredPlaying }), self.playState.value != .playing {
                 self.setPaused(false)
             }
         }
@@ -1168,7 +1181,7 @@ extension PlayerController {
                 guard let self else { return }
                 // Keep the audio session alive while the screen is locked so
                 // auto-advance can keep playing without user interaction.
-                if self.desiredPlaying {
+                if self.sharedState.withLock({ $0.desiredPlaying }) {
                     self.assertAudioSession()
                 }
                 self.setNowPlayingMetadata()
