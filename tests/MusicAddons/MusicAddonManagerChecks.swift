@@ -19,6 +19,20 @@ struct MusicAddonManagerChecks {
         precondition(MusicAddonPackage.validatedManifestURL(URL(string: "http://addons.example.org/manifest.json")!) == nil)
         precondition(MusicAddonPackage.validatedManifestURL(URL(string: "https://localhost/manifest.json")!) == nil)
 
+        // Flix-Music is a Stremio manifest, even though its catalogs
+        // contain songs. It must show a precise compatibility error,
+        // not pretend it was installed as a functional Trop provider.
+        let stremio = Data("""
+        {"id":"community.lastfm.telegram","name":"Flix-Music","version":"1.0.0",
+         "resources":["catalog","meta","stream"],"types":["movie"],
+         "catalogs":[{"type":"movie","id":"lastfm-top","name":"Music - Top"}]}
+        """.utf8)
+        do {
+            _ = try MusicAddonPackage.parse(stremio, from: alpha)
+            preconditionFailure("Stremio manifests must be detected")
+        } catch MusicAddonError.incompatibleStremioProtocol {}
+
+        // Native Trop manifests remain installable.
         var registry = MusicAddonRegistry()
         try registry.install(data: first, from: alpha)
         try registry.install(data: second, from: beta)
