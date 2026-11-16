@@ -51,7 +51,7 @@ struct ContentView: View {
                         from: nil,
                         for: nil
                     )
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                    withAnimation(.smooth(duration: 0.3)) {
                         isExpanded = true
                     }
                 })
@@ -62,7 +62,7 @@ struct ContentView: View {
             .overlay {
                 if isExpanded {
                     FullPlayerView(onCollapse: {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                        withAnimation(.smooth(duration: 0.3)) {
                             isExpanded = false
                         }
                     })
@@ -88,13 +88,13 @@ struct ContentView: View {
             // A detail page was opened from an overlay: collapse the player so
             // the pushed page is visible underneath.
             if route != nil {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                withAnimation(.smooth(duration: 0.3)) {
                     isExpanded = false
                 }
             }
         }
         .onReceive(AppRouter.shared.$playerExpandToken.dropFirst()) { _ in
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+            withAnimation(.smooth(duration: 0.3)) {
                 isExpanded = true
             }
         }

@@ -48,6 +48,7 @@ struct PlayerLikeButton: View {
                 .font(.system(size: fontSize, weight: .regular))
                 .foregroundStyle(isLiked ? activeColor : inactiveColor)
                 .frame(width: 36, height: 36)
+                .glassEffect(in: Circle())
         }
     }
 }
@@ -63,6 +64,7 @@ struct PlayerOptionsButton: View {
                 .font(.system(size: 20, weight: .black))
                 .foregroundStyle(color)
                 .frame(width: 36, height: 36)
+                .glassEffect(in: Circle())
         }
         .accessibilityLabel("Song options")
     }
