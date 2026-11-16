@@ -15,5 +15,5 @@ let package = Package(
         ),
         .testTarget(name: "SwiftyTubeTests", dependencies: ["SwiftyTube"])
     ],
-    swiftLanguageModes: [.v5]
+    swiftLanguageModes: [.v6]
 )
