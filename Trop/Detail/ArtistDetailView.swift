@@ -521,7 +521,7 @@ struct ArtistDetailView: View {
             // Fades the photo into the artist's dominant color so the page reads
             // as one surface (Apple Music artist page).
             LinearGradient(
-                colors: [.clear, backdropColor.opacity(0.35), backdropColor],
+                colors: [.clear, backdropColor.opacity(0.35), backdropColor.opacity(0.55)],
                 startPoint: .center,
                 endPoint: .bottom
             )
@@ -567,11 +567,6 @@ struct ArtistDetailView: View {
                     .accessibilityLabel(artist.isSubscribed ? "Unfollow artist" : "Follow artist")
                 }
 
-                if let subText = artist.subscriberCountText, !subText.isEmpty {
-                    Text(subscriberLabel(for: subText))
-                        .font(.footnote)
-                        .foregroundStyle(.white.opacity(0.8))
-                }
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
@@ -584,7 +579,11 @@ struct ArtistDetailView: View {
 
     private var artistBackdrop: some View {
         LinearGradient(
-            colors: [backdropColor.opacity(0.55), Color(.systemBackground)],
+            stops: [
+                .init(color: backdropColor.opacity(0.55), location: 0),
+                .init(color: backdropColor.opacity(0.55), location: 0.55),
+                .init(color: Color(.systemBackground), location: 1)
+            ],
             startPoint: .top,
             endPoint: .bottom
         )
@@ -613,7 +612,7 @@ struct ArtistDetailView: View {
                     .clipped()
 
                     LinearGradient(
-                        colors: [.clear, backdropColor.opacity(0.45), backdropColor],
+                        colors: [.clear, backdropColor.opacity(0.45), backdropColor.opacity(0.55)],
                         startPoint: .center,
                         endPoint: .bottom
                     )
@@ -710,39 +709,15 @@ struct ArtistDetailView: View {
             .padding(.top, 24)
 
             ForEach(Array(songs.enumerated()), id: \.offset) { index, song in
-                                Button(action: { playSong(song) }, label: {
-                    HStack(spacing: 12) {
-                        AsyncImageView(url: song.thumbnailUrl)
-                            .frame(width: 40, height: 40)
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(song.title)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundColor(.primary)
-                                .lineLimit(1)
-
-                            Text(song.artists.map(\.name).joined(separator: ", "))
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                        }
-
-                        Spacer()
-
-                        Text(song.duration.formattedDuration)
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
-                })
-                .buttonStyle(.plain)
+                SongRowView(
+                    song: song,
+                    onTap: { playSong(song) },
+                    onNavigate: { AppRouter.shared.open($0) }
+                )
 
                 if index < songs.count - 1 {
                     Divider()
-                        .padding(.leading, 72)
+                        .padding(.leading, 68)
                 }
             }
         }
