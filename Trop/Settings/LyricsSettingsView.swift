@@ -15,29 +15,29 @@ struct LyricsSettingsView: View {
 
         List {
             Section {
-                Toggle(isOn: $settings.lyricsEnabled) {
-                    Label("Lyrics", systemImage: "music.quote")
-                }
+                SettingsToggleRow("Lyrics", icon: "music.quote", isOn: $settings.lyricsEnabled)
             } footer: {
                 Text("When off, lyrics are not fetched or shown in the player.")
             }
 
             Section {
                 ForEach(LyricsProviderRegistry.all, id: \.id) { provider in
-                    Toggle(isOn: Binding(
-                        get: { !settings.disabledLyricsProviders.contains(provider.id) },
-                        set: { enabled in
-                            var disabled = settings.disabledLyricsProviders
-                            if enabled {
-                                disabled.remove(provider.id)
-                            } else {
-                                disabled.insert(provider.id)
+                    SettingsToggleRow(
+                        provider.name,
+                        icon: "music.note",
+                        isOn: Binding(
+                            get: { !settings.disabledLyricsProviders.contains(provider.id) },
+                            set: { enabled in
+                                var disabled = settings.disabledLyricsProviders
+                                if enabled {
+                                    disabled.remove(provider.id)
+                                } else {
+                                    disabled.insert(provider.id)
+                                }
+                                settings.disabledLyricsProviders = disabled
                             }
-                            settings.disabledLyricsProviders = disabled
-                        }
-                    )) {
-                        Label(provider.name, systemImage: "music.note")
-                    }
+                        )
+                    )
                 }
             } header: {
                 Text("Providers")

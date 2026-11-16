@@ -91,11 +91,11 @@ struct LastFMSettingsView: View {
             }
 
             Section {
-                Toggle("Enable Scrobbling", isOn: $scrobblingEnabled)
+                SettingsToggleRow("Enable Scrobbling", icon: "dot.radiowaves.left.and.right", isOn: $scrobblingEnabled)
                     .disabled(!isLoggedIn)
-                Toggle("Now Playing", isOn: $useNowPlaying)
+                SettingsToggleRow("Now Playing", icon: "play.circle", isOn: $useNowPlaying)
                     .disabled(!isLoggedIn || !scrobblingEnabled)
-                Toggle("Sync Likes to Last.fm", isOn: $useSendLikes)
+                SettingsToggleRow("Sync Likes to Last.fm", icon: "heart", isOn: $useSendLikes)
                     .disabled(!isLoggedIn)
             } header: {
                 Text("Options")

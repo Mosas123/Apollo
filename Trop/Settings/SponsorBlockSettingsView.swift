@@ -13,7 +13,9 @@ struct SponsorBlockSettingsView: View {
     var body: some View {
         List {
             Section {
-                Toggle("Skip Segments", isOn: $enabled)
+                SettingsToggleRow("Skip Segments", icon: "forward.end", isOn: $enabled)
+            } header: {
+                Text("Segments")
             } footer: {
                 Text("Skips non-music parts of music videos, like talking intros, skits and long outros.")
             }
