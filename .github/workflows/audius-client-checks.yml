@@ -1,0 +1,18 @@
+name: Audius Client Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Core/MusicSources/**"
+      - "tests/MusicSources/**"
+      - "scripts/test-audius-client.sh"
+      - ".github/workflows/audius-client-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check Audius decoding and request handling
+        run: bash scripts/test-audius-client.sh
