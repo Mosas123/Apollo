@@ -8,6 +8,19 @@
 // https://github.com/spicetify/cli/blob/main/CustomApps/lyrics-plus/ProviderMusixmatch.js
 
 import Foundation
+import Synchronization
+
+private struct MusixmatchTokenState: Sendable {
+    var token: String?
+    var fetchedAt: Date?
+}
+
+/// Thread-safe cache for the Musixmatch guest token. Tokens are short-lived,
+/// so we re-fetch once they're older than `ttl` instead of caching forever.
+private enum MusixmatchTokenCache {
+    static let state = Mutex(MusixmatchTokenState())
+    static let ttl: TimeInterval = 600
+}
 
 struct MusixmatchProvider: LyricsProvider {
     let id = "musixmatch"
@@ -15,9 +28,6 @@ struct MusixmatchProvider: LyricsProvider {
 
     private let baseURL = "https://apic-appmobile.musixmatch.com/ws/1.1/macro.subtitles.get"
     private let tokenURL = "https://apic-appmobile.musixmatch.com/ws/1.1/token.get?app_id=mac-ios-v2.0&"
-
-    // Guest token is fetched once and reused across requests.
-    nonisolated(unsafe) private static var guestToken: String?
 
     func fetch(query: LyricsQuery) async throws -> [LyricLine] {
         let token = try await fetchToken()
@@ -49,7 +59,11 @@ struct MusixmatchProvider: LyricsProvider {
     // MARK: - Token
 
     private func fetchToken() async throws -> String {
-        if let cached = Self.guestToken { return cached }
+        let cached = MusixmatchTokenCache.state.withLock { $0 }
+        if let token = cached.token, let fetchedAt = cached.fetchedAt,
+           Date().timeIntervalSince(fetchedAt) < MusixmatchTokenCache.ttl {
+            return token
+        }
         guard let url = URL(string: tokenURL) else { throw LyricsError.invalidURL }
         var request = URLRequest(url: url)
         applyHeaders(to: &request)
@@ -60,7 +74,7 @@ struct MusixmatchProvider: LyricsProvider {
               let token = body["user_token"] as? String, !token.isEmpty else {
             throw LyricsError.notFound
         }
-        Self.guestToken = token
+        MusixmatchTokenCache.state.withLock { $0 = MusixmatchTokenState(token: token, fetchedAt: Date()) }
         return token
     }
 
