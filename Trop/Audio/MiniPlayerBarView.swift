@@ -199,6 +199,15 @@ struct MiniPlayerBarView: View {
 
     // MARK: - Data
 
+    /// Radio shows the live ICY song when present; otherwise the station's own
+    /// metadata (country • codec), never an empty line.
+    private var nowPlayingArtistLine: String {
+        if np.playbackKind == .radio, let live = np.liveTitle, !live.isEmpty {
+            return live
+        }
+        return np.displayArtist
+    }
+
     private var currentSong: SongItem? {
         guard np.queueSongs.indices.contains(np.queueIndex) else { return nil }
         return np.queueSongs[np.queueIndex]
@@ -235,7 +244,7 @@ struct MiniPlayerBarView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .foregroundStyle(titleColor)
-                Text(np.playbackKind == .radio ? (np.liveTitle ?? np.displayArtist) : np.displayArtist)
+                Text(nowPlayingArtistLine)
                     .font(.system(size: 12, weight: .regular))
                     .lineLimit(1)
                     .truncationMode(.tail)
