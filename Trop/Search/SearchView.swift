@@ -203,7 +203,7 @@ struct SearchView: View {
             }
         }
         .scrollIndicators(.automatic)
-        .miniPlayerTracksScroll()
+        .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
     }
 
     private var searchResultsList: some View {
@@ -253,7 +253,7 @@ struct SearchView: View {
             .padding(.bottom, 16)
         }
         .scrollIndicators(.automatic)
-        .miniPlayerTracksScroll()
+        .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
     }
 
     /// Play external-catalogue tracks using the provider-scoped queue adapter.

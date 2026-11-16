@@ -84,7 +84,7 @@ struct ExploreView: View {
                 .padding(.bottom, 16)
         }
         .scrollIndicators(.automatic)
-        .miniPlayerTracksScroll()
+        .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
         .refreshable { await viewModel.refresh() }
     }
 }
@@ -224,7 +224,7 @@ private struct MoodDetailView: View {
                             .padding(.bottom, 16)
                     }
                     .scrollIndicators(.automatic)
-                    .miniPlayerTracksScroll()
+                    .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
                 }
             } else {
                 MoodDetailSkeletonView()

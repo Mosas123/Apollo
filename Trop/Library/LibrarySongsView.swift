@@ -44,7 +44,7 @@ struct LibrarySongsView: View {
                         }
                     }
                 }
-                .miniPlayerTracksScroll()
+                .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
             }
         }
         .navigationTitle("Songs")

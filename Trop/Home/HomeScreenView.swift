@@ -109,7 +109,7 @@ struct HomeScreenView: View {
             }
         }
         .scrollIndicators(.automatic)
-        .miniPlayerTracksScroll()
+        .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
         .task(id: selectedCategory) {
             await viewModel.loadCategoryFeed(selectedCategory)
         }

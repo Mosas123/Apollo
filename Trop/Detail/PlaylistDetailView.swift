@@ -409,7 +409,7 @@ struct PlaylistDetailView: View {
             }
         }
         .scrollDisabled(viewModel.isLoading || viewModel.error != nil || viewModel.playlist == nil)
-        .miniPlayerTracksScroll()
+        .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
         .navigationTitle(viewModel.playlist?.title ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

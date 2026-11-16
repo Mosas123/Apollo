@@ -55,7 +55,7 @@ struct DownloadsView: View {
             .buttonStyle(.borderedProminent)
             .tint(settings.accentColor)
         }
-        .miniPlayerTracksScroll()
+        .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
     }
 
     private var contentView: some View {
@@ -76,7 +76,7 @@ struct DownloadsView: View {
         .scrollDisabled(!downloadManager.isLoaded)
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .miniPlayerTracksScroll()
+        .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
     }
 
     private var header: some View {

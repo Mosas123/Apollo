@@ -147,7 +147,7 @@ struct LibraryView: View {
             .padding(.bottom, 28)
         }
         .scrollIndicators(.automatic)
-        .miniPlayerTracksScroll()
+        .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
     }
 
     /// Simple grouped list of library destinations, Apple Music style.
