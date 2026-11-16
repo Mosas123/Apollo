@@ -36,6 +36,12 @@ struct FullPlayerView: View {
         canvasDominantColors ?? np.dominantColors
     }
 
+    /// 0 while full-screen, 1 once the card has been pulled far enough to show
+    /// rounded corners — so the sheet look only appears while dismissing.
+    private var cardProgress: CGFloat {
+        min(1, max(0, sheet.dragOffset / 120))
+    }
+
     private var activeLyricText: String? {
         let synchronizedLines = currentLyrics.filter {
             $0.startTime != nil &&
@@ -78,8 +84,15 @@ struct FullPlayerView: View {
                             .fill(playerBackgroundColors.first ?? .blue)
                             .frame(width: 400, height: 400)
                             .blur(radius: 120)
-                            .opacity(0.45)
+                            .opacity(0.2)
                             .offset(y: -150)
+                            .allowsHitTesting(false)
+                    }
+                    .overlay {
+                        // Keep white text legible even over light/desaturated art.
+                        Color.black
+                            .opacity(0.30)
+                            .ignoresSafeArea()
                             .allowsHitTesting(false)
                     }
                 }
@@ -182,12 +195,11 @@ struct FullPlayerView: View {
             .ignoresSafeArea(edges: .bottom)
             .clipShape(
                 UnevenRoundedRectangle(
-                    topLeadingRadius: 38,
-                    topTrailingRadius: 38,
+                    topLeadingRadius: 38 * cardProgress,
+                    topTrailingRadius: 38 * cardProgress,
                     style: .continuous
                 )
             )
-            .padding(.top, 6)
             .offset(y: sheet.dragOffset)
             .animation(.easeInOut(duration: 0.35), value: showQueue)
             .simultaneousGesture(collapseDrag)
@@ -462,10 +474,17 @@ struct FullPlayerView: View {
             .onTapGesture { showGoToMenu = true }
 
             HStack(spacing: 8) {
-                PlayerLikeButton(isLiked: isLiked) {
+                Button {
                     guard let song = np.queueSongs.indices.contains(np.queueIndex) ? np.queueSongs[np.queueIndex] : nil else { return }
                     Task { await likeStore.toggle(song: song) }
+                } label: {
+                    Image(systemName: isLiked ? "star.fill" : "star")
+                        .font(.title3)
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isLiked ? "Favorited" : "Favorite")
 
                 if np.queueSongs.indices.contains(np.queueIndex) {
                     PlayerOptionsButton {
