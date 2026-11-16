@@ -12,13 +12,18 @@ import Foundation
 /// Preserves each provider's exact error contract — headers, query building
 /// and response interpretation stay per-provider.
 enum LyricsHTTP {
-    /// GETs `request`, throwing `.notFound` unless the status is exactly 200.
+    /// GETs `request`, throwing `.notFound` for 404 and `.requestFailed(code)`
+    /// for any other non-200 status (preserves 4xx/5xx/429 for callers).
     static func get(_ request: URLRequest) async throws -> Data {
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+        guard let http = response as? HTTPURLResponse else {
             throw LyricsError.notFound
         }
-        return data
+        switch http.statusCode {
+        case 200: return data
+        case 404: throw LyricsError.notFound
+        default: throw LyricsError.requestFailed(http.statusCode)
+        }
     }
 
     /// `get` + JSON dictionary decode, throwing `.decodingFailed` on bad JSON.

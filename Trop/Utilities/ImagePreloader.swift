@@ -20,8 +20,6 @@ actor ImagePreloader {
     private var seen: Set<URL> = []
     private var seenOrder: [URL] = []
     private static let maxSeen = 1000
-    private var lastPreloadAt: Date = .distantPast
-    private static let minPreloadInterval: TimeInterval = 0.4
     private static let maxPreloadBatch = 60
 
     nonisolated static let shared = ImagePreloader()
@@ -31,9 +29,6 @@ actor ImagePreloader {
     }
 
     func preload(_ urls: [URL]) {
-        let now = Date()
-        _ = now.timeIntervalSince(lastPreloadAt) < Self.minPreloadInterval
-        lastPreloadAt = now
 
         var fresh: [URL] = []
         fresh.reserveCapacity(min(urls.count, Self.maxPreloadBatch))
