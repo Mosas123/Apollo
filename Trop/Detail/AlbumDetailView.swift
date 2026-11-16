@@ -7,6 +7,7 @@
 
 @preconcurrency import SwiftyTube
 import SwiftUI
+import UIKit
 
 // MARK: - View Model
 
@@ -254,6 +255,7 @@ struct AlbumDetailView: View {
     @State private var viewModel: AlbumDetailViewModel
     @State private var pendingRoute: DetailRoute?
     @State private var showMoreSheet = false
+    @State private var backdropColors: [Color] = []
 
     @Environment(\.dismiss) private var dismiss
 
@@ -275,6 +277,7 @@ struct AlbumDetailView: View {
             }
         }
         .scrollDisabled(viewModel.isLoading || viewModel.error != nil || viewModel.album == nil)
+        .background(albumBackdrop)
         .miniPlayerTracksScroll()
         .navigationTitle(viewModel.album?.title ?? "")
         .navigationBarTitleDisplayMode(.inline)
@@ -282,7 +285,45 @@ struct AlbumDetailView: View {
             guard viewModel.isLoading else { return }
             await viewModel.load()
         }
+        .task(id: viewModel.album?.thumbnailUrl) {
+            await loadBackdrop(for: viewModel.album?.thumbnailUrl)
+        }
         .detailRouteSheet(item: $pendingRoute)
+    }
+
+    /// Apple Music-style tint pulled from the album artwork, fading into the
+    /// system background.
+    private var albumBackdrop: some View {
+        ZStack {
+            if let primary = backdropColors.first {
+                LinearGradient(
+                    colors: [
+                        primary.opacity(0.6),
+                        primary.opacity(0.18),
+                        Color(.systemBackground)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            } else {
+                Color(.systemBackground)
+            }
+        }
+        .ignoresSafeArea()
+    }
+
+    private func loadBackdrop(for urlString: String?) async {
+        guard let urlString, let url = URL(string: urlString) else { return }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            guard let image = UIImage(data: data) else { return }
+            let colors = image.extractDominantColors()
+            withAnimation(.easeInOut(duration: 0.4)) {
+                backdropColors = colors
+            }
+        } catch {
+            Log.albumDetail.debug("Backdrop color extraction failed: \(error)")
+        }
     }
 
     @ViewBuilder
