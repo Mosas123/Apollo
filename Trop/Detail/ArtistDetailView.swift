@@ -70,12 +70,22 @@ extension ArtistDetailViewModel {
                 let subscription = extractSubscriptionDetails(from: immersive)
                 isSubscribed = subscription.isSubscribed ?? false
                 subscriberCountText = subscription.subscriberCountText
+                if let descDict = immersive["description"] as? [String: Any] {
+                    let shelf = descDict["musicDescriptionShelfRenderer"] as? [String: Any]
+                    descriptionText = (shelf?["description"] as? [String: Any]).flatMap { InnerTubeJSON.runsText($0) }
+                        ?? InnerTubeJSON.runsText(descDict)
+                }
             } else if let responsive = header["musicResponsiveHeaderRenderer"] as? [String: Any] {
                 name = InnerTubeJSON.runsText(responsive["title"] as? [String: Any]) ?? "Unknown Artist"
                 thumbnailUrl = InnerTubeJSON.musicThumbnailURL(responsive)
                 let subscription = extractSubscriptionDetails(from: responsive)
                 isSubscribed = subscription.isSubscribed ?? false
                 subscriberCountText = subscription.subscriberCountText
+                if descriptionText == nil, let descDict = responsive["description"] as? [String: Any] {
+                    let shelf = descDict["musicDescriptionShelfRenderer"] as? [String: Any]
+                    descriptionText = (shelf?["description"] as? [String: Any]).flatMap { InnerTubeJSON.runsText($0) }
+                        ?? InnerTubeJSON.runsText(descDict)
+                }
             }
         }
 
@@ -100,6 +110,13 @@ extension ArtistDetailViewModel {
         if let sections = BrowseLens.browseSections(json) {
 
             for sectionDict in sections {
+                if descriptionText == nil,
+                   let descShelf = sectionDict["musicDescriptionShelfRenderer"] as? [String: Any],
+                   let desc = (descShelf["description"] as? [String: Any]).flatMap({ InnerTubeJSON.runsText($0) }),
+                   !desc.isEmpty {
+                    descriptionText = desc
+                }
+
                 // musicShelfRenderer typically contains a list of songs
                 if let shelf = sectionDict["musicShelfRenderer"] as? [String: Any],
                    let items = shelf["contents"] as? [[String: Any]] {
