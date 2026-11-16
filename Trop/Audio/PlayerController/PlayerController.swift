@@ -24,6 +24,15 @@ struct DetectedCrop {
 
 // MARK: - PlayerController
 
+/// `UIImage` is not Sendable, but `MPMediaItemArtwork`'s request handler runs on a
+/// background queue. Wrapping the rendered image lets the `@Sendable` handler
+/// capture it without inheriting `@MainActor` isolation (which would trap at
+/// runtime under Swift 6).
+final class SendableArtwork: @unchecked Sendable {
+    let image: UIImage
+    init(_ image: UIImage) { self.image = image }
+}
+
 @MainActor
 final class PlayerController {
     static let shared = PlayerController()
@@ -1024,7 +1033,8 @@ extension PlayerController {
         nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackQueueIndex] = np.queueIndex
         nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackQueueCount] = np.queueSongs.count
         if let image = np.thumbnailUIImage {
-            nowPlayingInfo[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            let artwork = SendableArtwork(image)
+            nowPlayingInfo[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in artwork.image }
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
         MPNowPlayingInfoCenter.default().playbackState = np.isPlaying ? .playing : .paused
@@ -1038,7 +1048,8 @@ extension PlayerController {
     func updateNowPlayingArtwork() {
         let np = NowPlaying.shared
         if let image = np.thumbnailUIImage {
-            nowPlayingInfo[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            let artwork = SendableArtwork(image)
+            nowPlayingInfo[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in artwork.image }
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
     }
