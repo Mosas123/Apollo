@@ -91,8 +91,70 @@ extension HomePageParser {
             if let responsiveList = itemDict["musicResponsiveListItemRenderer"] as? [String: Any] {
                 return SongItem.from(responsiveList).map { YTItem.song($0) }
             }
+            if let multiRow = itemDict["musicMultiRowListItemRenderer"] as? [String: Any] {
+                return parseMultiRowItem(multiRow)
+            }
             return nil
         }
+    }
+
+    /// Multi-row tiles (used by the "Podcasts" home chip and other filtered
+    /// feeds). They carry the video id in `onTap.watchEndpoint` and the media
+    /// type in `musicVideoType`, so episodes can be distinguished from songs.
+    static func parseMultiRowItem(_ renderer: [String: Any]) -> YTItem? {
+        guard let onTap = renderer["onTap"] as? [String: Any],
+              let watch = onTap["watchEndpoint"] as? [String: Any],
+              let videoId = watch["videoId"] as? String else { return nil }
+
+        let title = InnerTubeJSON.runsText(renderer["title"] as? [String: Any]) ?? "Unknown"
+        let subtitle = InnerTubeJSON.runsText(renderer["subtitle"] as? [String: Any]) ?? ""
+
+        var thumbnail: String?
+        if let thumb = renderer["thumbnail"] as? [String: Any],
+           let musicThumb = thumb["musicThumbnailRenderer"] as? [String: Any],
+           let inner = musicThumb["thumbnail"] as? [String: Any],
+           let list = inner["thumbnails"] as? [[String: Any]] {
+            thumbnail = InnerTubeJSON.lastThumbnailURL(list)
+        }
+
+        var duration = 0
+        if let progress = renderer["playbackProgress"] as? [String: Any],
+           let progressRenderer = progress["musicPlaybackProgressRenderer"] as? [String: Any],
+           let durationText = InnerTubeJSON.runsText(progressRenderer["durationText"] as? [String: Any]) {
+            duration = DurationFormat.parseClock(durationText) ?? 0
+        }
+
+        let configs = (watch["watchEndpointMusicSupportedConfigs"] as? [String: Any])?["watchEndpointMusicConfig"] as? [String: Any]
+        let musicVideoType = configs?["musicVideoType"] as? String
+
+        if musicVideoType == "MUSIC_VIDEO_TYPE_PODCAST_EPISODE" {
+            let episode = EpisodeItem(
+                videoId: videoId,
+                title: title,
+                artists: [],
+                duration: duration,
+                thumbnailUrl: thumbnail,
+                publishDate: subtitle.isEmpty ? nil : subtitle,
+                descriptionText: nil,
+                viewsText: nil
+            )
+            return .episode(episode)
+        }
+
+        let song = SongItem(
+            videoId: videoId,
+            title: title,
+            artists: [],
+            album: nil,
+            albumId: nil,
+            duration: duration,
+            thumbnailUrl: thumbnail,
+            isExplicit: false,
+            playlistId: nil,
+            likeStatus: nil,
+            musicVideoType: musicVideoType
+        )
+        return .song(song)
     }
 
     static func parseTwoRowItem(_ renderer: [String: Any]) -> YTItem? {
