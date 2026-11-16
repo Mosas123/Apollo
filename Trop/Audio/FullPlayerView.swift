@@ -228,7 +228,7 @@ struct FullPlayerView: View {
     }
 
     private var currentAlbumSubtitle: String? {
-        if let album = np.albumTitle, !album.isEmpty { return album }
+        if !np.albumTitle.isEmpty { return np.albumTitle }
         if let album = currentSong?.album, !album.isEmpty { return album }
         return nil
     }
