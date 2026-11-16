@@ -26,6 +26,7 @@ struct FullPlayerView: View {
     @State private var showQueue = false
     @State private var pendingRoute: DetailRoute?
     @State private var showSongMenu = false
+    @State private var liveSaveStatus: String?
     @State private var artworkEntryOffset: CGFloat = 0
     @State private var currentLyrics: [LyricLine] = []
     @State private var canvasDominantColors: [Color]?
@@ -136,6 +137,12 @@ struct FullPlayerView: View {
                         titleAndActionsRow
                             .padding(.horizontal, horizontalPadding)
                             .padding(.bottom, isCompact ? 10 : 14)
+
+                        if np.playbackKind == .radio, let live = np.liveSongInfo {
+                            radioLiveCard(live)
+                                .padding(.horizontal, horizontalPadding)
+                                .padding(.bottom, 10)
+                        }
 
                         Group {
                             if let activeLyricText {
@@ -297,6 +304,62 @@ struct FullPlayerView: View {
               !Task.isCancelled,
               np.videoId == videoId else { return }
         currentLyrics = lines
+    }
+
+    private func radioLiveCard(_ live: LiveSongInfo) -> some View {
+        HStack(spacing: 10) {
+            Group {
+                if let data = live.artwork, let image = UIImage(data: data) {
+                    Image(uiImage: image).resizable().scaledToFill()
+                } else {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(.white.opacity(0.12))
+                        .overlay {
+                            Image(systemName: "music.note")
+                                .foregroundStyle(.white.opacity(0.5))
+                        }
+                }
+            }
+            .frame(width: 44, height: 44)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(liveSaveStatus ?? "EN RADIO AHORA")
+                    .font(.system(size: 9, weight: .bold))
+                    .tracking(1)
+                    .foregroundStyle(.white.opacity(0.55))
+                    .lineLimit(1)
+                Text(live.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text([live.artist, live.album].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " • "))
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.75))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 4)
+
+            Button {
+                Task { await saveLive(live) }
+            } label: {
+                Image(systemName: "arrow.down.circle")
+                    .font(.title2)
+                    .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Save song")
+        }
+        .padding(10)
+        .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func saveLive(_ live: LiveSongInfo) async {
+        liveSaveStatus = "GUARDANDO…"
+        liveSaveStatus = await RadioLiveSaver.download(artist: live.artist, title: live.title)
+        try? await Task.sleep(for: .seconds(3))
+        liveSaveStatus = nil
     }
 
     private var playerArtistLine: String {

@@ -12,6 +12,15 @@ import Nuke
 import SwiftUI
 
 @Observable
+/// The song currently playing on a radio stream (from ICY metadata), enriched
+/// with canonical metadata and artwork when available.
+struct LiveSongInfo: Equatable {
+    var title: String
+    var artist: String
+    var album: String?
+    var artwork: Data?
+}
+
 /// What is currently playing, used to route metadata and label the UI.
 enum PlaybackKind: Sendable {
     case music
@@ -29,6 +38,8 @@ final class NowPlaying {
     var artist = ""
     /// For internet radio: the song currently playing on the station (ICY title).
     var liveTitle: String?
+    /// Enriched live radio song (parsed + album/artwork from a catalogue).
+    var liveSongInfo: LiveSongInfo?
     var albumTitle = ""
     var videoId: String?
     var artists: [YTArtist] = []
@@ -279,6 +290,7 @@ final class NowPlaying {
         self.duration = 0
         self.videoId = videoId
         self.liveTitle = nil
+        self.liveSongInfo = nil
         self.hasVideo = false
         self.isVideoMode = false
         self.isVideoReady = false
@@ -631,7 +643,44 @@ final class NowPlaying {
     /// station) and publishes it when it changes.
     private func refreshLiveTitle() {
         guard let icy = PlayerController.shared.icyTitle(), !icy.isEmpty else { return }
-        if liveTitle != icy { liveTitle = icy }
+        guard liveTitle != icy else { return }
+        liveTitle = icy
+        resolveLiveSong(icy)
+    }
+
+    /// Splits an ICY title ("Artist - Title") and enriches it with a catalogue
+    /// lookup, so the player can show the full song and offer to save it.
+    private func resolveLiveSong(_ raw: String) {
+        let parts = Self.splitICY(raw)
+        liveSongInfo = LiveSongInfo(title: parts.title, artist: parts.artist, album: nil, artwork: nil)
+        Task {
+            guard let resolved = await MetadataResolver.enrich(title: parts.title, artist: parts.artist) else { return }
+            var artwork: Data?
+            if let url = resolved.artworkURL {
+                artwork = try? await URLSession.shared.data(from: url).0
+            }
+            guard liveTitle == raw else { return }
+            liveSongInfo = LiveSongInfo(
+                title: resolved.title,
+                artist: resolved.artist,
+                album: resolved.album,
+                artwork: artwork
+            )
+        }
+    }
+
+    /// Splits a raw ICY stream title into artist and title.
+    static func splitICY(_ raw: String) -> (artist: String, title: String) {
+        for separator in [" - ", " – ", " — "] {
+            if let range = raw.range(of: separator) {
+                let artist = raw[..<range.lowerBound].trimmingCharacters(in: .whitespaces)
+                let title = raw[range.upperBound...].trimmingCharacters(in: .whitespaces)
+                if !artist.isEmpty, !title.isEmpty {
+                    return (String(artist), String(title))
+                }
+            }
+        }
+        return ("", raw.trimmingCharacters(in: .whitespaces))
     }
 
     private func stopTimer() {
