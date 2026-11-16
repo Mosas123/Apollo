@@ -65,13 +65,15 @@ struct MiniPlayerBarView: View {
     }
 
     var body: some View {
-        Group {
-            if isInline {
-                collapsedBar
-            } else {
-                expandedBar
-            }
+        HStack(spacing: 0) {
+            pagingArea
+            playPauseButton
+                .padding(.trailing, 16)
         }
+        .frame(height: barHeight)
+        .frame(maxWidth: .infinity)
+        .overlay(alignment: .bottom) { progressLine }
+        .clipShape(Capsule())
         .onChange(of: np.videoId) { _, _ in
             dragOffset = 0
             preloadLyrics()
@@ -85,34 +87,6 @@ struct MiniPlayerBarView: View {
             np.preloadNeighborArtwork()
         }
         .task { np.preloadNeighborArtwork() }
-        .animation(.easeInOut(duration: 0.22), value: isInline)
-    }
-
-    /// Full 48pt capsule: artwork, marquee title, play/pause and progress line.
-    private var expandedBar: some View {
-        HStack(spacing: 0) {
-            pagingArea
-            playPauseButton
-                .padding(.trailing, 16)
-        }
-        .frame(height: barHeight)
-        .frame(maxWidth: .infinity)
-        .overlay(alignment: .bottom) { progressLine }
-        .clipShape(Capsule())
-    }
-
-    /// Apple Music-style collapsed form: only the artwork remains on the left,
-    /// tappable to reopen the player.
-    private var collapsedBar: some View {
-        HStack(spacing: 0) {
-            if let song = currentSong {
-                barArtwork(for: song.videoId)
-            }
-            Spacer()
-        }
-        .padding(.leading, 16)
-        .contentShape(Rectangle())
-        .onTapGesture { onExpand() }
     }
 
     private func preloadLyrics() {
