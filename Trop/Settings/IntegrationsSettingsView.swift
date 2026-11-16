@@ -9,6 +9,9 @@ struct IntegrationsSettingsView: View {
     var body: some View {
         List {
             Section {
+                SettingsNavigationRow("Qobuz", icon: "waveform") {
+                    QobuzSettingsView()
+                }
                 SettingsNavigationRow("Last.fm", icon: "music.note") {
                     LastFMSettingsView()
                 }

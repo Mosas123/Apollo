@@ -28,9 +28,9 @@ struct QobuzClientChecks {
                 precondition(request.value(forHTTPHeaderField: "X-User-Auth-Token") == credentials.userAuthToken)
                 precondition(!url.absoluteString.contains(credentials.appSecret))
                 let parts = URLComponents(url: url, resolvingAgainstBaseURL: false)
-                let values = Dictionary(uniqueKeysWithValues: (parts?.queryItems ?? []).compactMap {
-                    $0.value.map { ($0.name, $0) }
-                })
+                let values = (parts?.queryItems ?? []).reduce(into: [String: String]()) { map, item in
+                    map[item.name] = item.value
+                }
                 precondition(values["app_id"] == credentials.appId)
                 if url.path.hasSuffix("/catalog/search") {
                     precondition(values["query"] == "canción & jazz")

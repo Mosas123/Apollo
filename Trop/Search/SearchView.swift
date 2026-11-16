@@ -239,7 +239,14 @@ struct SearchView: View {
                 if viewModel.showsAudiusResults && !viewModel.audiusTracks.isEmpty {
                     sectionHeader("Audius")
                     ForEach(viewModel.audiusTracks, id: \.id) { track in
-                        audiusTrackRow(track)
+                        externalTrackRow(track, from: viewModel.audiusTracks)
+                    }
+                }
+
+                if viewModel.showsQobuzResults && !viewModel.qobuzTracks.isEmpty {
+                    sectionHeader("Qobuz")
+                    ForEach(viewModel.qobuzTracks, id: \.id) { track in
+                        externalTrackRow(track, from: viewModel.qobuzTracks)
                     }
                 }
             }
@@ -251,10 +258,13 @@ struct SearchView: View {
 
     /// Play external-catalogue tracks using the provider-scoped queue adapter.
     /// Do not expose YouTube's song menu or navigation actions on this row.
-    private func audiusTrackRow(_ track: MusicCatalogTrack) -> some View {
+    private func externalTrackRow(_ track: MusicCatalogTrack, from tracks: [MusicCatalogTrack]) -> some View {
         Button {
-            let songs = viewModel.audiusTracks.map { $0.asQueueSong() }
-            PlaybackQueue.play(track.asQueueSong(), in: songs, log: Log.searchView, context: "Audius search")
+            let songs = tracks.map { $0.asQueueSong() }
+            PlaybackQueue.play(
+                track.asQueueSong(), in: songs, log: Log.searchView,
+                context: "\(track.id.source.rawValue) search"
+            )
         } label: {
             HStack(spacing: 12) {
                 AsyncImageView(url: track.artworkURL?.absoluteString)
