@@ -9,6 +9,9 @@ struct IntegrationsSettingsView: View {
     var body: some View {
         List {
             Section {
+                SettingsNavigationRow("Music Addons", icon: "puzzlepiece.extension") {
+                    MusicAddonsSettingsView()
+                }
                 SettingsNavigationRow("Qobuz", icon: "waveform") {
                     QobuzSettingsView()
                 }
