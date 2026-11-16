@@ -91,6 +91,7 @@ enum LocalDiscoveryService {
 
         // iTunes fallback, seeded by the taste profile plus broad topics.
         var terms = TasteProfileStore.shared.topArtists(limit: 2)
+        terms += TasteProfileStore.shared.topGenres(limit: 3)
         terms += ["music", "culture", "comedy", "news"]
 
         var names: [String] = []

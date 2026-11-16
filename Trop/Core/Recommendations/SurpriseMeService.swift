@@ -92,10 +92,12 @@ enum SurpriseMeService {
             }
         }
 
-        // 3) Last resort: songs by the listener's learned top artists.
+        // 3) Last resort: songs by the listener's learned artists and genres.
         if items.count < 8 {
-            for artist in TasteProfileStore.shared.topArtists(limit: 4) {
-                guard let raw = try? await SearchService.shared.search(query: artist) else { continue }
+            let queries = TasteProfileStore.shared.topArtists(limit: 4)
+                + TasteProfileStore.shared.topGenres(limit: 2)
+            for query in queries {
+                guard let raw = try? await SearchService.shared.search(query: query) else { continue }
                 let songs = SearchParser.parseSearchResults(from: raw)
                     .flatMap(\.items)
                     .compactMap { item -> SongItem? in

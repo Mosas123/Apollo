@@ -26,9 +26,10 @@ enum ForYouService {
             return cachedSongs?.songs ?? []
         }
 
+        let genreNote = profile.genres.isEmpty ? "" : " Genres they enjoy: \(profile.genres.joined(separator: ", "))."
         let prompt = """
         You are a music recommendation engine. The listener follows these artists: \
-        \(profile.artists.joined(separator: ", ")). Their liked songs: \(profile.liked.joined(separator: "; ")).
+        \(profile.artists.joined(separator: ", ")).\(genreNote) Their liked songs: \(profile.liked.joined(separator: "; ")).
         Recommend 20 songs they likely haven't heard, mixing familiar artists with closely related ones.
         Reply ONLY with a JSON array of objects: [{"artist":"...","title":"..."}]. No prose.
         """
@@ -82,8 +83,9 @@ enum ForYouService {
         }
         let known = Set(profile.artists.map { $0.lowercased() })
 
+        let genreNote = profile.genres.isEmpty ? "" : " Genres they enjoy: \(profile.genres.joined(separator: ", "))."
         let prompt = """
-        You are a music discovery engine. The listener follows: \(profile.artists.joined(separator: ", ")). \
+        You are a music discovery engine. The listener follows: \(profile.artists.joined(separator: ", ")).\(genreNote) \
         Their liked songs: \(profile.liked.joined(separator: "; ")).
         Suggest 12 artists they would likely enjoy but probably do NOT know yet \
         (avoid these: \(profile.artists.joined(separator: ", "))).
@@ -126,8 +128,9 @@ enum ForYouService {
             return cachedPodcasts?.items ?? []
         }
 
+        let genreNote = profile.genres.isEmpty ? "" : " Genres they enjoy: \(profile.genres.joined(separator: ", "))."
         let prompt = """
-        You are a podcast discovery engine. The listener follows: \(profile.artists.prefix(6).joined(separator: ", ")).
+        You are a podcast discovery engine. The listener follows: \(profile.artists.prefix(6).joined(separator: ", ")).\(genreNote)
         Suggest 10 podcasts they might enjoy, spanning their interests. Reply ONLY with a JSON array of podcast names: ["Podcast", ...]. No prose.
         """
 
@@ -172,7 +175,7 @@ enum ForYouService {
         return nil
     }
 
-    private static func loadProfile() async -> (artists: [String], liked: [String]) {
+    private static func loadProfile() async -> (artists: [String], liked: [String], genres: [String]) {
         var artists = (try? await DatabaseService.shared.fetchArtists(limit: 12))?.map(\.name) ?? []
         for artist in TasteProfileStore.shared.topArtists(limit: 8) where !artists.contains(artist) {
             artists.append(artist)
@@ -180,7 +183,7 @@ enum ForYouService {
         let liked = (try? await DatabaseService.shared.fetchAllLikedSongs())?
             .prefix(20)
             .map { "\($0.title) — \($0.artistName ?? "")" } ?? []
-        return (artists, liked)
+        return (artists, liked, TasteProfileStore.shared.topGenres(limit: 5))
     }
 
     private static func parseSuggestions(_ text: String) -> [(artist: String, title: String)]? {
