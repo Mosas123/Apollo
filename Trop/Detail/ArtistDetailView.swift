@@ -609,7 +609,7 @@ struct ArtistDetailView: View {
                         url: ArtworkURLs.sized(artist.thumbnailUrl, width: 1200, height: 1200),
                         contentMode: .fill
                     )
-                    .frame(height: min(430, UIScreen.main.bounds.height * 0.55))
+                    .frame(height: UIScreen.main.bounds.height * 0.52)
                     .clipped()
 
                     LinearGradient(
