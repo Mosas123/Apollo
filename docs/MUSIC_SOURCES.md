@@ -60,3 +60,14 @@ action for an Audius item when the user interface is connected.
 region restrictions, app/platform network policies, or server availability.
 No live stream playback has been tested yet. There is no download support for
 Audius, and `resolve(forDownload:)` deliberately rejects that route.
+
+
+## Phase 3: Audius search UI (stacked draft)
+
+YouTube and Audius searches run in parallel, with failures isolated so one
+source can still return results. Audius has its own searchable filter and
+separate song rows that feed the source-prefixed queue. The UI deliberately
+does not offer YouTube song navigation, radio, or downloads for those rows.
+
+This is the first user-visible integration. Real iPhone playback and
+full-system regression tests remain required before any merge.

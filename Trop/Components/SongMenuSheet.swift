@@ -36,78 +36,86 @@ struct SongMenuSheet: View {
         SheetChrome {
             Group {
                 headerCard
-                actionGrid
-                MenuCard {
-                    MenuRow(
-                        icon: isLiked ? "heart.slash" : "heart",
-                        title: isLiked ? "Unlike" : "Like"
-                    ) {
-                        Task { await likeStore.toggle(song: song) }
+                if MusicPlaybackIdentity.isYouTube(song.videoId) {
+                    actionGrid
+                    MenuCard {
+                        MenuRow(
+                            icon: isLiked ? "heart.slash" : "heart",
+                            title: isLiked ? "Unlike" : "Like"
+                        ) {
+                            Task { await likeStore.toggle(song: song) }
+                        }
+                        Divider()
+                        downloadRow
                     }
-                    Divider()
-                    downloadRow
-                }
-                MenuCard {
-                    MenuRow(
-                        icon: "text.insert",
-                        title: "Play Next",
-                        subtitle: "Add to the queue, next in line"
-                    ) { playNext() }
-                    Divider()
-                    MenuRow(
-                        icon: "list.bullet",
-                        title: "Add to Queue",
-                        subtitle: "Add to the end of the queue"
-                    ) { addToQueue() }
-                    Divider()
-                    MenuRow(
-                        icon: pin.isPinned ? "pin.fill" : "pin",
-                        title: pin.isPinned ? "Unpin from Quick Picks" : "Pin to Quick Picks"
-                    ) { Task { await pin.toggle(song: song) } }
-                    MenuRow(
-                        icon: "music.mic",
-                        title: "View Artist",
-                        subtitle: song.artistNamesDisplay
-                    ) { handleViewArtist() }
-                    if let albumId = song.firstAlbumBrowseId {
+                    MenuCard {
+                        MenuRow(
+                            icon: "text.insert",
+                            title: "Play Next",
+                            subtitle: "Add to the queue, next in line"
+                        ) { playNext() }
                         Divider()
                         MenuRow(
-                            icon: "record.circle",
-                            title: "View Album",
-                            subtitle: song.album
-                        ) { navigate(.album(browseId: albumId)) }
+                            icon: "list.bullet",
+                            title: "Add to Queue",
+                            subtitle: "Add to the end of the queue"
+                        ) { addToQueue() }
+                        Divider()
+                        MenuRow(
+                            icon: pin.isPinned ? "pin.fill" : "pin",
+                            title: pin.isPinned ? "Unpin from Quick Picks" : "Pin to Quick Picks"
+                        ) { Task { await pin.toggle(song: song) } }
+                        MenuRow(
+                            icon: "music.mic",
+                            title: "View Artist",
+                            subtitle: song.artistNamesDisplay
+                        ) { handleViewArtist() }
+                        if let albumId = song.firstAlbumBrowseId {
+                            Divider()
+                            MenuRow(
+                                icon: "record.circle",
+                                title: "View Album",
+                                subtitle: song.album
+                            ) { navigate(.album(browseId: albumId)) }
+                        }
                     }
-                }
-                MenuCard {
-                    MenuRow(
-                        icon: "bubble.left.and.bubble.right",
-                        title: "Comments",
-                        subtitle: "Top & newest from YouTube"
-                    ) { showComments = true }
-                    Divider()
-                    NavigationLink(value: Destination.details) {
-                        MenuRowLabel(
-                            icon: "info.circle",
-                            title: "Details",
-                            subtitle: "Metadata & stream information"
-                        )
+                    MenuCard {
+                        MenuRow(
+                            icon: "bubble.left.and.bubble.right",
+                            title: "Comments",
+                            subtitle: "Top & newest from YouTube"
+                        ) { showComments = true }
+                        Divider()
+                        NavigationLink(value: Destination.details) {
+                            MenuRowLabel(
+                                icon: "info.circle",
+                                title: "Details",
+                                subtitle: "Metadata & stream information"
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        Divider()
+                        NavigationLink(value: Destination.similar) {
+                            MenuRowLabel(
+                                icon: "dot.radiowaves.left.and.right",
+                                title: "Similar to this song",
+                                subtitle: "More like “\(song.title)”"
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        Divider()
+                        MenuRow(
+                            icon: "slider.horizontal.3",
+                            title: "Customize Radio",
+                            subtitle: "Style, size & explicit filter"
+                        ) { showRadioOptions = true }
                     }
-                    .buttonStyle(.plain)
-                    Divider()
-                    NavigationLink(value: Destination.similar) {
-                        MenuRowLabel(
-                            icon: "dot.radiowaves.left.and.right",
-                            title: "Similar to this song",
-                            subtitle: "More like “\(song.title)”"
-                        )
+                } else {
+                    MenuCard {
+                        MenuRow(icon: "text.insert", title: "Play Next") { playNext() }
+                        Divider()
+                        MenuRow(icon: "list.bullet", title: "Add to Queue") { addToQueue() }
                     }
-                    .buttonStyle(.plain)
-                    Divider()
-                    MenuRow(
-                        icon: "slider.horizontal.3",
-                        title: "Customize Radio",
-                        subtitle: "Style, size & explicit filter"
-                    ) { showRadioOptions = true }
                 }
             }
             .navigationDestination(for: Destination.self) { dest in
