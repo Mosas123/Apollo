@@ -359,7 +359,7 @@ struct AlbumDetailView: View {
                 Color(.systemBackground)
             }
         }
-        .ignoresSafeArea()
+        .ignoresSafeArea(.container)
     }
 
 

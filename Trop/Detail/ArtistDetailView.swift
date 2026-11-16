@@ -331,7 +331,7 @@ struct ArtistDetailView: View {
                     scrollOffset = newOffset
                 }
             )
-            .ignoresSafeArea(edges: .top)
+            .ignoresSafeArea(.container, edges: .top)
             .toolbar(.hidden, for: .navigationBar)
             .background(artistBackdrop)
             .task {
@@ -369,7 +369,7 @@ struct ArtistDetailView: View {
         .background(
             Color(.systemBackground)
                 .opacity(barProgress)
-                .ignoresSafeArea(edges: .top)
+                .ignoresSafeArea(.container, edges: .top)
                 .allowsHitTesting(false)
         )
         .overlay(alignment: .bottom) {
@@ -621,7 +621,7 @@ struct ArtistDetailView: View {
             startPoint: .top,
             endPoint: .bottom
         )
-        .ignoresSafeArea()
+        .ignoresSafeArea(.container)
     }
 
 
@@ -686,7 +686,7 @@ struct ArtistDetailView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(artistBackdrop)
-        .ignoresSafeArea(edges: .bottom)
+        .ignoresSafeArea(.container, edges: .bottom)
         .overlay(alignment: .topLeading) {
             Button { showInfo = false } label: {
                 Image(systemName: "xmark")
