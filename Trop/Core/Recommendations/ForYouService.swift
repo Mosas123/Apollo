@@ -43,23 +43,29 @@ enum ForYouService {
 
         var songs: [SongItem] = []
         var seen = Set<String>()
-        for suggestion in suggestions {
-            let query = "\(suggestion.artist) \(suggestion.title)"
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !query.isEmpty,
-                  let raw = try? await SearchService.shared.search(query: query) else { continue }
-            let sections = SearchParser.parseSearchResults(from: raw)
-            let song = sections
-                .first(where: { $0.title == "Songs" })?
-                .items
-                .compactMap { item -> SongItem? in
-                    if case .song(let song) = item { return song }
-                    return nil
+        let batchSize = 4
+        var start = 0
+        while start < suggestions.count, songs.count < 15 {
+            let end = min(start + batchSize, suggestions.count)
+            let batch = suggestions[start..<end]
+            let resolved = await withTaskGroup(of: SongItem?.self) { group -> [SongItem] in
+                for suggestion in batch {
+                    let artist = suggestion.artist
+                    let title = suggestion.title
+                    group.addTask { await resolveSuggestion(artist: artist, title: title) }
                 }
-                .first
-            guard let song, seen.insert(song.videoId).inserted else { continue }
-            songs.append(song)
-            if songs.count >= 15 { break }
+                var out: [SongItem] = []
+                for await song in group {
+                    if let song { out.append(song) }
+                }
+                return out
+            }
+            for song in resolved {
+                guard seen.insert(song.videoId).inserted else { continue }
+                songs.append(song)
+                if songs.count >= 15 { break }
+            }
+            start = end
         }
 
         if !songs.isEmpty {
@@ -191,6 +197,20 @@ enum ForYouService {
         let profile = (artists, liked, TasteProfileStore.shared.topGenres(limit: 5))
         cachedProfile = (Date(), profile.0, profile.1, profile.2)
         return profile
+    }
+
+    private static func resolveSuggestion(artist: String, title: String) async -> SongItem? {
+        let query = "\(artist) \(title)".trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty,
+              let raw = try? await SearchService.shared.search(query: query) else { return nil }
+        return SearchParser.parseSearchResults(from: raw)
+            .first(where: { $0.title == "Songs" })?
+            .items
+            .compactMap { item -> SongItem? in
+                if case .song(let song) = item { return song }
+                return nil
+            }
+            .first
     }
 
     private static func parseSuggestions(_ text: String) -> [(artist: String, title: String)]? {
