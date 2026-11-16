@@ -132,6 +132,23 @@ struct AccentPreset: Identifiable, Hashable {
     ]
 }
 
+/// How the player's floating chips render (iOS 26/27 Liquid Glass).
+enum GlassStyle: String, CaseIterable, Identifiable, SettingsOption {
+    case clear
+    case regular
+    case opaque
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .clear: return "Clear"
+        case .regular: return "Regular"
+        case .opaque: return "Opaque"
+        }
+    }
+}
+
 @Observable
 final class SettingsStore: @unchecked Sendable {
     static let shared = SettingsStore()
@@ -177,6 +194,13 @@ final class SettingsStore: @unchecked Sendable {
     /// Shows the Explore tab (YouTube moods/genres/charts).
     var showExploreTab: Bool {
         didSet { Self.defaults.set(showExploreTab, forKey: Keys.showExploreTab) }
+    }
+
+    // MARK: - Liquid Glass
+
+    /// Translucency of the player's floating glass chips (iOS 27 style control).
+    var glassStyle: GlassStyle {
+        didSet { Self.defaults.set(glassStyle.rawValue, forKey: Keys.glassStyle) }
     }
 
     // MARK: - Lyrics appearance
@@ -362,6 +386,7 @@ final class SettingsStore: @unchecked Sendable {
         static let defaultTabMigrated = "settings.defaultTabMigrated"
         static let showRadioTab = "settings.showRadioTab"
         static let showExploreTab = "settings.showExploreTab"
+        static let glassStyle = "settings.glassStyle"
         static let lyricsFontSize = "settings.lyricsFontSize"
         static let lyricsAlignment = "settings.lyricsAlignment"
         static let lyricsOffsetSeconds = "settings.lyricsOffsetSeconds"
@@ -434,6 +459,7 @@ final class SettingsStore: @unchecked Sendable {
         defaultTab = Self.load(Keys.defaultTab, default: 0)
         showRadioTab = Self.load(Keys.showRadioTab, default: true)
         showExploreTab = Self.load(Keys.showExploreTab, default: false)
+        glassStyle = Self.loadEnum(Keys.glassStyle, default: .regular)
         lyricsFontSize = Self.load(Keys.lyricsFontSize, default: 17)
         lyricsAlignment = Self.loadEnum(Keys.lyricsAlignment, default: .center)
         lyricsOffsetSeconds = Self.load(Keys.lyricsOffsetSeconds, default: 0)

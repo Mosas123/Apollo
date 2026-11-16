@@ -7,6 +7,27 @@
 
 import SwiftUI
 
+/// Applies the user's Liquid Glass style to a player chip (iOS 26/27).
+private struct PlayerGlassModifier: ViewModifier {
+    @Environment(\.settingsStore) private var settings
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        switch settings.glassStyle {
+        case .clear:
+            content.glassEffect(.clear, in: Circle())
+        case .regular:
+            content.glassEffect(.regular, in: Circle())
+        case .opaque:
+            content.background(Color.black.opacity(0.4), in: Circle())
+        }
+    }
+}
+
+extension View {
+    func playerGlass() -> some View { modifier(PlayerGlassModifier()) }
+}
+
 /// Title + artist marquee block shared by the FullPlayer, Queue and Lyrics
 /// header rows.
 struct PlayerTitleBlock: View {
@@ -48,7 +69,7 @@ struct PlayerLikeButton: View {
                 .font(.system(size: fontSize, weight: .regular))
                 .foregroundStyle(isLiked ? activeColor : inactiveColor)
                 .frame(width: 36, height: 36)
-                .glassEffect(in: Circle())
+                .playerGlass()
         }
     }
 }
@@ -64,7 +85,7 @@ struct PlayerOptionsButton: View {
                 .font(.system(size: 20, weight: .black))
                 .foregroundStyle(color)
                 .frame(width: 36, height: 36)
-                .glassEffect(in: Circle())
+                .playerGlass()
         }
         .accessibilityLabel("Song options")
     }

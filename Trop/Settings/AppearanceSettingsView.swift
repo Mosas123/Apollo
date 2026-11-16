@@ -25,6 +25,14 @@ struct AppearanceSettingsView: View {
             }
 
             Section {
+                SettingsPickerRow("Liquid Glass", icon: "circle.lefthalf.filled", selection: $settings.glassStyle)
+            } header: {
+                Text("Liquid Glass")
+            } footer: {
+                Text("How the player's floating controls render — mirrors iOS 27's glass translucency control.")
+            }
+
+            Section {
                 LazyVGrid(columns: columns, spacing: 14) {
                     ForEach(AccentPreset.all) { preset in
                         Button {
