@@ -204,7 +204,9 @@ struct FullPlayerView: View {
                 .frame(maxWidth: .infinity)
             }
             .offset(y: collapseOffset)
-            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: collapseOffset)
+            // No implicit spring on collapseOffset: it's set every frame during
+            // the drag, and animating it there made each frame chase the finger
+            // (the "slow / stuck" dismiss). Animation now happens only on release.
             .animation(.easeInOut(duration: 0.35), value: showQueue)
             .simultaneousGesture(collapseDrag)
             .onChange(of: np.videoId) { _, _ in
@@ -270,13 +272,22 @@ struct FullPlayerView: View {
             .onChanged { value in
                 guard value.translation.height > 0,
                       value.translation.height > abs(value.translation.width) else { return }
-                collapseOffset = value.translation.height
+                // Follow the finger with no implicit animation so it never lags.
+                var transaction = Transaction()
+                transaction.animation = nil
+                withTransaction(transaction) {
+                    collapseOffset = value.translation.height
+                }
             }
             .onEnded { value in
-                defer { collapseOffset = 0 }
                 let isVertical = value.translation.height > abs(value.translation.width)
                 if isVertical, value.translation.height > 140 {
                     onCollapse()
+                    collapseOffset = 0
+                } else {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        collapseOffset = 0
+                    }
                 }
             }
     }
