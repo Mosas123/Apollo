@@ -35,7 +35,7 @@ struct SongRowView: View {
     var onTap: () -> Void
     var onNavigate: ((DetailRoute) -> Void)?
     /// When set, shows a track number instead of artwork (album track lists).
-    var index: Int?
+    var index: Int? = nil
 
     @State private var durations = DurationResolver()
     @State private var showSongMenu = false

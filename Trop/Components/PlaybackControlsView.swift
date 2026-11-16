@@ -41,7 +41,7 @@ struct PlaybackControlsView: View {
                 .foregroundStyle(accent)
                 .frame(maxWidth: .infinity)
                 .frame(height: 48)
-                .background(Capsule().fill(.white))
+                .background(Capsule().fill(Color.white))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Play all")
