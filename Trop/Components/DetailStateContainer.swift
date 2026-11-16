@@ -24,6 +24,7 @@ struct LoadingStateView: View {
                 .foregroundColor(.secondary)
             Spacer()
         }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -42,14 +43,16 @@ struct DetailStateContainer<Data, Content: View>: View {
         Group {
             if isLoading {
                 LoadingStateView("Loading \(noun)...")
-                    .containerRelativeFrame(.vertical)
+                    .frame(maxWidth: .infinity)
+                .frame(minHeight: 360)
             } else if let error = error {
                 ContentUnavailableView(
                     LocalizedStringKey("Couldn't load \(noun)"),
                     systemImage: "exclamationmark.circle",
                     description: Text(error.localizedDescription)
                 )
-                .containerRelativeFrame(.vertical)
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 360)
             } else if let data = data {
                 content(data)
             } else {
@@ -58,7 +61,8 @@ struct DetailStateContainer<Data, Content: View>: View {
                     systemImage: emptyIcon,
                     description: Text(LocalizedStringKey("Could not parse \(noun) details"))
                 )
-                .containerRelativeFrame(.vertical)
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 360)
             }
         }
     }

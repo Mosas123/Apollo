@@ -599,7 +599,7 @@ struct ArtistDetailView: View {
     }
 
     private var backdropColor: Color {
-        backdropColors.first ?? Color(.systemGray)
+        backdropColors.first ?? Color(.systemBackground)
     }
 
     private var artistBackdrop: some View {
