@@ -70,6 +70,10 @@ final class NowPlaying {
     var isVideoReady: Bool = false
     var musicVideoType: String?
 
+    /// True while the queue is an AI "Surprise me" session; the AI refills the
+    /// queue when it runs out so it keeps suggesting on its own.
+    var isSurpriseSession = false
+
     private var originalQueue: [SongItem]?
 
     var hasNext: Bool {
@@ -378,6 +382,8 @@ final class NowPlaying {
         }
         if hasNext {
             playNext(automatic: true)
+        } else if isSurpriseSession {
+            continueSurprise()
         } else if SettingsStore.shared.autoplaySimilar,
                   MusicPlaybackIdentity.isYouTube(videoId),
                   let endedVideoId = videoId {
@@ -388,6 +394,26 @@ final class NowPlaying {
             stopTimer()
             PlayerController.shared.updateNowPlayingProgress()
             Task { await PlaybackStateService.shared.stopTracking() }
+        }
+    }
+
+    /// Refills an AI "Surprise me" session when its queue runs out, asking the
+    /// AI for a fresh batch so it keeps choosing based on the listener's taste.
+    private func continueSurprise() {
+        Task {
+            let items = await SurpriseMeService.musicQueue(currentVideoId: nil, refreshAI: true)
+            guard !items.isEmpty else {
+                isPlaying = false
+                stopTimer()
+                return
+            }
+            queueSongs = items
+            queueIndex = 0
+            isShuffleOn = false
+            let first = items[0]
+            update(with: first)
+            try? await PlaybackManager.shared.resolveAndPlay(videoId: first.videoId)
+            persistQueueState()
         }
     }
 

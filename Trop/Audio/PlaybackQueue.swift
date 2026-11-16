@@ -15,6 +15,7 @@ enum PlaybackQueue {
     /// Plays `songs[startIndex]` (clamped). Used by detail play-all / play-song.
     static func play(_ songs: [SongItem], startIndex: Int = 0, log: AppLogger, context: String) {
         guard !songs.isEmpty else { return }
+        NowPlaying.shared.isSurpriseSession = false
         let index = min(max(startIndex, 0), songs.count - 1)
         let first = songs[index]
         NowPlaying.shared.setQueue(songs, startIndex: index)

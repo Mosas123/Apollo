@@ -54,6 +54,37 @@ enum SurpriseMeService {
         return SongItem(entity: pick)
     }
 
+    /// A longer, AI-assisted queue for a "Surprise me" session. AI picks come
+    /// first (so the next songs reflect what it learned), then the library.
+    static func musicQueue(currentVideoId: String?, refreshAI: Bool = false) async -> [SongItem] {
+        var items: [SongItem] = []
+        var seen = Set<String>()
+
+        for song in await ForYouService.musicSongs(force: refreshAI) {
+            guard song.videoId != currentVideoId, seen.insert(song.videoId).inserted else { continue }
+            items.append(song)
+        }
+
+        let liked = (try? await DatabaseService.shared.fetchAllLikedSongs()) ?? []
+        for entity in liked.shuffled() {
+            let song = SongItem(entity: entity)
+            guard song.videoId != currentVideoId, seen.insert(song.videoId).inserted else { continue }
+            items.append(song)
+            if items.count >= 30 { break }
+        }
+        return items
+    }
+
+    /// All episodes available in the current sections, deduped.
+    static func episodes(from sections: [HomeSection]) -> [SongItem] {
+        var seen = Set<String>()
+        return sections.flatMap(\.items).compactMap { item -> SongItem? in
+            guard case .episode(let episode) = item else { return nil }
+            guard seen.insert(episode.videoId).inserted else { return nil }
+            return episode.toSongItem()
+        }
+    }
+
     static func episode(from sections: [HomeSection]) -> SongItem? {
         let episodes = sections.flatMap(\.items).compactMap { item -> SongItem? in
             if case .episode(let episode) = item { return episode.toSongItem() }

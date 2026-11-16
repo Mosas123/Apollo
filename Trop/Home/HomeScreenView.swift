@@ -356,14 +356,18 @@ struct HomeScreenView: View {
     private func handleSurprise() {
         switch selectedCategory {
         case .all, .music:
-            // "All" surprises with music only, as requested.
+            // "All" surprises with music only, as requested. Starts a longer
+            // AI-assisted queue; the AI keeps refilling it as it plays.
             Task {
-                guard let song = await SurpriseMeService.musicSong(currentVideoId: NowPlaying.shared.videoId) else { return }
-                PlaybackQueue.play([song], log: Log.homeScreenView, context: "Surprise music")
+                let items = await SurpriseMeService.musicQueue(currentVideoId: NowPlaying.shared.videoId)
+                guard !items.isEmpty, let start = items.indices.randomElement() else { return }
+                PlaybackQueue.play(items, startIndex: start, log: Log.homeScreenView, context: "Surprise music")
+                NowPlaying.shared.isSurpriseSession = true
             }
         case .podcast:
-            if let episode = SurpriseMeService.episode(from: visibleSections) {
-                PlaybackQueue.play([episode], log: Log.homeScreenView, context: "Surprise podcast")
+            let episodes = SurpriseMeService.episodes(from: visibleSections)
+            if let start = episodes.indices.randomElement() {
+                PlaybackQueue.play(episodes, startIndex: start, log: Log.homeScreenView, context: "Surprise podcast")
             }
         case .audiobook:
             if let book = SurpriseMeService.audiobook(from: visibleSections) {
