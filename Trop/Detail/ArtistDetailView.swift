@@ -718,6 +718,7 @@ struct ArtistDetailView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .contextMenu { AlbumContextMenu(album: album) }
             }
         }
     }
@@ -736,6 +737,7 @@ struct ArtistDetailView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .contextMenu { AlbumContextMenu(album: single) }
             }
         }
     }

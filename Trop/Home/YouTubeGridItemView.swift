@@ -60,6 +60,11 @@ struct YouTubeGridItemView: View {
             .frame(width: artworkSize, height: 220, alignment: .top)
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            if case .album(let album) = item {
+                AlbumContextMenu(album: album)
+            }
+        }
         .task {
             guard let vid = videoId else { return }
             let known: Int

@@ -379,6 +379,7 @@ struct SearchView: View {
                             }
                         }
                         .buttonStyle(.plain)
+                        .contextMenu { AlbumContextMenu(album: album) }
                     }
                 }
             }
