@@ -12,6 +12,17 @@ struct ContentSettingsView: View {
 
     private static let countries = ["US", "GB", "CA", "AU", "FR", "DE", "ES", "IT", "PT", "JP", "KR", "MX", "BR", "IN"]
 
+    @State private var revealKey = false
+    @State private var showCustomModel = false
+    @State private var keyTest: KeyTest = .idle
+
+    private enum KeyTest: Equatable {
+        case idle
+        case testing
+        case ok
+        case failed(String)
+    }
+
     var body: some View {
         @Bindable var settings = settings
 
@@ -52,13 +63,91 @@ struct ContentSettingsView: View {
                         Text(provider.title).tag(provider.rawValue)
                     }
                 }
+                .onChange(of: settings.aiProvider) { _, _ in
+                    settings.aiModel = ""
+                    showCustomModel = false
+                    keyTest = .idle
+                }
+
                 if settings.aiProvider != AIProvider.off.rawValue {
-                    TextField("API Key", text: $settings.aiKey)
+                    HStack {
+                        Group {
+                            if revealKey {
+                                TextField("API Key", text: $settings.aiKey)
+                            } else {
+                                SecureField("API Key", text: $settings.aiKey)
+                            }
+                        }
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    TextField("Model (optional)", text: $settings.aiModel)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+
+                        Button {
+                            revealKey.toggle()
+                        } label: {
+                            Image(systemName: revealKey ? "eye.slash" : "eye")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                    }
+
+                    HStack {
+                        Text("Model")
+                        Spacer()
+                        Menu {
+                            Button("Default (\(provider.defaultModel))") {
+                                settings.aiModel = ""
+                                showCustomModel = false
+                            }
+                            ForEach(modelOptions, id: \.self) { model in
+                                Button(model) {
+                                    settings.aiModel = model
+                                    showCustomModel = false
+                                }
+                            }
+                            Button("Custom…") {
+                                showCustomModel = true
+                                if modelOptions.contains(settings.aiModel) {
+                                    settings.aiModel = ""
+                                }
+                            }
+                        } label: {
+                            Text(currentModelLabel)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if showCustomModel || isCustomStored {
+                        TextField("Custom model", text: $settings.aiModel)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    }
+
+                    HStack {
+                        Button {
+                            testConnection()
+                        } label: {
+                            Label("Test key", systemImage: "checkmark.seal")
+                        }
+                        .disabled(settings.aiKey.isEmpty || keyTest == .testing)
+
+                        Spacer()
+
+                        switch keyTest {
+                        case .idle:
+                            EmptyView()
+                        case .testing:
+                            ProgressView()
+                        case .ok:
+                            Label("Works", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                                .font(.caption)
+                        case .failed(let message):
+                            Text(message)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .lineLimit(2)
+                        }
+                    }
                 }
             } header: {
                 Text("For You (AI)")
@@ -105,5 +194,45 @@ struct ContentSettingsView: View {
 
     private func countryName(for code: String) -> String {
         Locale.current.localizedString(forRegionCode: code) ?? code
+    }
+
+    private var provider: AIProvider {
+        AIProvider(rawValue: settings.aiProvider) ?? .off
+    }
+
+    private var modelOptions: [String] {
+        switch provider {
+        case .off: return []
+        case .gemini: return ["gemini-3.6-flash", "gemini-3.5-pro"]
+        case .deepSeek: return ["deepseek-flash", "deepseek-v4-pro"]
+        case .openRouter: return ["qwen/qwen3.7-flash", "openai/gpt-5-mini"]
+        }
+    }
+
+    private var currentModelLabel: String {
+        let model = settings.aiModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        return model.isEmpty ? provider.defaultModel : model
+    }
+
+    private var isCustomStored: Bool {
+        let model = settings.aiModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !model.isEmpty && !modelOptions.contains(model)
+    }
+
+    @MainActor
+    private func testConnection() {
+        guard let client = AIProviderClient.configured() else {
+            keyTest = .failed("Enter a key first")
+            return
+        }
+        keyTest = .testing
+        Task {
+            do {
+                try await client.verify()
+                keyTest = .ok
+            } catch {
+                keyTest = .failed(error.localizedDescription)
+            }
+        }
     }
 }

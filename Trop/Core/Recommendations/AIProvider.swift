@@ -30,11 +30,13 @@ enum AIProvider: String, CaseIterable, Identifiable {
 enum AIError: LocalizedError {
     case notConfigured
     case http(Int)
+    case emptyResponse
 
     var errorDescription: String? {
         switch self {
         case .notConfigured: return "AI provider is not configured."
         case .http(let code): return "AI provider returned HTTP \(code)."
+        case .emptyResponse: return "The AI provider returned an empty response."
         }
     }
 }
@@ -59,6 +61,14 @@ struct AIProviderClient {
             apiKey: key,
             model: model.isEmpty ? provider.defaultModel : model
         )
+    }
+
+    /// Quick credential/connectivity check with a tiny prompt.
+    func verify() async throws {
+        let reply = try await complete("Reply with the single word: OK")
+        guard !reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw AIError.emptyResponse
+        }
     }
 
     func complete(_ prompt: String) async throws -> String {
