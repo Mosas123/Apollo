@@ -80,7 +80,7 @@ struct HomeScreenView: View {
                 categoryChips
                 surpriseCard
 
-                ForEach(Array(visibleSections.enumerated()), id: \.offset) { _, section in
+                ForEach(visibleSections) { section in
                     sectionView(for: section)
                 }
 
