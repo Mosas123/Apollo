@@ -47,6 +47,26 @@ struct ContentSettingsView: View {
             }
 
             Section {
+                Picker("AI Provider", selection: $settings.aiProvider) {
+                    ForEach(AIProvider.allCases) { provider in
+                        Text(provider.title).tag(provider.rawValue)
+                    }
+                }
+                if settings.aiProvider != AIProvider.off.rawValue {
+                    TextField("API Key", text: $settings.aiKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    TextField("Model (optional)", text: $settings.aiModel)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+            } header: {
+                Text("For You (AI)")
+            } footer: {
+                Text("Optional. An AI model suggests songs from your history; each suggestion is verified on YouTube Music before it appears. Uses your own API key.")
+            }
+
+            Section {
                 TextField("API Key", text: $settings.podcastIndexKey)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()

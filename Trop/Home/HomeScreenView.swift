@@ -16,6 +16,7 @@ struct HomeScreenView: View {
     @State private var pendingRoute: DetailRoute?
     @State private var speedDialEntries: [SpeedDialEntry] = []
     @State private var selectedCategory: ContentCategory = .all
+    @State private var forYouSongs: [SongItem] = []
 
     var body: some View {
         NavigationStack(path: $router.homePath) {
@@ -108,6 +109,9 @@ struct HomeScreenView: View {
         .miniPlayerTracksScroll()
         .task(id: selectedCategory) {
             await viewModel.loadCategoryFeed(selectedCategory)
+        }
+        .task {
+            forYouSongs = await ForYouService.musicSongs()
         }
         .refreshable {
             await viewModel.refresh()
@@ -258,19 +262,26 @@ struct HomeScreenView: View {
     /// Sections for the active Home filter. "All" mixes everything but is
     /// capped so the feed doesn't feel overloaded.
     private var visibleSections: [HomePage.Section] {
+        var sections: [HomePage.Section]
         switch selectedCategory {
         case .all:
-            return Array(viewModel.homeSections.prefix(10))
+            sections = Array(viewModel.homeSections.prefix(10))
         case .music:
-            return viewModel.homeSections.filter { $0.category == .music }
+            sections = viewModel.homeSections.filter { $0.category == .music }
         case .podcast, .audiobook:
             // Each of these is its own feed (podcast/audiobook shelves); fall
             // back to the matching home sections until it loads.
-            if let feed = viewModel.categoryFeeds[selectedCategory] {
-                return feed
-            }
-            return viewModel.homeSections.filter { $0.category == selectedCategory }
+            sections = viewModel.categoryFeeds[selectedCategory]
+                ?? viewModel.homeSections.filter { $0.category == selectedCategory }
         }
+
+        if !forYouSongs.isEmpty, selectedCategory == .all || selectedCategory == .music {
+            sections.insert(
+                HomePage.Section(title: "For You", items: forYouSongs.map(YTItem.song)),
+                at: 0
+            )
+        }
+        return sections
     }
 
     private var categoryChips: some View {

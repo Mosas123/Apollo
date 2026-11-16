@@ -196,6 +196,21 @@ final class SettingsStore: @unchecked Sendable {
         didSet { Self.defaults.set(showExploreTab, forKey: Keys.showExploreTab) }
     }
 
+    // MARK: - AI recommendations ("For You")
+
+    /// AI provider raw value (off / gemini / deepSeek / openRouter).
+    var aiProvider: String {
+        didSet { Self.defaults.set(aiProvider, forKey: Keys.aiProvider) }
+    }
+
+    var aiKey: String {
+        didSet { Self.defaults.set(aiKey, forKey: Keys.aiKey) }
+    }
+
+    var aiModel: String {
+        didSet { Self.defaults.set(aiModel, forKey: Keys.aiModel) }
+    }
+
     // MARK: - Podcasts
 
     /// Podcast Index API key (https://api.podcastindex.org). Optional; empty
@@ -400,6 +415,9 @@ final class SettingsStore: @unchecked Sendable {
         static let showExploreTab = "settings.showExploreTab"
         static let glassStyle = "settings.glassStyle"
         static let podcastIndexKey = "settings.podcastIndexKey"
+        static let aiProvider = "settings.aiProvider"
+        static let aiKey = "settings.aiKey"
+        static let aiModel = "settings.aiModel"
         static let podcastIndexSecret = "settings.podcastIndexSecret"
         static let lyricsFontSize = "settings.lyricsFontSize"
         static let lyricsAlignment = "settings.lyricsAlignment"
@@ -475,6 +493,9 @@ final class SettingsStore: @unchecked Sendable {
         showExploreTab = Self.load(Keys.showExploreTab, default: false)
         glassStyle = Self.loadEnum(Keys.glassStyle, default: .regular)
         podcastIndexKey = Self.loadString(Keys.podcastIndexKey, default: "")
+        aiProvider = Self.loadString(Keys.aiProvider, default: AIProvider.off.rawValue)
+        aiKey = Self.loadString(Keys.aiKey, default: "")
+        aiModel = Self.loadString(Keys.aiModel, default: "")
         podcastIndexSecret = Self.loadString(Keys.podcastIndexSecret, default: "")
         lyricsFontSize = Self.load(Keys.lyricsFontSize, default: 17)
         lyricsAlignment = Self.loadEnum(Keys.lyricsAlignment, default: .center)
