@@ -33,7 +33,7 @@ struct ContentView: View {
                 SearchView()
             }
         }
-        .tabBarMinimizeBehavior(.never)
+        .tabBarMinimizeBehavior(.onScrollDown)
             .tabViewBottomAccessory(isEnabled: nowPlaying.isBarPresented) {
                 MiniPlayerBarView(onExpand: {
                     // Dismiss the keyboard before expanding the player so the reveal is visible on the first tap.
