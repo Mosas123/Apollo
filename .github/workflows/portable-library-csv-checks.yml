@@ -1,0 +1,18 @@
+name: Portable Library CSV Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Core/LibrarySync/**"
+      - "tests/LibrarySync/**"
+      - "scripts/test-portable-library-csv.sh"
+      - ".github/workflows/portable-library-csv-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify CSV formats and stable source IDs
+        run: bash scripts/test-portable-library-csv.sh
