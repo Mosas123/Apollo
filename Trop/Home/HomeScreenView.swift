@@ -17,6 +17,7 @@ struct HomeScreenView: View {
     @State private var speedDialEntries: [SpeedDialEntry] = []
     @State private var selectedCategory: ContentCategory = .all
     @State private var forYouSongs: [SongItem] = []
+    @State private var discoverArtists: [ArtistItem] = []
 
     var body: some View {
         NavigationStack(path: $router.homePath) {
@@ -113,6 +114,7 @@ struct HomeScreenView: View {
         }
         .task {
             forYouSongs = await ForYouService.musicSongs()
+            discoverArtists = await ForYouService.artists()
         }
         .refreshable {
             await viewModel.refresh()
@@ -276,11 +278,20 @@ struct HomeScreenView: View {
                 ?? viewModel.homeSections.filter { $0.category == selectedCategory }
         }
 
-        if !forYouSongs.isEmpty, selectedCategory == .all || selectedCategory == .music {
-            sections.insert(
-                HomePage.Section(title: "For You", items: forYouSongs.map(YTItem.song)),
-                at: 0
-            )
+        if selectedCategory == .all || selectedCategory == .music {
+            if !forYouSongs.isEmpty {
+                sections.insert(
+                    HomePage.Section(title: "For You", items: forYouSongs.map(YTItem.song)),
+                    at: 0
+                )
+            }
+            if !discoverArtists.isEmpty {
+                let index = forYouSongs.isEmpty ? 0 : 1
+                sections.insert(
+                    HomePage.Section(title: "Artistas para ti", items: discoverArtists.map(YTItem.artist)),
+                    at: min(index, sections.count)
+                )
+            }
         }
         return sections
     }
