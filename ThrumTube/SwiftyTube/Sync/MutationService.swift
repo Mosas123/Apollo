@@ -192,8 +192,9 @@ public actor MutationService {
         guard !isLocal else { return }
 
         let actions = PlaylistEditAction.dictionaries([.addVideo(videoId: songId, setVideoId: setVideoId)])
+        let actionsBox = SendableJSONArray(value: actions)
         try await OptimisticMutation.attemptingRemote(
-            { _ = try await self.client.editPlaylist(playlistId: playlistId, actions: actions) },
+            { _ = try await self.client.editPlaylist(playlistId: playlistId, actions: actionsBox.value) },
             rollback: { try? await self.store.deleteMapEntry(playlistId: playlistId, songId: songId) }
         )
     }
@@ -375,10 +376,11 @@ public actor MutationService {
             SwiftyTubeLog.error("unsaveAlbum: no playlistId for \(browseId), local-only")
             return
         }
+        let hadBookmarkSnapshot = hadBookmark
         try await OptimisticMutation.attemptingRemote(
             { _ = try await self.client.ratePlaylist(playlistId: pid, rating: "INDIFFERENT") },
             rollback: {
-                if hadBookmark, var restored = try? await self.store.fetchAlbum(id: browseId) {
+                if hadBookmarkSnapshot, var restored = try? await self.store.fetchAlbum(id: browseId) {
                     restored.bookmarkedAt = Date()
                     try? await self.store.saveAlbum(restored)
                 }
@@ -484,4 +486,11 @@ public actor MutationService {
             }
         )
     }
+}
+
+
+/// Carries raw playlist-action dictionaries into a @Sendable closure: the
+/// array is only read inside it.
+private struct SendableJSONArray: @unchecked Sendable {
+    let value: [[String: Any]]
 }
