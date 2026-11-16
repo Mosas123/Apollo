@@ -71,6 +71,10 @@ final class PlayerController {
     private var detectedCropRepeatCount = 0
     var currentLoudnessDb: Double?
     var pendingURL: String?
+    /// Deferred title/artwork metadata, applied when mpv actually starts the
+    /// new file (FILE_LOADED) so the UI never shows a new title while the
+    /// previous song is still audibly playing.
+    private var pendingMetadata: (title: String, artist: String?, videoId: String, artists: [YTArtist], thumbnailUrl: String?)?
     private var wasPlayingBeforeInterruption = false
 
     /// Video-mode state. Reads happen on the event loop thread from event handlers;
@@ -199,7 +203,8 @@ extension PlayerController {
         }
 
         if let videoId, let title, videoId != NowPlaying.shared.videoId {
-            NowPlaying.shared.update(title: title, artist: artist, videoId: videoId, artists: artists, thumbnailUrl: thumbnailUrl)
+            pendingMetadata = (title, artist, videoId, artists, thumbnailUrl)
+            NowPlaying.shared.videoId = videoId
         }
 
         let skipStart = await SponsorBlockIntegration.shared.preloadedStartOffset(for: videoId)
@@ -495,6 +500,10 @@ extension PlayerController {
         let pendingVideoId = self.sharedState.withLock { $0.pendingVideoId }
         Task { @MainActor [weak self] in
             guard let self else { return }
+            if let meta = self.pendingMetadata {
+                self.pendingMetadata = nil
+                NowPlaying.shared.update(title: meta.title, artist: meta.artist, videoId: meta.videoId, artists: meta.artists, thumbnailUrl: meta.thumbnailUrl)
+            }
             Log.player.debug("TRANSITION FILE_LOADED videoId=\(pendingVideoId ?? "nil") playing=\(actuallyPlaying)")
             self.playState.send(actuallyPlaying ? .playing : .paused)
             NowPlaying.shared.isPlaying = actuallyPlaying
