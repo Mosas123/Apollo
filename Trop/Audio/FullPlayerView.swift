@@ -482,6 +482,7 @@ struct FullPlayerView: View {
                     : np.currentTime))
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.white.opacity(0.6))
+                    .contentTransition(.numericText())
 
                 Spacer()
 

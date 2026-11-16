@@ -220,6 +220,7 @@ struct QueueView<ProgressSlider: View>: View {
                         .fill(isOn.wrappedValue ? .white.opacity(0.15) : .white.opacity(0.07))
                 )
         }
+        .sensoryFeedback(.selection, trigger: isOn.wrappedValue)
     }
 
     private var queueListHeaderRow: some View {

@@ -63,6 +63,7 @@ struct PlayerPlayPauseButton: View {
         }
         .frame(width: 80, height: 80)
         .accessibilityLabel(isPlaying ? "Pause" : "Play")
+        .sensoryFeedback(.impact(weight: .light), trigger: isPlaying)
     }
 }
 

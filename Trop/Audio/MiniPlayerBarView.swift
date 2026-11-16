@@ -179,6 +179,7 @@ struct MiniPlayerBarView: View {
                 .foregroundStyle(.tint)
         })
         .accessibilityLabel(np.isPlaying ? "Pause" : "Play")
+        .sensoryFeedback(.impact(weight: .light), trigger: np.isPlaying)
     }
 
     private var progressLine: some View {
