@@ -37,3 +37,26 @@ struct PlayerBackgroundShader: View {
         .allowsHitTesting(false)
     }
 }
+
+
+/// Subtle, time-driven distortion for artwork heroes (runs only while playing).
+struct AnimatedDistortion<Content: View>: View {
+    let size: CGSize
+    let isPlaying: Bool
+    var amplitude: CGFloat = 6
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 20.0, paused: !isPlaying)) { context in
+            let time = context.date.timeIntervalSinceReferenceDate
+            content.distortionEffect(
+                ShaderLibrary.playerWarp(
+                    .float(time),
+                    .float2(size),
+                    .float(amplitude)
+                ),
+                maxSampleOffset: CGSize(width: amplitude * 2, height: amplitude * 2)
+            )
+        }
+    }
+}

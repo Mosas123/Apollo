@@ -533,18 +533,20 @@ struct ArtistDetailView: View {
         ZStack(alignment: .bottom) {
             Color(.systemGray5)
 
-            AsyncImageView(
-                url: ArtworkURLs.sized(artist.thumbnailUrl, width: 1200, height: 1200),
-                contentMode: .fill,
-                onImageLoaded: { image in
-                    guard backdropColors.isEmpty else { return }
-                    withAnimation(.easeInOut(duration: 0.4)) {
-                        backdropColors = image.extractDominantColors()
+            AnimatedDistortion(size: size, isPlaying: NowPlaying.shared.isPlaying, amplitude: 6) {
+                AsyncImageView(
+                    url: ArtworkURLs.sized(artist.thumbnailUrl, width: 1200, height: 1200),
+                    contentMode: .fill,
+                    onImageLoaded: { image in
+                        guard backdropColors.isEmpty else { return }
+                        withAnimation(.easeInOut(duration: 0.4)) {
+                            backdropColors = image.extractDominantColors()
+                        }
                     }
-                }
-            )
-            .frame(width: size.width, height: size.height)
-            .clipped()
+                )
+                .frame(width: size.width, height: size.height)
+                .clipped()
+            }
 
             // Fades the photo into the artist's dominant color so the page reads
             // as one surface (Apple Music artist page).
