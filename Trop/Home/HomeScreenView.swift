@@ -76,6 +76,7 @@ struct HomeScreenView: View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 categoryChips
+                surpriseCard
 
                 ForEach(Array(visibleSections.enumerated()), id: \.offset) { _, section in
                     sectionView(for: section)
@@ -282,6 +283,68 @@ struct HomeScreenView: View {
             )
         }
         return sections
+    }
+
+    private var surpriseCard: some View {
+        Button {
+            handleSurprise()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "shuffle")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(settings.accentColor))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sorpréndeme")
+                        .font(.headline)
+                    Text(surpriseSubtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 4)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+
+    private var surpriseSubtitle: String {
+        switch selectedCategory {
+        case .all, .music: return "¿No sabes qué escuchar? Te pongo una canción."
+        case .podcast: return "¿No sabes qué escuchar? Te pongo un podcast."
+        case .audiobook: return "¿No sabes qué escuchar? Te abro un audiolibro."
+        }
+    }
+
+    private func handleSurprise() {
+        switch selectedCategory {
+        case .all, .music:
+            // "All" surprises with music only, as requested.
+            Task {
+                guard let song = await SurpriseMeService.musicSong(currentVideoId: NowPlaying.shared.videoId) else { return }
+                PlaybackQueue.play([song], log: Log.homeScreenView, context: "Surprise music")
+            }
+        case .podcast:
+            if let episode = SurpriseMeService.episode(from: visibleSections) {
+                PlaybackQueue.play([episode], log: Log.homeScreenView, context: "Surprise podcast")
+            }
+        case .audiobook:
+            if let book = SurpriseMeService.audiobook(from: visibleSections) {
+                router.homePath.append(DetailRoute.album(browseId: book.browseId))
+            }
+        }
     }
 
     private var categoryChips: some View {
