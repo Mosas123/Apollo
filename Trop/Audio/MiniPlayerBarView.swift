@@ -235,7 +235,7 @@ struct MiniPlayerBarView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .foregroundStyle(titleColor)
-                Text(np.displayArtist)
+                Text(np.playbackKind == .radio ? (np.liveTitle ?? np.displayArtist) : np.displayArtist)
                     .font(.system(size: 12, weight: .regular))
                     .lineLimit(1)
                     .truncationMode(.tail)

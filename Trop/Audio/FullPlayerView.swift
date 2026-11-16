@@ -299,6 +299,11 @@ struct FullPlayerView: View {
         currentLyrics = lines
     }
 
+    private var playerArtistLine: String {
+        if np.playbackKind == .radio, let live = np.liveTitle, !live.isEmpty { return live }
+        return np.displayArtist
+    }
+
     private var titleAndActionsRow: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
@@ -310,7 +315,7 @@ struct FullPlayerView: View {
                 }
                 PlayerTitleBlock(
                     title: np.title,
-                    artist: np.displayArtist,
+                    artist: playerArtistLine,
                     spacing: 4,
                     titleFont: .title3.weight(.bold),
                     titleHeight: 28

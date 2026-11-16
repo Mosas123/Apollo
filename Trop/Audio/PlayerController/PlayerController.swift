@@ -153,6 +153,16 @@ final class PlayerController {
         mpvHandle.withLock { if let box = $0 { mpv_wakeup(box.value) } }
     }
 
+    /// The stream's ICY title (live song on Shoutcast/Icecast radio), if any.
+    func icyTitle() -> String? {
+        withMpv { mpv -> String? in
+            guard let cstr = mpv_get_property_string(mpv, "icy-title") else { return nil }
+            defer { mpv_free(UnsafeMutableRawPointer(cstr)) }
+            let value = String(cString: cstr)
+            return value.isEmpty ? nil : value
+        } ?? nil
+    }
+
     nonisolated func withMpv<T: Sendable>(_ body: @escaping @Sendable (OpaquePointer) -> T) -> T? {
         var result: T?
         mpvHandle.withLock { box in

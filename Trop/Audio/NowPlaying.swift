@@ -27,6 +27,8 @@ final class NowPlaying {
 
     var title = ""
     var artist = ""
+    /// For internet radio: the song currently playing on the station (ICY title).
+    var liveTitle: String?
     var albumTitle = ""
     var videoId: String?
     var artists: [YTArtist] = []
@@ -82,6 +84,7 @@ final class NowPlaying {
     }
 
     private var timer: Timer?
+    private var icyTick = 0
     var sleepTimerEndsAt: Date?
     @ObservationIgnored private var sleepTimerTask: Task<Void, Never>?
     var lastManualSkipTime: Date?
@@ -275,6 +278,7 @@ final class NowPlaying {
         self.currentTime = 0
         self.duration = 0
         self.videoId = videoId
+        self.liveTitle = nil
         self.hasVideo = false
         self.isVideoMode = false
         self.isVideoReady = false
@@ -609,6 +613,10 @@ final class NowPlaying {
         duration = PlayerController.shared.duration
         PlayerController.shared.updateNowPlayingProgress()
         SponsorBlockIntegration.shared.tick()
+        icyTick += 1
+        if icyTick % 4 == 0, playbackKind == .radio {
+            refreshLiveTitle()
+        }
         if let videoId, duration >= 600 || musicVideoType == "MUSIC_VIDEO_TYPE_PODCAST_EPISODE" {
             let vid = videoId
             let pos = currentTime
@@ -617,6 +625,13 @@ final class NowPlaying {
                 await EpisodePlaybackStore.shared.savePosition(videoId: vid, position: pos, duration: dur)
             }
         }
+    }
+
+    /// Reads the stream's ICY title (the live song on a Shoutcast/Icecast
+    /// station) and publishes it when it changes.
+    private func refreshLiveTitle() {
+        guard let icy = PlayerController.shared.icyTitle(), !icy.isEmpty else { return }
+        if liveTitle != icy { liveTitle = icy }
     }
 
     private func stopTimer() {
