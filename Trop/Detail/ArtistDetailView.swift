@@ -684,7 +684,9 @@ struct ArtistDetailView: View {
                 .padding(.bottom, 36)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(artistBackdrop)
+        .ignoresSafeArea(edges: .bottom)
         .overlay(alignment: .topLeading) {
             Button { showInfo = false } label: {
                 Image(systemName: "xmark")
