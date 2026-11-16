@@ -93,6 +93,10 @@ extension AlbumDetailViewModel {
         var thumbnailUrl: String?
         var playlistId: String?
         var songs: [SongItem] = []
+        var descriptionText: String?
+        var relatedAlbums: [AlbumItem] = []
+        var videos: [SongItem] = []
+        var featuredPlaylists: [PlaylistItem] = []
 
         // Resolve first tab section (exists in both layouts)
         let firstTabSection: [String: Any]? = BrowseLens.firstSectionItem(json)
@@ -132,6 +136,13 @@ extension AlbumDetailViewModel {
             }
 
             thumbnailUrl = InnerTubeJSON.musicThumbnailURL(responsiveHeader)
+
+            if descriptionText == nil,
+               let descDict = responsiveHeader["description"] as? [String: Any] {
+                let shelf = descDict["musicDescriptionShelfRenderer"] as? [String: Any]
+                descriptionText = (shelf?["description"] as? [String: Any]).flatMap { InnerTubeJSON.runsText($0) }
+                    ?? InnerTubeJSON.runsText(descDict)
+            }
         }
 
         // --- Header fallback: musicDetailHeaderRenderer (legacy / single-column) ---
@@ -211,6 +222,38 @@ extension AlbumDetailViewModel {
             return result
         }
 
+        func classifyCarousel(_ section: [String: Any]) {
+            guard let carousel = section["musicCarouselShelfRenderer"] as? [String: Any],
+                  let contents = carousel["contents"] as? [[String: Any]] else { return }
+            for itemDict in contents {
+                guard let twoRow = itemDict["musicTwoRowItemRenderer"] as? [String: Any] else { continue }
+                let pageType = HomePageParser.extractPageType(twoRow)
+                switch pageType {
+                case "MUSIC_PAGE_TYPE_ALBUM", "MUSIC_PAGE_TYPE_AUDIOBOOK":
+                    if let album = AlbumItem.from(twoRow), album.browseId != browseId {
+                        relatedAlbums.append(album)
+                    }
+                case "MUSIC_PAGE_TYPE_PLAYLIST":
+                    if let playlist = PlaylistItem.from(twoRow) {
+                        featuredPlaylists.append(playlist)
+                    }
+                default:
+                    if pageType == "MUSIC_PAGE_TYPE_VIDEO" || HomePageParser.hasWatchEndpoint(twoRow),
+                       let video = SongItem.from(twoRow) {
+                        videos.append(video)
+                    }
+                }
+            }
+        }
+
+        func captureDescription(_ section: [String: Any]) {
+            guard descriptionText == nil,
+                  let shelf = section["musicDescriptionShelfRenderer"] as? [String: Any],
+                  let desc = (shelf["description"] as? [String: Any]).flatMap({ InnerTubeJSON.runsText($0) }),
+                  !desc.isEmpty else { return }
+            descriptionText = desc
+        }
+
         if let twoCol = (json["contents"] as? [String: Any])?["twoColumnBrowseResultsRenderer"] as? [String: Any] {
             // Songs are in secondaryContents for two-column albums
             if let secondary = twoCol["secondaryContents"] as? [String: Any],
@@ -218,6 +261,8 @@ extension AlbumDetailViewModel {
                let secondarySections = sectionList["contents"] as? [[String: Any]] {
                 for section in secondarySections {
                     songs += parseSongsFromShelf(section, fallbackThumbnail: thumbnailUrl)
+                    classifyCarousel(section)
+                    captureDescription(section)
                 }
             }
             // Fallback: songs might still be in first tab section (e.g. musicShelfRenderer)
@@ -227,6 +272,8 @@ extension AlbumDetailViewModel {
         } else if let sections = BrowseLens.browseSections(json) {
             for section in sections {
                 songs += parseSongsFromShelf(section, fallbackThumbnail: thumbnailUrl)
+                classifyCarousel(section)
+                captureDescription(section)
             }
         }
 
@@ -242,7 +289,11 @@ extension AlbumDetailViewModel {
             thumbnailUrl: thumbnailUrl,
             playlistId: playlistId,
             browseId: browseId,
-            songs: songs
+            songs: songs,
+            descriptionText: descriptionText,
+            relatedAlbums: relatedAlbums,
+            videos: videos,
+            featuredPlaylists: featuredPlaylists
         )
     }
     // swiftlint:enable cyclomatic_complexity

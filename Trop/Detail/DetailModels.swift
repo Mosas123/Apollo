@@ -18,6 +18,10 @@ struct AlbumDetailInfo {
     var playlistId: String?
     var browseId: String
     var songs: [SongItem]
+    var descriptionText: String? = nil
+    var relatedAlbums: [AlbumItem] = []
+    var videos: [SongItem] = []
+    var featuredPlaylists: [PlaylistItem] = []
 }
 
 /// Parsed detail data for an artist page.
