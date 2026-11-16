@@ -25,8 +25,10 @@ enum MetadataResolver {
             return cached.value
         }
 
-        let resolved = await iTunes(title: title, artist: artist, album: album)
-            ?? musicBrainz(title: title, artist: artist)
+        var resolved = await iTunes(title: title, artist: artist, album: album)
+        if resolved == nil {
+            resolved = await musicBrainz(title: title, artist: artist)
+        }
         await MetadataCache.shared.store(key, resolved)
         return resolved
     }

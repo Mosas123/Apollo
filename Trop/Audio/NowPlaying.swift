@@ -11,7 +11,6 @@ import Observation
 import Nuke
 import SwiftUI
 
-@Observable
 /// The song currently playing on a radio stream (from ICY metadata), enriched
 /// with canonical metadata and artwork when available.
 struct LiveSongInfo: Equatable {
@@ -29,6 +28,7 @@ enum PlaybackKind: Sendable {
 }
 
 @MainActor
+@Observable
 final class NowPlaying {
     static let shared = NowPlaying()
     /// Synchronous radio streams use a synthetic `radio:<uuid>` video id.
