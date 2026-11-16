@@ -7,6 +7,18 @@
 
 import Foundation
 
+/// One raw page of playlist rows for progress callbacks. Boxed as
+/// `@unchecked Sendable` because it only carries immutable JSON snapshots.
+public struct PlaylistRowsChunk: @unchecked Sendable {
+    public let json: [String: Any]
+    public let items: [[String: Any]]
+
+    public init(json: [String: Any], items: [[String: Any]]) {
+        self.json = json
+        self.items = items
+    }
+}
+
 /// Sendable page returned by `fetchPlaylistRows` so it can cross actor
 /// isolation under Swift 6.
 public struct PlaylistPage: @unchecked Sendable {
