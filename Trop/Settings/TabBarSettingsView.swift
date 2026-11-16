@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Mini-menu for choosing which tabs appear in the tab bar.
 struct TabBarSettingsView: View {
-    @Environment(SettingsStore.self) private var settings
+    @Environment(\.settingsStore) private var settings
 
     var body: some View {
         @Bindable var settings = settings
@@ -19,6 +19,8 @@ struct TabBarSettingsView: View {
                     icon: "flame",
                     isOn: $settings.showExploreTab
                 )
+            } header: {
+                Text("Visible Tabs")
             } footer: {
                 Text("Home, Library and Search are always shown.")
             }
