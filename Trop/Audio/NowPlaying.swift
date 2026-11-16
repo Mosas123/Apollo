@@ -322,6 +322,7 @@ final class NowPlaying {
 
     /// Convenience pushing a `SongItem`'s metadata into the player state.
     func update(with song: SongItem) {
+        loadedAt = Date()
         update(
             title: song.title,
             artist: song.artists.map(\.name).joined(separator: ", "),
@@ -376,6 +377,11 @@ final class NowPlaying {
         }
         guard isEof else {
             recoverFromPlaybackFailure(videoId: videoId)
+            return
+        }
+        let sinceLoad = Date().timeIntervalSince(loadedAt)
+        if sinceLoad < 2 {
+            Log.nowPlaying.debug("Ignoring spurious EOF \(String(format: "%.2f", sinceLoad))s after load")
             return
         }
         currentTime = duration
@@ -514,6 +520,10 @@ final class NowPlaying {
     }
 
     private var lastLoadedVideoId: String?
+    /// When the current track started loading. Used to drop a spurious EOF that
+    /// mpv can report for the previous file right after a new load (this made a
+    /// freshly started song skip to the next one after ~1 second).
+    private var loadedAt = Date()
 
     private func loadThumbnail(videoId: String, thumbnailUrl: String? = nil) {
         guard videoId != lastLoadedVideoId else { return }
