@@ -200,8 +200,23 @@ struct MusicAddonsSettingsView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(isChecking || manifestURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-                Text("Add a music-only HTTPS manifest. Check its capabilities before installation; new addons start disabled.")
+                Text("Add a Trop Music Addon v1 manifest. Stremio addons are not compatible yet.")
                     .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                Button("Try Offline Demo Addon") {
+                    do {
+                        try addonStore.installSample()
+                    } catch MusicAddonError.alreadyInstalled {
+                        show("The demo addon is already installed.")
+                    } catch {
+                        show(error.localizedDescription)
+                    }
+                }
+                .buttonStyle(.bordered)
+
+                Text("Demo only: lets you test install, enable, reorder and remove without playing audio or connecting to a provider.")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .addonCardSurface()
@@ -251,7 +266,9 @@ struct MusicAddonsSettingsView: View {
                 Toggle(
                     "Enable \(entry.manifest.name)",
                     isOn: Binding(
-                        get: { entry.isEnabled },
+                        get: {
+                            addonStore.installations.first(where: { $0.key == entry.key })?.isEnabled ?? false
+                        },
                         set: { enabled in
                             do {
                                 try addonStore.setEnabled(enabled, key: entry.key)
@@ -301,7 +318,7 @@ struct MusicAddonsSettingsView: View {
                         Image(systemName: "arrow.clockwise")
                     }
                 }
-                .disabled(refreshingKey != nil || isChecking)
+                .disabled(refreshingKey != nil || isChecking || MusicAddonsStore.isSample(entry))
                 .accessibilityLabel("Check updates for \(entry.manifest.name)")
 
                 Spacer()

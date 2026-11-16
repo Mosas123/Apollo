@@ -25,6 +25,7 @@ struct MusicAddonManifest: Codable, Sendable, Equatable {
 enum MusicAddonError: Error, Equatable, LocalizedError {
     case insecureManifestURL
     case invalidManifest
+    case incompatibleStremioProtocol
     case unsupportedSchema
     case invalidIdentity
     case invalidCapabilities
@@ -37,7 +38,8 @@ enum MusicAddonError: Error, Equatable, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .insecureManifestURL: return "Addons must use a public HTTPS manifest URL."
-        case .invalidManifest: return "The addon manifest is invalid."
+        case .invalidManifest: return "This is not a valid Trop Music Addon manifest. Check that the provider supports the Trop v1 music protocol."
+        case .incompatibleStremioProtocol: return "This is a Stremio addon, not a Trop Music Addon. Stremio music compatibility is not supported yet; no audio can be played from this addon."
         case .unsupportedSchema: return "This addon requires an unsupported manifest version."
         case .invalidIdentity: return "The addon name, identifier or version is invalid."
         case .invalidCapabilities: return "The addon declares invalid capabilities."
@@ -75,8 +77,18 @@ struct MusicAddonPackage: Sendable {
     /// already obtained by a separate, policy-enforcing fetcher (future PR).
     static func parse(_ data: Data, from url: URL) throws -> MusicAddonPackage {
         guard let canonical = canonicalManifestURL(url) else { throw MusicAddonError.insecureManifestURL }
-        guard !data.isEmpty, data.count <= 64 * 1024,
-              let manifest = try? JSONDecoder().decode(MusicAddonManifest.self, from: data) else {
+        guard !data.isEmpty, data.count <= 64 * 1024 else {
+            throw MusicAddonError.invalidManifest
+        }
+        // Stremio's resources/types/catalogs format is not Trop's
+        // capabilities/endpoints format. Do not suggest a broken install.
+        if let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           payload["id"] is String,
+           payload["resources"] is [Any],
+           payload["types"] is [Any] {
+            throw MusicAddonError.incompatibleStremioProtocol
+        }
+        guard let manifest = try? JSONDecoder().decode(MusicAddonManifest.self, from: data) else {
             throw MusicAddonError.invalidManifest
         }
         guard manifest.schemaVersion == 1 else { throw MusicAddonError.unsupportedSchema }

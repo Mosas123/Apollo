@@ -95,6 +95,25 @@ struct MusicAddonManifestDownloader: Sendable {
 final class MusicAddonsStore {
     static let shared = MusicAddonsStore()
 
+    // An offline-only example to test the interface and registry. No catalog
+    // requests or playback are made for this reserved example domain.
+    static let sampleURL = URL(string: "https://demo.trop.example/manifest.json")!
+    static let sampleJSON = """
+        {
+          "schemaVersion": 1,
+          "id": "trop.demo",
+          "name": "Trop Demo (No Audio)",
+          "version": "1.0.0",
+          "description": "Offline sample for testing the addon manager. No searches or audio are available.",
+          "capabilities": ["search", "lyrics"],
+          "endpoints": {"search": "/demo/search", "lyrics": "/demo/lyrics"}
+        }
+        """
+
+    static func isSample(_ entry: MusicAddonInstallation) -> Bool {
+        entry.manifestURL == sampleURL && entry.manifest.id == "trop.demo"
+    }
+
     private var registry = MusicAddonRegistry()
     private let storageKey = "trop.musicAddons.declarative.v1"
 
@@ -111,6 +130,10 @@ final class MusicAddonsStore {
     func install(_ data: Data, from url: URL) throws {
         try registry.install(data: data, from: url)
         save()
+    }
+
+    func installSample() throws {
+        try install(Data(Self.sampleJSON.utf8), from: Self.sampleURL)
     }
 
     func setEnabled(_ enabled: Bool, key: String) throws {
@@ -132,6 +155,7 @@ final class MusicAddonsStore {
         guard let previous = registry.installations.first(where: { $0.key == key }) else {
             throw MusicAddonError.notInstalled
         }
+        guard !Self.isSample(previous) else { return }
         let (data, url) = try await MusicAddonManifestDownloader().download(from: previous.manifestURL)
         try registry.update(data: data, from: url)
         save()
