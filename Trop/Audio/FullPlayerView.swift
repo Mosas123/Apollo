@@ -117,8 +117,10 @@ struct FullPlayerView: View {
                             pendingRoute: $pendingRoute,
                             progressSlider: { progressSlider(horizontalPadding: horizontalPadding) }
                         )
+                        .padding(.bottom, geometry.safeAreaInsets.bottom)
                     } else if np.isVideoMode && np.hasVideo {
                         musicVideoContent
+                            .padding(.bottom, geometry.safeAreaInsets.bottom)
                     } else if showQueue {
                         QueueView(
                             showQueue: $showQueue,
@@ -129,6 +131,7 @@ struct FullPlayerView: View {
                             pendingRoute: $pendingRoute,
                             progressSlider: { progressSlider(horizontalPadding: horizontalPadding) }
                         )
+                        .padding(.bottom, geometry.safeAreaInsets.bottom)
                     } else {
                         Color.clear.frame(height: isCompact ? 4 : 8)
 
