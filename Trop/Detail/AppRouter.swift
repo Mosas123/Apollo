@@ -28,8 +28,7 @@ import SwiftUI
 
     var activePathDepth: Int {
         switch selectedTabIndex {
-        case 1: libraryPath.count
-        case 2: explorePath.count
+        case 2: libraryPath.count
         case 3: searchPath.count
         default: homePath.count
         }
@@ -38,8 +37,7 @@ import SwiftUI
     func popActiveRoute() {
         guard activePathDepth > 0 else { return }
         switch selectedTabIndex {
-        case 1: libraryPath.removeLast()
-        case 2: explorePath.removeLast()
+        case 2: libraryPath.removeLast()
         case 3: searchPath.removeLast()
         default: homePath.removeLast()
         }
@@ -51,8 +49,7 @@ import SwiftUI
 
     func open(_ route: DetailRoute) {
         switch selectedTabIndex {
-        case 1: libraryPath.append(route)
-        case 2: explorePath.append(route)
+        case 2: libraryPath.append(route)
         case 3: searchPath.append(route)
         default: homePath.append(route)
         }

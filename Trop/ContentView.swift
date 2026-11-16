@@ -21,12 +21,12 @@ struct ContentView: View {
                 HomeScreenView()
             }
 
-            Tab("Library", systemImage: "music.note.square.stack", value: 1) {
-                LibraryView()
+            Tab("Radio", systemImage: "dot.radiowaves.left.and.right", value: 1) {
+                RadioView()
             }
 
-            Tab("Explore", systemImage: "flame", value: 2) {
-                ExploreView()
+            Tab("Library", systemImage: "music.note.square.stack", value: 2) {
+                LibraryView()
             }
 
             Tab("Search", systemImage: "magnifyingglass", value: 3, role: .search) {
