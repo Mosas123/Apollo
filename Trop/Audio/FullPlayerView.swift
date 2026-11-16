@@ -211,6 +211,7 @@ struct FullPlayerView: View {
                     style: .continuous
                 )
             )
+            .padding(.top, 6)
             .offset(y: sheet.dragOffset)
             .animation(.easeInOut(duration: 0.35), value: showQueue)
             .simultaneousGesture(collapseDrag)
