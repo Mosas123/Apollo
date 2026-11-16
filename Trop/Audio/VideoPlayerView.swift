@@ -31,6 +31,7 @@ final class MpvVideoUIView: UIView {
         super.init(frame: frame)
         isOpaque = false
         backgroundColor = .clear
+        autoresizingMask = [.flexibleWidth, .flexibleHeight]
         layer.addSublayer(PlayerController.shared.videoLayer)
         syncLayer()
     }

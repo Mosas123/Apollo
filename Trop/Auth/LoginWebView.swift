@@ -58,6 +58,9 @@ final class WebLoginController: UIViewController {
         let delegate = LoginNavigationDelegate(model: model)
         self.delegate = delegate
 
+        edgesForExtendedLayout = .all
+        extendedLayoutIncludesOpaqueBars = true
+
         let config = WKWebViewConfiguration()
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.customUserAgent = LoginWebviewHarvest.userAgent
