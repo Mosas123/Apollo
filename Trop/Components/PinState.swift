@@ -10,6 +10,7 @@ import Observation
 
 /// Speed-dial pin state shared by the song and player menu sheets.
 /// Consolidates the identical `isPinned` + `loadStates` + `togglePin` trios.
+@MainActor
 @Observable
 final class PinState {
     var isPinned = false

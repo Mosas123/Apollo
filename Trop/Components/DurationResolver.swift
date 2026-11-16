@@ -10,6 +10,7 @@ import Observation
 
 /// Resolves unknown track durations via the shared `InnerTubeClient`,
 /// shared by every song row and grid cell.
+@MainActor
 @Observable
 final class DurationResolver {
     var resolved = 0
