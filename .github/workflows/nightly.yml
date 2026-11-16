@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FFMPEG_KIT_TAG: v9.0.0
+  FFMPEG_KIT_TAG: v9.0.2
 
 jobs:
   build-ios:

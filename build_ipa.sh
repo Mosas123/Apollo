@@ -124,7 +124,7 @@ IPA_PATH="$BUILD_DIR/$APPLICATION_NAME.ipa"
 FFMPEG_KIT_DIR="$BUILD_DIR/ffmpeg-kit-next"
 FFMPEG_KIT_XCF="$BUILD_DIR/ffmpeg-kit-xcframeworks"
 # v8.1.x tags are Nix-only (no ios.sh). v9.0.0+ ships the classic ios.sh entrypoint.
-FFMPEG_KIT_TAG="${FFMPEG_KIT_TAG:-v9.0.0}"
+FFMPEG_KIT_TAG="${FFMPEG_KIT_TAG:-v9.0.2}"
 
 mkdir -p "$BUILD_DIR"
 mkdir -p "$STAGE_DIR"
