@@ -50,11 +50,23 @@ struct PodcastIndexClient {
     }
 
     func search(_ query: String, max: Int = 5) async throws -> [PodcastIndexFeed] {
-        var components = URLComponents(string: "https://api.podcastindex.org/api/1.0/search/byterm")
-        components?.queryItems = [
-            URLQueryItem(name: "q", value: query),
-            URLQueryItem(name: "max", value: "\(max)")
-        ]
+        try await get(
+            path: "search/byterm",
+            queryItems: [
+                URLQueryItem(name: "q", value: query),
+                URLQueryItem(name: "max", value: "\(max)")
+            ]
+        )
+    }
+
+    /// Trending podcasts — used for local discovery when the AI is off.
+    func trending(max: Int = 20) async throws -> [PodcastIndexFeed] {
+        try await get(path: "podcasts/trending", queryItems: [URLQueryItem(name: "max", value: "\(max)")])
+    }
+
+    private func get(path: String, queryItems: [URLQueryItem]) async throws -> [PodcastIndexFeed] {
+        var components = URLComponents(string: "https://api.podcastindex.org/api/1.0/\(path)")
+        components?.queryItems = queryItems
         guard let url = components?.url else { throw PodcastIndexError.notConfigured }
 
         let date = String(Int(Date().timeIntervalSince1970))
