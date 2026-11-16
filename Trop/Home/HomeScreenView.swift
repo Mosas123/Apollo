@@ -114,9 +114,12 @@ struct HomeScreenView: View {
             await viewModel.loadCategoryFeed(selectedCategory)
         }
         .task {
-            forYouSongs = await DiscoveryService.songs()
-            discoverArtists = await DiscoveryService.artists()
-            podcastSuggestions = await DiscoveryService.podcasts()
+            async let songsTask = DiscoveryService.songs()
+            async let artistsTask = DiscoveryService.artists()
+            async let podcastsTask = DiscoveryService.podcasts()
+            forYouSongs = await songsTask
+            discoverArtists = await artistsTask
+            podcastSuggestions = await podcastsTask
         }
         .refreshable {
             await viewModel.refresh()

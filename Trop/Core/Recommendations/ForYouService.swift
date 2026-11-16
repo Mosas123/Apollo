@@ -9,6 +9,8 @@ enum ForYouService {
     private static var cachedSongs: (date: Date, songs: [SongItem])?
     private static var cachedArtists: (date: Date, artists: [ArtistItem])?
     private static var cachedPodcasts: (date: Date, items: [YTItem])?
+    private static var cachedProfile: (date: Date, artists: [String], liked: [String], genres: [String])?
+    private static let profileTTL: TimeInterval = 60
     private static let ttl: TimeInterval = 60 * 60 * 6
 
     // MARK: - Songs
@@ -176,6 +178,9 @@ enum ForYouService {
     }
 
     private static func loadProfile() async -> (artists: [String], liked: [String], genres: [String]) {
+        if let cached = cachedProfile, Date().timeIntervalSince(cached.date) < profileTTL {
+            return (cached.artists, cached.liked, cached.genres)
+        }
         var artists = (try? await DatabaseService.shared.fetchArtists(limit: 12))?.map(\.name) ?? []
         for artist in TasteProfileStore.shared.topArtists(limit: 8) where !artists.contains(artist) {
             artists.append(artist)
@@ -183,7 +188,9 @@ enum ForYouService {
         let liked = (try? await DatabaseService.shared.fetchAllLikedSongs())?
             .prefix(20)
             .map { "\($0.title) — \($0.artistName ?? "")" } ?? []
-        return (artists, liked, TasteProfileStore.shared.topGenres(limit: 5))
+        let profile = (artists, liked, TasteProfileStore.shared.topGenres(limit: 5))
+        cachedProfile = (Date(), profile.0, profile.1, profile.2)
+        return profile
     }
 
     private static func parseSuggestions(_ text: String) -> [(artist: String, title: String)]? {
