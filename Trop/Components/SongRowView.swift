@@ -34,25 +34,35 @@ struct SongRowView: View {
     var artRadius: CGFloat = DesignTokens.thumbRadius
     var onTap: () -> Void
     var onNavigate: ((DetailRoute) -> Void)?
+    /// When set, shows a track number instead of artwork (album track lists).
+    var index: Int?
 
     @State private var durations = DurationResolver()
     @State private var showSongMenu = false
 
     var body: some View {
         HStack(spacing: DesignTokens.rowSpacing) {
-            AsyncImageView(url: song.thumbnailUrl)
-                .frame(width: artSize, height: artSize)
-                .clipShape(RoundedRectangle(cornerRadius: artRadius, style: .continuous))
+            if let index {
+                Text("\(index)")
+                    .font(.body)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, alignment: .leading)
+            } else {
+                AsyncImageView(url: song.thumbnailUrl)
+                    .frame(width: artSize, height: artSize)
+                    .clipShape(RoundedRectangle(cornerRadius: artRadius, style: .continuous))
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(song.title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(index == nil ? .subheadline : .body)
+                    .fontWeight(index == nil ? .medium : .regular)
                     .foregroundColor(.primary)
                     .lineLimit(1)
 
                 Text(song.subtitleLine(duration: durations.effectiveDuration(known: song.duration)))
-                    .font(.caption)
+                    .font(index == nil ? .caption : .subheadline)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }

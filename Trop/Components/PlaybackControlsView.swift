@@ -19,11 +19,11 @@ struct PlaybackControlsView: View {
     var onMore: () -> Void = {}
 
     var body: some View {
-        HStack(spacing: 20) {
+        HStack(spacing: 16) {
             if showsShuffle {
                 Button(action: onShuffle) {
                     Image(systemName: "shuffle")
-                        .font(.title3)
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(.primary)
                         .frame(width: 48, height: 48)
                         .background(Circle().fill(Color(.secondarySystemGroupedBackground)))
@@ -33,20 +33,23 @@ struct PlaybackControlsView: View {
             }
 
             Button(action: onPlay) {
-                Image(systemName: "play.fill")
-                    .font(.title2)
-                    .foregroundStyle(.white)
-                    .frame(width: 64, height: 64)
-                    .background(Circle().fill(accent))
-                    .shadow(color: accent.opacity(0.4), radius: 10, y: 4)
+                HStack(spacing: 8) {
+                    Image(systemName: "play.fill")
+                    Text("Play")
+                }
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(accent)
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+                .background(Capsule().fill(.white))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Play all")
 
             if showsMore {
                 Button(action: onMore) {
-                    Text("⋮")
-                        .font(.title3)
+                    Image(systemName: "plus")
+                        .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(.primary)
                         .frame(width: 48, height: 48)
                         .background(Circle().fill(Color(.secondarySystemGroupedBackground)))
@@ -55,6 +58,7 @@ struct PlaybackControlsView: View {
                 .accessibilityLabel("More options")
             }
         }
+        .padding(.horizontal, 24)
         .padding(.top, 4)
     }
 }

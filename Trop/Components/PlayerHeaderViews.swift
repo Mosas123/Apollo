@@ -36,6 +36,7 @@ struct PlayerTitleBlock: View {
     var spacing: CGFloat = 2
     var titleFont: Font = .body.weight(.semibold)
     var titleHeight: CGFloat = 24
+    var artistFont: Font = .subheadline
 
     var body: some View {
         VStack(alignment: .leading, spacing: spacing) {
@@ -47,8 +48,8 @@ struct PlayerTitleBlock: View {
 
             if !artist.isEmpty {
                 Text(artist)
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .font(artistFont)
+                    .foregroundStyle(.white.opacity(0.72))
                     .lineLimit(1)
             }
         }

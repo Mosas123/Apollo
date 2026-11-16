@@ -312,7 +312,7 @@ struct AlbumDetailView: View {
 
             // Album title
             Text(album.title)
-                .font(.title2)
+                .font(.title)
                 .fontWeight(.bold)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
@@ -328,15 +328,13 @@ struct AlbumDetailView: View {
                         if let artistId = artist.id {
                             NavigationLink(value: DetailRoute.artist(browseId: artistId)) {
                                 Text(artist.name)
-                                    .font(.body)
-                                    .fontWeight(.medium)
+                                    .font(.title3)
                                     .foregroundColor(.secondary)
                             }
                             .buttonStyle(.plain)
                         } else {
                             Text(artist.name)
-                                .font(.body)
-                                .fontWeight(.medium)
+                                .font(.title3)
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -347,8 +345,8 @@ struct AlbumDetailView: View {
             let metaParts = metaStrings(for: album)
             if !metaParts.isEmpty {
                 Text(metaParts.joined(separator: " • "))
-                    .font(.subheadline)
-                    .foregroundStyle(.tertiary)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             // Action buttons: shuffle, play, more (matches playlist header)
@@ -378,12 +376,13 @@ struct AlbumDetailView: View {
                 SongRowView(
                     song: song,
                     onTap: { playSong(song, in: album) },
-                    onNavigate: { pendingRoute = $0 }
+                    onNavigate: { pendingRoute = $0 },
+                    index: index + 1
                 )
 
                 if index < album.songs.count - 1 {
                     Divider()
-                        .padding(.leading, 68)
+                        .padding(.leading, 42)
                 }
             }
         }

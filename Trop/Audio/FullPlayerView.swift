@@ -390,9 +390,10 @@ struct FullPlayerView: View {
                 PlayerTitleBlock(
                     title: np.title,
                     artist: playerArtistLine,
-                    spacing: 4,
-                    titleFont: .title3.weight(.bold),
-                    titleHeight: 28
+                    spacing: 5,
+                    titleFont: .title2.weight(.bold),
+                    titleHeight: 32,
+                    artistFont: .title3
                 )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
