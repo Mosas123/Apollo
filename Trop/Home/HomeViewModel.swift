@@ -253,6 +253,40 @@ final class HomeViewModel {
         mergeSections()
     }
 
+    // MARK: - Per-category feeds
+
+    /// Sections fetched specifically for a Home filter (e.g. the Podcasts chip's
+    /// genre shelves), so each filter feels like its own menu.
+    var categoryFeeds: [ContentCategory: [HomePage.Section]] = [:]
+
+    func loadCategoryFeed(_ category: ContentCategory) async {
+        guard category == .podcast || category == .audiobook else { return }
+        guard categoryFeeds[category] == nil else { return }
+        guard let chip = homePage?.chips.first(where: { chipMatches($0.title, category) }) else {
+            return
+        }
+        do {
+            let json = try await InnerTubeClient.tropShared.browse(
+                browseId: chip.browseId ?? "FEmusic_home",
+                params: chip.params
+            ).value
+            if let page = HomePageParser.parseHomePage(from: json) {
+                categoryFeeds[category] = page.sections
+            }
+        } catch {
+            Log.homeViewModel.error("Category feed \(category.rawValue) failed: \(error)")
+        }
+    }
+
+    private func chipMatches(_ title: String, _ category: ContentCategory) -> Bool {
+        let value = title.lowercased()
+        switch category {
+        case .podcast: return value.contains("podcast")
+        case .audiobook: return value.contains("audiobook") || value.contains("audio book")
+        default: return false
+        }
+    }
+
     func toggleChip(_ chip: HomePage.Chip?) {
         cleanup.chipTask?.cancel()
         if chip == nil || chip?.title == selectedChip?.title {

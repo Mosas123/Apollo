@@ -106,6 +106,9 @@ struct HomeScreenView: View {
         }
         .scrollIndicators(.automatic)
         .miniPlayerTracksScroll()
+        .task(id: selectedCategory) {
+            await viewModel.loadCategoryFeed(selectedCategory)
+        }
         .refreshable {
             await viewModel.refresh()
             await reloadSpeedDial()
@@ -255,11 +258,19 @@ struct HomeScreenView: View {
     /// Sections for the active Home filter. "All" mixes everything but is
     /// capped so the feed doesn't feel overloaded.
     private var visibleSections: [HomePage.Section] {
-        let sections = viewModel.homeSections
-        if selectedCategory == .all {
-            return Array(sections.prefix(10))
+        switch selectedCategory {
+        case .all:
+            return Array(viewModel.homeSections.prefix(10))
+        case .music:
+            return viewModel.homeSections.filter { $0.category == .music }
+        case .podcast, .audiobook:
+            // Each of these is its own feed (podcast/audiobook shelves); fall
+            // back to the matching home sections until it loads.
+            if let feed = viewModel.categoryFeeds[selectedCategory] {
+                return feed
+            }
+            return viewModel.homeSections.filter { $0.category == selectedCategory }
         }
-        return sections.filter { $0.category == selectedCategory }
     }
 
     private var categoryChips: some View {
