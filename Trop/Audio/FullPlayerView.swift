@@ -145,37 +145,6 @@ struct FullPlayerView: View {
                                 .padding(.bottom, 10)
                         }
 
-                        Group {
-                            if let activeLyricText {
-                                Button {
-                                    withAnimation(.easeInOut(duration: 0.3)) {
-                                        showLyrics = true
-                                    }
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Text(activeLyricText)
-                                            .font(.system(size: 14, weight: .medium))
-                                            .lineLimit(1)
-                                            .truncationMode(.tail)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 10, weight: .semibold))
-                                            .foregroundStyle(.white.opacity(0.55))
-                                    }
-                                    .foregroundStyle(.white.opacity(0.82))
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .padding(.horizontal, horizontalPadding)
-                                .padding(.bottom, 8)
-                                .accessibilityLabel("Current lyric: \(activeLyricText). Open lyrics")
-                            } else {
-                                Color.clear
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 33, alignment: .bottom)
 
                         progressSlider(horizontalPadding: horizontalPadding)
                             .padding(.top, 4)
