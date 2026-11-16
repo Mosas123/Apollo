@@ -151,6 +151,10 @@ struct PortableLibraryCSVImporter: Sendable {
             ))
         }
         guard !rows.isEmpty else { throw PortableLibraryFileError.missingRows }
+        // The merge planner counts a playlist as one more input identity.
+        guard rows.count + (importAsPlaylist ? 1 : 0) <= LibraryImportPlanner.maximumBatchSize else {
+            throw PortableLibraryFileError.tooManyRows
+        }
         return PortableLibraryCSVPreview(
             name: displayName, sourceFileHash: fileHash,
             playlistItem: playlist, rows: rows
