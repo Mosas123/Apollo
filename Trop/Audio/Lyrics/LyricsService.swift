@@ -34,8 +34,23 @@ actor LyricsService {
     private var cache: [String: [LyricLine]] = [:]
     private var customs: [String: (lines: [LyricLine], providerName: String)] = [:]
     private var inFlight: [String: Task<FetchResult, Error>] = [:]
+    private let cacheLimit = 200
 
     private init() {}
+
+    private func trimCacheIfNeeded() {
+        guard cache.count > cacheLimit else { return }
+        for key in Array(cache.keys.prefix(cache.count - cacheLimit)) {
+            cache.removeValue(forKey: key)
+        }
+    }
+
+    private func trimCustomsIfNeeded() {
+        guard customs.count > cacheLimit else { return }
+        for key in Array(customs.keys.prefix(customs.count - cacheLimit)) {
+            customs.removeValue(forKey: key)
+        }
+    }
 
     private static func customKey(_ videoId: String) -> String { "lyrics.custom.\(videoId)" }
     private static func customProviderKey(_ videoId: String) -> String { "lyrics.customProvider.\(videoId)" }
@@ -73,6 +88,7 @@ actor LyricsService {
             // since lyrics can be matched/published after playback starts.
             if !result.lines.isEmpty {
                 cache[videoId] = result.lines
+                trimCacheIfNeeded()
             }
             await updateAvailability(videoId: videoId, available: !result.lines.isEmpty, providerName: result.providerName)
             return result.lines
@@ -119,6 +135,7 @@ actor LyricsService {
             ?? UserDefaults.standard.string(forKey: Self.customProviderKey(videoId))
             ?? "Manual"
         customs[videoId] = (lines, provider)
+        trimCustomsIfNeeded()
         UserDefaults.standard.set(rawText, forKey: Self.customKey(videoId))
         UserDefaults.standard.set(provider, forKey: Self.customProviderKey(videoId))
         cache.removeValue(forKey: videoId)
@@ -149,6 +166,7 @@ actor LyricsService {
         let raw = LyricsParsing.serializeLines(fetchedLines)
         let provider = fetchedProvider ?? "Manual"
         customs[videoId] = (fetchedLines, provider)
+        trimCustomsIfNeeded()
         UserDefaults.standard.set(raw, forKey: Self.customKey(videoId))
         UserDefaults.standard.set(provider, forKey: Self.customProviderKey(videoId))
         await updateAvailability(videoId: videoId, available: true, providerName: provider)
@@ -163,6 +181,7 @@ actor LyricsService {
         let provider = UserDefaults.standard.string(forKey: Self.customProviderKey(videoId)) ?? "Manual"
         let entry = (lines, provider)
         customs[videoId] = entry
+        trimCustomsIfNeeded()
         return entry
     }
 

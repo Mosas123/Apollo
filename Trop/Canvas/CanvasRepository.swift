@@ -95,6 +95,8 @@ actor CanvasRepository {
 
 enum CanvasPrefetch {
     static func request(videoId: String, title: String, artist: String, album: String?) {
+        // Short-circuit before any network work when Canvas is off.
+        guard SettingsStore.shared.canvasEnabled else { return }
         Task {
             guard let clip = await CanvasRepository.shared.canvasFor(
                 videoId: videoId, title: title, artist: artist, album: album

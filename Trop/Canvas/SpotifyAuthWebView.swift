@@ -85,6 +85,15 @@ private struct SpotifyLoginContainer: UIViewRepresentable {
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
+    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
+        webView.stopLoading()
+        webView.navigationDelegate = nil
+        webView.uiDelegate = nil
+        webView.configuration.userContentController
+            .removeScriptMessageHandler(forName: CanvasTokenHook.bridgeName)
+        coordinator.stop()
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(currentHost: $currentHost, errorText: $errorText, onComplete: onComplete)
     }
@@ -105,6 +114,14 @@ private struct SpotifyLoginContainer: UIViewRepresentable {
 
         deinit {
             pollTask?.cancel()
+        }
+
+        func stop() {
+            pollTask?.cancel()
+            pollTask = nil
+            lock.lock()
+            completed = true
+            lock.unlock()
         }
 
         init(currentHost: Binding<String>, errorText: Binding<String?>, onComplete: @escaping (Bool) -> Void) {

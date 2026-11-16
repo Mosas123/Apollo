@@ -174,6 +174,11 @@ actor MetadataCache {
     }
 
     func store(_ key: String, _ value: ResolvedMetadata?) {
+        if store[key] == nil, store.count >= 2000 {
+            for victim in Array(store.keys.prefix(500)) {
+                store.removeValue(forKey: victim)
+            }
+        }
         store[key] = Entry(value: value)
     }
 }

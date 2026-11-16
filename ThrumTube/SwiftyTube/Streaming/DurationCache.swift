@@ -32,6 +32,11 @@ public enum DurationCache: Sendable {
         lock.lock()
         cache[videoId] = duration
         pending.remove(videoId)
+        if cache.count > 4000 {
+            // Durations are tiny, but keep the cache from growing for the
+            // whole process lifetime.
+            for key in Array(cache.keys.prefix(1000)) { cache.removeValue(forKey: key) }
+        }
         lock.unlock()
         DispatchQueue.main.async {
             NotificationCenter.default.post(

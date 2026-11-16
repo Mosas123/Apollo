@@ -16,6 +16,8 @@ private final class StickyArtworkCache: @unchecked Sendable {
     private let cache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 500
+        // Also cap by bytes: count alone lets 500 full-size bitmaps pile up.
+        cache.totalCostLimit = 96 * 1024 * 1024
         return cache
     }()
 
@@ -24,7 +26,8 @@ private final class StickyArtworkCache: @unchecked Sendable {
     }
 
     func store(_ image: UIImage, for key: String) {
-        cache.setObject(image, forKey: key as NSString)
+        let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
+        cache.setObject(image, forKey: key as NSString, cost: cost)
     }
 }
 

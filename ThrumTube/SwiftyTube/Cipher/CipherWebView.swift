@@ -244,9 +244,14 @@ public final class CipherWebView: NSObject {
 
             func resumeOnce(_ block: (CheckedContinuation<String?, Error>) -> Void) {
                 lock.lock()
-                defer { lock.unlock() }
-                guard timeoutTask != nil else { return }
+                guard let task = timeoutTask else {
+                    lock.unlock()
+                    return
+                }
                 timeoutTask = nil
+                lock.unlock()
+                // Stop the 20s sleep instead of letting it run to completion.
+                task.cancel()
                 block(cont)
             }
 

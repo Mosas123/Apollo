@@ -33,6 +33,14 @@ public actor StreamCache {
     }
 
     public func set(videoId: String, result: PlaybackResult) {
+        // Drop already-expired entries and cap the cache so tracks that are
+        // never revisited don't stay in memory forever.
+        let now = Date()
+        cache = cache.filter { $0.value.expiresAt > now }
+        if cache.count >= 200 {
+            let keep = cache.sorted { $0.value.expiresAt > $1.value.expiresAt }.prefix(150)
+            cache = Dictionary(uniqueKeysWithValues: keep.map { ($0.key, $0.value) })
+        }
         let reported = max(result.expiresInSeconds, 0)
         let ttl = reported > 60 ? max(reported - 60, 60) : 5 * 60
         let entry = Entry(result: result, expiresAt: Date().addingTimeInterval(TimeInterval(ttl)))
