@@ -220,6 +220,7 @@ struct FullPlayerView: View {
                 np.isVideoMode = false
                 showLyrics = false
                 showQueue = false
+                canvasDominantColors = nil
                 preloadLyrics()
             }
             .onChange(of: np.queueSongs.count) { _, _ in

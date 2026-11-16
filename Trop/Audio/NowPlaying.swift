@@ -315,15 +315,17 @@ final class NowPlaying {
         liveResolveTask?.cancel()
         self.title = title
         // A deferred metadata update can arrive without artist credits (the
-        // resolved stream only carries a title). Never let that wipe a name
-        // that the queue already provided.
-        if !preserveMissingArtist || !artists.isEmpty {
+        // resolved stream only carries a title). Preserve a name only when it
+        // was set for THIS track; a new track must never inherit the old one.
+        let canPreserve = preserveMissingArtist && artistVideoId == videoId
+        if !canPreserve || !artists.isEmpty {
             self.artists = artists
         }
         let cleaned = cleanArtistDisplay(artist ?? "")
-        if !preserveMissingArtist || !cleaned.isEmpty {
+        if !canPreserve || !cleaned.isEmpty {
             self.artist = cleaned
         }
+        artistVideoId = videoId
         self.albumTitle = album ?? ""
         self.currentTime = 0
         self.duration = 0
@@ -545,6 +547,9 @@ final class NowPlaying {
     }
 
     private var lastLoadedVideoId: String?
+    /// Video id the current artist/artists belong to, so a metadata update for a
+    /// *different* track never keeps the previous artist.
+    private var artistVideoId: String?
     /// When the current track started loading. Used to drop a spurious EOF that
     /// mpv can report for the previous file right after a new load (this made a
     /// freshly started song skip to the next one after ~1 second).

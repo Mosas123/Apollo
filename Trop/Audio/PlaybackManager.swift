@@ -190,7 +190,9 @@ actor PlaybackManager {
 
     private func playNetworkResult(_ result: PlaybackResult, videoId: String) async {
         let queueSong = await queueSong(for: videoId)
-        let artistName = queueSong.map { artistDisplayString(from: $0.artists) } ?? result.author ?? ""
+        let queueArtistName = queueSong.map { artistDisplayString(from: $0.artists) } ?? ""
+        let fallbackAuthor = result.author?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let artistName = !queueArtistName.isEmpty ? queueArtistName : fallbackAuthor
         let rawTitle = queueSong?.title ?? result.title ?? ""
         await PlayerController.shared.play(
             url: result.streamUrl,
