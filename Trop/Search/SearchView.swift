@@ -14,15 +14,26 @@ struct SearchView: View {
     @FocusState private var fieldFocused: Bool
 
     @State private var pendingRoute: DetailRoute?
+    @State private var headerHeight: CGFloat = 64
 
     var body: some View {
         NavigationStack(path: $router.searchPath) {
-            VStack(spacing: 0) {
-                searchTopBar
-
+            ZStack(alignment: .top) {
                 content
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        Color.clear.frame(height: headerHeight)
+                    }
+
+                ProgressiveBlurUnderlay(height: headerHeight)
+                searchTopBar
+                    .background {
+                        GeometryReader { geo in
+                            Color.clear.preference(key: TabHeaderHeightKey.self, value: geo.size.height)
+                        }
+                    }
             }
             .frame(maxHeight: .infinity, alignment: .top)
+            .onPreferenceChange(TabHeaderHeightKey.self) { headerHeight = $0 }
             .toolbar(.hidden, for: .navigationBar)
             .detailRouteDestinations()
             .onChange(of: pendingRoute) { _, route in
@@ -203,7 +214,7 @@ struct SearchView: View {
             }
         }
         .scrollIndicators(.automatic)
-        .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
+        .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all).scrollEdgeEffectHidden(true, for: .top)
     }
 
     private var searchResultsList: some View {
@@ -253,7 +264,7 @@ struct SearchView: View {
             .padding(.bottom, 16)
         }
         .scrollIndicators(.automatic)
-        .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
+        .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all).scrollEdgeEffectHidden(true, for: .top)
     }
 
     /// Play external-catalogue tracks using the provider-scoped queue adapter.
