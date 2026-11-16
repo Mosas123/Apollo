@@ -52,7 +52,7 @@ struct LyricsView<ProgressSlider: View>: View {
 
             playbackControls
         }
-        .ignoresSafeArea(edges: .bottom)
+        .ignoresSafeArea(.container, edges: .bottom)
         .simultaneousGesture(swipeBackGesture)
         .sheet(isPresented: $showSongMenu) {
             LyricsMenuSheet()

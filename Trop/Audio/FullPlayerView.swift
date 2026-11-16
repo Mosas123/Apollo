@@ -50,10 +50,10 @@ struct FullPlayerView: View {
             ZStack {
                 if np.isVideoMode && np.hasVideo {
                     Color.black
-                        .ignoresSafeArea()
+                        .ignoresSafeArea(.container)
                 } else if settings.playerBackgroundStyle == .solid {
                     Color.black
-                        .ignoresSafeArea()
+                        .ignoresSafeArea(.container)
                 } else {
                     LinearGradient(
                         colors: [
@@ -63,7 +63,7 @@ struct FullPlayerView: View {
                         startPoint: .top,
                         endPoint: .bottom
                     )
-                    .ignoresSafeArea()
+                    .ignoresSafeArea(.container)
                     .animation(.easeInOut(duration: 0.8), value: playerBackgroundColors)
                     .overlay(alignment: .top) {
                         Circle()
@@ -78,7 +78,7 @@ struct FullPlayerView: View {
                         // Keep white text legible even over light/desaturated art.
                         Color.black
                             .opacity(0.30)
-                            .ignoresSafeArea()
+                            .ignoresSafeArea(.container)
                             .allowsHitTesting(false)
                     }
                 }
@@ -199,7 +199,7 @@ struct FullPlayerView: View {
                     goToMenuOverlay
                 }
             }
-            .ignoresSafeArea(edges: .bottom)
+            .ignoresSafeArea(.container, edges: .bottom)
             .clipShape(
                 UnevenRoundedRectangle(
                     topLeadingRadius: 38 * cardProgress,
@@ -257,7 +257,7 @@ struct FullPlayerView: View {
     private var goToMenuOverlay: some View {
         ZStack {
             Color.black.opacity(0.25)
-                .ignoresSafeArea()
+                .ignoresSafeArea(.container)
                 .onTapGesture { showGoToMenu = false }
 
             VStack(spacing: 0) {

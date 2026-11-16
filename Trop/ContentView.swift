@@ -25,7 +25,7 @@ struct ContentView: View {
                     if backgroundProgress > 0 {
                         Color.black
                             .opacity(0.22 * backgroundProgress)
-                            .ignoresSafeArea()
+                            .ignoresSafeArea(.container)
                             .allowsHitTesting(false)
                     }
                 }
@@ -155,13 +155,13 @@ struct ContentView: View {
     private var backgroundLayer: some View {
         if sheet.isExpanded || sheet.dragOffset > 0 {
             Color(.systemBackground)
-                .ignoresSafeArea()
+                .ignoresSafeArea(.container)
         } else if settings.playerBackgroundStyle == .solid {
-            Color.black.ignoresSafeArea()
+            Color.black.ignoresSafeArea(.container)
         } else if let accent = nowPlaying.accentColor {
             accent
                 .opacity(0.06)
-                .ignoresSafeArea()
+                .ignoresSafeArea(.container)
                 .animation(.easeInOut(duration: 0.8), value: nowPlaying.accentColor)
         }
     }
