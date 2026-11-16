@@ -240,6 +240,7 @@ extension DatabaseService {
             let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
             let recentIds = try Event
                 .filter(Column("timestamp") > cutoff)
+                .filter(sql: "song_id NOT LIKE 'radio:%'")
                 .select(Column("song_id"))
                 .distinct()
                 .order(Column("timestamp").desc)

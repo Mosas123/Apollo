@@ -14,6 +14,9 @@ actor PlaybackStateService {
     private let innerTube = InnerTubeClient.tropShared
 
     private let historyDurationThreshold: TimeInterval = 30
+    /// Live radio uses synthetic "radio:<uuid>" ids; they are streams, not
+    /// songs, so they must never land in play history or "Keep Listening".
+    private static let radioPrefix = "radio:"
     private var currentVideoId: String?
     private var playbackStartTime: Date?
     private var isTracking = false
@@ -24,6 +27,11 @@ actor PlaybackStateService {
     private init() {}
 
     func startTracking(videoId: String) {
+        guard !videoId.hasPrefix(Self.radioPrefix) else {
+            reset()
+            Log.playbackState.debug("Skipping tracking for radio stream \(videoId)")
+            return
+        }
         currentVideoId = videoId
         playbackStartTime = Date()
         isTracking = true
@@ -78,6 +86,7 @@ actor PlaybackStateService {
 
     @discardableResult
     private func bankPlayTime(videoId: String, elapsedMs: Int64, minimumMs: Int64) async -> Int64 {
+        guard !videoId.hasPrefix(Self.radioPrefix) else { return 0 }
         guard SettingsStore.shared.trackPlayHistory else { return 0 }
         let delta = elapsedMs - bankedPlayTimeMs
         guard delta >= minimumMs, delta > 0, !videoId.isEmpty else { return 0 }
@@ -128,6 +137,7 @@ actor PlaybackStateService {
     }
 
     private func recordPlayback(videoId: String, playTimeMs: Int64) async {
+        guard !videoId.hasPrefix(Self.radioPrefix) else { return }
         guard SettingsStore.shared.trackPlayHistory else {
             Log.playbackState.debug("Play history tracking disabled — skipping recording")
             return
