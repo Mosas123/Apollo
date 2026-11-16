@@ -609,7 +609,7 @@ struct ArtistDetailView: View {
                         url: ArtworkURLs.sized(artist.thumbnailUrl, width: 1200, height: 1200),
                         contentMode: .fill
                     )
-                    .frame(height: 430)
+                    .frame(height: min(430, UIScreen.main.bounds.height * 0.55))
                     .clipped()
 
                     LinearGradient(
@@ -648,11 +648,6 @@ struct ArtistDetailView: View {
                         }
                     }
 
-                    if let subText = artist.subscriberCountText, !subText.isEmpty {
-                        Text(subscriberLabel(for: subText))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 18)
@@ -673,6 +668,7 @@ struct ArtistDetailView: View {
             .padding(.leading, 16)
         }
         .task { infoGenre = await ArtistGenreResolver.genre(for: artist.name) }
+        .presentationDragIndicator(.hidden)
         .presentationDetents([.large])
     }
 
