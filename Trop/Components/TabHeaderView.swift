@@ -13,7 +13,6 @@ struct TabHeaderView: View {
     let title: String
     var accountIsLoggedIn: Bool = false
     var accountImageUrl: String?
-    var onHistory: () -> Void
     var onAccount: () -> Void
     var accountInitial: String? = nil
 

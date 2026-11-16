@@ -22,7 +22,6 @@ struct ExploreView: View {
                     title: "Explore",
                     accountIsLoggedIn: accountState.isLoggedIn,
                     accountImageUrl: accountState.accountImageUrl,
-                    onHistory: { router.explorePath.append(DetailRoute.history) },
                     onAccount: { router.explorePath.append(DetailRoute.settings) }
                 )
 

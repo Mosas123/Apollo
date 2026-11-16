@@ -61,7 +61,6 @@ struct LibraryView: View {
                     title: "Library",
                     accountIsLoggedIn: accountState.isLoggedIn,
                     accountImageUrl: accountState.accountImageUrl,
-                    onHistory: { router.libraryPath.append(DetailRoute.history) },
                     onAccount: { router.libraryPath.append(DetailRoute.settings) },
                     accountInitial: accountState.accountName.first.map(String.init)
                 )
