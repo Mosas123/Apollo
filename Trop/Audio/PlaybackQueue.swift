@@ -42,6 +42,7 @@ enum PlaybackQueue {
     /// then replaces the queue with the fetched radio. Used by the song and
     /// player "Start Radio" menu actions.
     static func startRadio(for song: SongItem, options: RadioOptions = .default) {
+        guard MusicPlaybackIdentity.isYouTube(song.videoId) else { return }
         let isCurrentSong = NowPlaying.shared.videoId == song.videoId
         if !isCurrentSong {
             NowPlaying.shared.setQueue([song], startIndex: 0)
@@ -67,7 +68,8 @@ enum PlaybackQueue {
                 log.error("Playback failed: \(error)")
                 return
             }
-            guard let radio = try? await PersonalizationService.shared.fetchRadio(videoId: song.videoId),
+            guard MusicPlaybackIdentity.isYouTube(song.videoId),
+                  let radio = try? await PersonalizationService.shared.fetchRadio(videoId: song.videoId),
                   radio.songs.count > 1,
                   NowPlaying.shared.videoId == song.videoId else { return }
             NowPlaying.shared.queueSongs = preservingArtists(radio.songs, over: NowPlaying.shared.queueSongs)

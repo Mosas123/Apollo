@@ -43,3 +43,20 @@ stream URL construction, and HTTP error propagation. This does not substitute
 for an iOS build, a real Audius API call, or full playback testing.
 
 References: https://docs.audius.co/api/ and https://docs.audius.co/developers/guides/gate-release-access/
+
+
+## Phase 2: Provider-aware playback routing (stacked draft)
+
+Audius tracks can be adapted to `SongItem` for existing queue persistence,
+using a synthetic `audius:<track id>` key. The playback manager detects these
+keys and resolves Audius audio URLs without invoking YouTube stream resolution.
+SponsorBlock and YouTube radio/autoplay requests are gated for Audius tracks.
+
+Audius streaming is not yet exposed through search UI. The application must
+not display a misleading YouTube video, YouTube share URL, or YouTube-only menu
+action for an Audius item when the user interface is connected.
+
+**Note:** Direct stream URLs may require redirects and may fail because of
+region restrictions, app/platform network policies, or server availability.
+No live stream playback has been tested yet. There is no download support for
+Audius, and `resolve(forDownload:)` deliberately rejects that route.
