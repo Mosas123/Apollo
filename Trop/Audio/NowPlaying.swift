@@ -493,7 +493,7 @@ final class NowPlaying {
 
         Task {
             // For downloaded songs, try to extract embedded artwork from the local file first.
-            if !MusicPlaybackIdentity.isAudius(videoId),
+            if !MusicPlaybackIdentity.isExternal(videoId),
                let localURL = await DownloadManager.shared.localURL(for: videoId) {
                 loadArtworkFromLocalFile(localURL, videoId: videoId)
                 return
@@ -509,7 +509,7 @@ final class NowPlaying {
     private func enrichArtwork(videoId: String) {
         // Radio stations already carry their own name and favicon; never match
         // them against music/podcast catalogues.
-        guard playbackKind != .radio, !MusicPlaybackIdentity.isAudius(videoId) else { return }
+        guard playbackKind != .radio, !MusicPlaybackIdentity.isExternal(videoId) else { return }
         let title = title
         let artist = artist
         let kind = queueSongs.first { $0.videoId == videoId }?.contentKind
@@ -568,7 +568,7 @@ final class NowPlaying {
         // Best source first: the track's own artwork upgraded to full
         // resolution, then ytimg step-downs, then the guaranteed hqdefault.
         var candidates: [String] = []
-        if MusicPlaybackIdentity.isAudius(videoId), let thumbnailUrl {
+        if MusicPlaybackIdentity.isExternal(videoId), let thumbnailUrl {
             candidates.append(thumbnailUrl)
         } else if let upgraded = ArtworkURLs.highRes(thumbnailUrl) {
             if let maxRes = ArtworkURLs.maxResVariant(upgraded) {
@@ -579,7 +579,7 @@ final class NowPlaying {
             }
             candidates.append(upgraded)
         }
-        if !MusicPlaybackIdentity.isAudius(videoId) {
+        if !MusicPlaybackIdentity.isExternal(videoId) {
             let fallback = Self.artworkURL(for: videoId)
             if !candidates.contains(fallback) {
                 candidates.append(fallback)

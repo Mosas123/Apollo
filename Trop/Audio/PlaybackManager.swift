@@ -56,11 +56,50 @@ actor PlaybackManager {
         )
     }
 
+
+    /// Qobuz uses fresh, authorized, short-lived FLAC links. Its IDs must
+    /// never enter the YouTube stream resolver.
+    private func resolveQobuz(videoId: String) async throws -> PlaybackResult {
+        guard let identifier = MusicCatalogID(storageKey: videoId),
+              identifier.source == .qobuz,
+              let song = await queueSong(for: videoId) else {
+            throw QobuzError.invalidTrack
+        }
+        guard let credentials = try await QobuzCredentialStore.shared.load() else {
+            throw QobuzError.notConfigured
+        }
+        let streamURL = try await QobuzClient().streamURL(
+            trackId: identifier.rawValue, credentials: credentials
+        )
+        return PlaybackResult(
+            streamUrl: streamURL.absoluteString,
+            itag: 0,
+            mimeType: "audio/flac",
+            bitrate: 0,
+            audioQuality: "qobuz-cd",
+            videoId: videoId,
+            title: song.title,
+            author: song.artistNamesDisplay,
+            duration: song.duration,
+            expiresInSeconds: 0,
+            clientName: "qobuz",
+            musicVideoType: nil,
+            hasVideoContent: false,
+            muxedStreamUrl: nil,
+            loudnessDb: nil
+        )
+    }
+
     /// Resolve a video and start playback. Returns the result used, or throws.
     @discardableResult
     func resolveAndPlay(videoId: String) async throws -> PlaybackResult {
-        if MusicPlaybackIdentity.isAudius(videoId) {
-            let result = try await resolveAudius(videoId: videoId)
+        if MusicPlaybackIdentity.isExternal(videoId) {
+            let result: PlaybackResult
+            if MusicPlaybackIdentity.isQobuz(videoId) {
+                result = try await resolveQobuz(videoId: videoId)
+            } else {
+                result = try await resolveAudius(videoId: videoId)
+            }
             let song = await queueSong(for: videoId)
             await PlayerController.shared.play(
                 url: result.streamUrl,
@@ -263,8 +302,11 @@ actor PlaybackManager {
     static let sessionId: String = UUID().uuidString
     /// Resolve a video without playing. Useful for previews / testing.
     func resolve(videoId: String, preferredFormat: Format? = nil, forDownload: Bool = false) async throws -> PlaybackResult {
-        if MusicPlaybackIdentity.isAudius(videoId) {
+        if MusicPlaybackIdentity.isExternal(videoId) {
             guard !forDownload else { throw MusicCatalogError.unavailableTrack }
+            if MusicPlaybackIdentity.isQobuz(videoId) {
+                return try await resolveQobuz(videoId: videoId)
+            }
             return try await resolveAudius(videoId: videoId)
         }
         if !forDownload, let cached = await StreamCache.shared.get(videoId: videoId) {
