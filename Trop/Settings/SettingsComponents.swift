@@ -23,7 +23,17 @@ struct SettingsNavigationRow<Destination: View>: View {
         NavigationLink {
             destination()
         } label: {
-            Label(LocalizedStringKey(title), systemImage: icon)
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        settings.accentColor,
+                        in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    )
+                Text(LocalizedStringKey(title))
+            }
         }
         .tint(settings.accentColor)
     }

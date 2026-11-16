@@ -17,31 +17,18 @@ struct SettingsView: View {
             accountSection
 
             Section {
-                SettingsNavigationRow("Appearance", icon: "paintpalette") {
+                SettingsNavigationRow("Appearance", icon: "paintpalette.fill") {
                     AppearanceSettingsView()
                 }
-            } header: {
-                Text("Appearance")
-            }
-
-            Section {
-                Toggle("Show Radio tab", isOn: $settings.showRadioTab)
-                Toggle("Show Explore tab", isOn: $settings.showExploreTab)
-            } header: {
-                Text("Tab Bar")
-            } footer: {
-                Text("Home, Library and Search are always shown.")
-            }
-
-            Section {
-                SettingsNavigationRow("Player", icon: "play.circle") {
+                SettingsNavigationRow("Tab Bar", icon: "rectangle.bottomthird.inset.filled") {
+                    TabBarSettingsView()
+                }
+                SettingsNavigationRow("Player", icon: "play.circle.fill") {
                     PlayerSettingsView()
                 }
-                SettingsNavigationRow("Downloads", icon: "arrow.down.circle") {
+                SettingsNavigationRow("Downloads", icon: "arrow.down.circle.fill") {
                     DownloadSettingsView()
                 }
-            } header: {
-                Text("Playback & Offline")
             }
 
             Section {
@@ -51,24 +38,15 @@ struct SettingsView: View {
                 SettingsNavigationRow("Lyrics", icon: "text.quote") {
                     LyricsSettingsView()
                 }
-            } header: {
-                Text("Content & Lyrics")
-            }
-
-            Section {
-                SettingsNavigationRow("Integrations", icon: "puzzlepiece.extension") {
+                SettingsNavigationRow("Integrations", icon: "puzzlepiece.extension.fill") {
                     IntegrationsSettingsView()
                 }
-            } header: {
-                Text("Integrations")
             }
 
             Section {
-                SettingsNavigationRow("About", icon: "info.circle") {
+                SettingsNavigationRow("About", icon: "info.circle.fill") {
                     AboutSettingsView()
                 }
-            } header: {
-                Text("About")
             }
         }
         .navigationTitle("Settings")
