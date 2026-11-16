@@ -15,6 +15,7 @@ struct HomeScreenView: View {
 
     @State private var pendingRoute: DetailRoute?
     @State private var speedDialEntries: [SpeedDialEntry] = []
+    @State private var selectedCategory: ContentCategory = .all
 
     var body: some View {
         NavigationStack(path: $router.homePath) {
@@ -73,17 +74,19 @@ struct HomeScreenView: View {
     private var homescreenContent: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                if let chips = viewModel.homePage?.chips, !chips.isEmpty {
-                    ChipsRowView(
-                        chips: chips,
-                        selectedChip: viewModel.selectedChip,
-                        onChipTap: { viewModel.toggleChip($0) }
-                    )
+                categoryChips
+
+                ForEach(Array(visibleSections.enumerated()), id: \.offset) { _, section in
+                    sectionView(for: section)
                 }
 
-                ForEach(viewModel.homeSections.indices, id: \.self) { index in
-                    let section = viewModel.homeSections[index]
-                    sectionView(for: section)
+                if visibleSections.isEmpty && !viewModel.isLoading {
+                    ContentUnavailableView(
+                        emptyCategoryTitle,
+                        systemImage: emptyCategorySymbol,
+                        description: Text("Pull to refresh or try another category.")
+                    )
+                    .padding(.top, 50)
                 }
 
                 GeometryReader { _ in
@@ -247,6 +250,59 @@ struct HomeScreenView: View {
     private func handleSongTap(_ song: SongItem, in queue: [SongItem]) {
         Log.homeScreenView.debug("Tapped song in queue: \(song.title) queueCount=\(queue.count)")
         PlaybackQueue.play(song, in: queue, log: Log.homeScreenView, context: "Tapped song")
+    }
+
+    /// Sections for the active Home filter. "All" mixes everything but is
+    /// capped so the feed doesn't feel overloaded.
+    private var visibleSections: [HomePage.Section] {
+        let sections = viewModel.homeSections
+        if selectedCategory == .all {
+            return Array(sections.prefix(10))
+        }
+        return sections.filter { $0.category == selectedCategory }
+    }
+
+    private var categoryChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(ContentCategory.allCases) { category in
+                    let isOn = selectedCategory == category
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { selectedCategory = category }
+                    } label: {
+                        Text(category.title)
+                            .font(.system(size: 15, weight: .semibold))
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 10)
+                            .background(
+                                isOn ? settings.accentColor : Color(uiColor: .secondarySystemBackground),
+                                in: Capsule()
+                            )
+                            .foregroundStyle(isOn ? .black : .primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+    }
+
+    private var emptyCategoryTitle: String {
+        switch selectedCategory {
+        case .all: return "Nothing here yet"
+        case .music: return "No music"
+        case .podcast: return "No podcasts"
+        case .audiobook: return "No audiobooks"
+        }
+    }
+
+    private var emptyCategorySymbol: String {
+        switch selectedCategory {
+        case .podcast: return "mic"
+        case .audiobook: return "book.closed"
+        default: return "music.note"
+        }
     }
 
     private func handleItemTap(_ item: YTItem) {

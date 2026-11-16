@@ -7,6 +7,25 @@
 
 import Foundation
 
+/// Top-level Home filter: everything, music only, podcasts or audiobooks.
+enum ContentCategory: String, CaseIterable, Identifiable, Sendable {
+    case all
+    case music
+    case podcast
+    case audiobook
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: return "All"
+        case .music: return "Music"
+        case .podcast: return "Podcasts"
+        case .audiobook: return "Audiobooks"
+        }
+    }
+}
+
 struct HomePage {
     var chips: [Chip]
     var sections: [Section]
@@ -21,6 +40,21 @@ struct HomePage {
     struct Section {
         var title: String
         var items: [YTItem]
+
+        /// Which Home filter this section belongs to, inferred from its items.
+        var category: ContentCategory {
+            for item in items {
+                switch item {
+                case .episode, .podcast:
+                    return .podcast
+                case .album(let album) where album.isAudiobook:
+                    return .audiobook
+                default:
+                    continue
+                }
+            }
+            return .music
+        }
 
         var isSongsOnly: Bool {
             !items.isEmpty && items.allSatisfy {

@@ -425,6 +425,7 @@ struct AlbumItem {
     var thumbnailUrl: String?
     var playlistId: String?
     var isExplicit: Bool
+    var isAudiobook: Bool = false
 
     static func from(_ renderer: [String: Any]) -> AlbumItem? {
         guard let browseId = extractTwoRowBrowseId(renderer) else { return nil }

@@ -165,8 +165,14 @@ extension HomePageParser {
             return SongItem.from(renderer).map { YTItem.song($0) }
         }
         switch pageType {
-        case "MUSIC_PAGE_TYPE_ALBUM", "MUSIC_PAGE_TYPE_AUDIOBOOK":
+        case "MUSIC_PAGE_TYPE_ALBUM":
             return AlbumItem.from(renderer).map { YTItem.album($0) }
+        case "MUSIC_PAGE_TYPE_AUDIOBOOK":
+            return AlbumItem.from(renderer).map { album in
+                var copy = album
+                copy.isAudiobook = true
+                return YTItem.album(copy)
+            }
         case "MUSIC_PAGE_TYPE_ARTIST":
             return ArtistItem.from(renderer).map { YTItem.artist($0) }
         case "MUSIC_PAGE_TYPE_PLAYLIST":
