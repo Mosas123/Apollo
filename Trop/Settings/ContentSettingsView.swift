@@ -47,6 +47,17 @@ struct ContentSettingsView: View {
             }
 
             Section {
+                TextField("API Key", text: $settings.podcastIndexKey)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                SecureField("API Secret", text: $settings.podcastIndexSecret)
+            } header: {
+                Text("Podcasts (Podcast Index)")
+            } footer: {
+                Text("Optional. Create a free key at podcastindex.org to enrich podcast art and metadata. Without it, the app falls back to iTunes podcast search.")
+            }
+
+            Section {
                 SettingsToggleRow("Track Search History", icon: "magnifyingglass", isOn: $settings.trackSearchHistory)
                 SettingsToggleRow("Track Play History", icon: "clock.arrow.circlepath", isOn: $settings.trackPlayHistory)
             } header: {

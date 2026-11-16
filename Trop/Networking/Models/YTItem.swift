@@ -260,6 +260,13 @@ enum YTItem {
     }
 }
 
+/// Whether a playable item is music, a podcast show, or a podcast episode.
+enum ContentKind: String, Codable, Hashable, Sendable {
+    case music
+    case podcast
+    case episode
+}
+
 struct SongItem: Codable, Hashable {
     var videoId: String
     var title: String
@@ -280,6 +287,10 @@ struct SongItem: Codable, Hashable {
     /// art-tracks), when the row carried one. Nil for stored rows parsed
     /// before this existed — previously persisted queues keep decoding.
     var musicVideoType: String?
+
+    /// Content kind for routing metadata enrichment. Optional so previously
+    /// persisted queue snapshots keep decoding; nil means `.music`.
+    var contentKind: ContentKind?
 
     /// True for music-video results (subtitle starts with "Video").
     var isMusicVideo: Bool { isVideo == true }
@@ -611,7 +622,8 @@ extension EpisodeItem {
             thumbnailUrl: thumbnailUrl,
             isExplicit: false,
             playlistId: nil,
-            likeStatus: nil
+            likeStatus: nil,
+            contentKind: .episode
         )
     }
 }

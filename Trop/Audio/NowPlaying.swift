@@ -435,10 +435,16 @@ final class NowPlaying {
     private func enrichArtwork(videoId: String) {
         let title = title
         let artist = artist
+        let kind = queueSongs.first { $0.videoId == videoId }?.contentKind
         guard !title.isEmpty, !artist.isEmpty else { return }
         Task {
-            guard let resolved = await MetadataResolver.enrich(title: title, artist: artist),
-                  let artworkURL = resolved.artworkURL,
+            let resolved: ResolvedMetadata?
+            if kind == .episode || kind == .podcast {
+                resolved = await PodcastMetadataResolver.enrich(title: title, author: artist)
+            } else {
+                resolved = await MetadataResolver.enrich(title: title, artist: artist)
+            }
+            guard let resolved, let artworkURL = resolved.artworkURL,
                   let image = try? await ArtworkLoader.image(for: artworkURL) else { return }
             guard lastLoadedVideoId == videoId else { return }
             publishArtwork(image)

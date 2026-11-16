@@ -196,6 +196,18 @@ final class SettingsStore: @unchecked Sendable {
         didSet { Self.defaults.set(showExploreTab, forKey: Keys.showExploreTab) }
     }
 
+    // MARK: - Podcasts
+
+    /// Podcast Index API key (https://api.podcastindex.org). Optional; empty
+    /// disables Podcast Index and the app falls back to iTunes podcast search.
+    var podcastIndexKey: String {
+        didSet { Self.defaults.set(podcastIndexKey, forKey: Keys.podcastIndexKey) }
+    }
+
+    var podcastIndexSecret: String {
+        didSet { Self.defaults.set(podcastIndexSecret, forKey: Keys.podcastIndexSecret) }
+    }
+
     // MARK: - Liquid Glass
 
     /// Translucency of the player's floating glass chips (iOS 27 style control).
@@ -387,6 +399,8 @@ final class SettingsStore: @unchecked Sendable {
         static let showRadioTab = "settings.showRadioTab"
         static let showExploreTab = "settings.showExploreTab"
         static let glassStyle = "settings.glassStyle"
+        static let podcastIndexKey = "settings.podcastIndexKey"
+        static let podcastIndexSecret = "settings.podcastIndexSecret"
         static let lyricsFontSize = "settings.lyricsFontSize"
         static let lyricsAlignment = "settings.lyricsAlignment"
         static let lyricsOffsetSeconds = "settings.lyricsOffsetSeconds"
@@ -460,6 +474,8 @@ final class SettingsStore: @unchecked Sendable {
         showRadioTab = Self.load(Keys.showRadioTab, default: true)
         showExploreTab = Self.load(Keys.showExploreTab, default: false)
         glassStyle = Self.loadEnum(Keys.glassStyle, default: .regular)
+        podcastIndexKey = Self.loadString(Keys.podcastIndexKey, default: "")
+        podcastIndexSecret = Self.loadString(Keys.podcastIndexSecret, default: "")
         lyricsFontSize = Self.load(Keys.lyricsFontSize, default: 17)
         lyricsAlignment = Self.loadEnum(Keys.lyricsAlignment, default: .center)
         lyricsOffsetSeconds = Self.load(Keys.lyricsOffsetSeconds, default: 0)
