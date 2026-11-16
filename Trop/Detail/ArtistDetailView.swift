@@ -494,14 +494,45 @@ struct ArtistDetailView: View {
                 endPoint: .bottom
             )
 
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text(artist.name)
                     .font(.system(size: 34, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                     .lineLimit(2)
                     .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
 
+                if let subText = artist.subscriberCountText, !subText.isEmpty {
+                    Text(subscriberLabel(for: subText))
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.88))
+                        .lineLimit(1)
+                }
+
                 HStack(spacing: 12) {
+                    Button(action: { playArtist(artist) }, label: {
+                        Image(systemName: "play.fill")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(.black)
+                            .frame(width: 52, height: 52)
+                            .background(Circle().fill(.white))
+                    })
+                    .buttonStyle(.plain)
+                    .disabled(artist.songs.isEmpty)
+                    .accessibilityLabel("Play artist")
+
+                    Button(action: { shufflePlay(artist) }, label: {
+                        Image(systemName: "shuffle")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 52, height: 52)
+                            .glassEffect(in: Circle())
+                    })
+                    .buttonStyle(.plain)
+                    .disabled(artist.songs.isEmpty)
+                    .accessibilityLabel("Shuffle artist")
+
+                    Spacer(minLength: 0)
+
                     Button(action: { toggleSubscribe(artist) }, label: {
                         Text(artist.isSubscribed ? "Subscribed" : "Subscribe")
                             .font(.subheadline.weight(.bold))
@@ -518,25 +549,6 @@ struct ArtistDetailView: View {
                             )
                     })
                     .buttonStyle(.plain)
-
-                    Spacer(minLength: 0)
-
-                    if let subText = artist.subscriberCountText, !subText.isEmpty {
-                        Text(subscriberLabel(for: subText))
-                            .font(.subheadline)
-                            .foregroundStyle(.white.opacity(0.88))
-                            .lineLimit(1)
-                    }
-
-                    Button(action: { shufflePlay(artist) }, label: {
-                        Image(systemName: "shuffle")
-                            .font(.title3.weight(.bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 52, height: 52)
-                            .background(Circle().fill(Color.accentColor))
-                    })
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Shuffle artist")
                 }
             }
             .padding(.horizontal, horizontalSizeClass == .regular ? 32 : 20)
@@ -744,6 +756,10 @@ struct ArtistDetailView: View {
     }
 
     // MARK: - Actions
+
+    private func playArtist(_ artist: ArtistDetailInfo) {
+        PlaybackQueue.play(artist.songs, log: Log.artistDetail, context: "Artist playback")
+    }
 
     private func shufflePlay(_ artist: ArtistDetailInfo) {
         PlaybackQueue.playShuffled(artist.songs, log: Log.artistDetail, context: "Shuffle playback")
