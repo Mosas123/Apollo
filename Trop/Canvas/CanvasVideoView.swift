@@ -152,7 +152,7 @@ private final class CanvasPlayerUIView: UIView {
 
 /// Owns the queue player + looper for one clip URL. Torn down with the view.
 @MainActor
-private final class Coordinator {
+private final class Coordinator: @unchecked Sendable {
     private weak var view: CanvasPlayerUIView?
     private var player: AVQueuePlayer?
     private var readyObservation: NSKeyValueObservation?
@@ -160,8 +160,6 @@ private final class Coordinator {
     private var isPlaying = false
     private var didReportFirstFrame = false
     private let onFirstFrame: () -> Void
-    nonisolated(unsafe) private var backgroundObserver: NSObjectProtocol?
-    nonisolated(unsafe) private var foregroundObserver: NSObjectProtocol?
 
     init(onFirstFrame: @escaping () -> Void) {
         self.onFirstFrame = onFirstFrame

@@ -7,6 +7,8 @@
 
 import SwiftUI
 
+extension UserDefaults: @unchecked Sendable {}
+
 protocol SettingsOption: CaseIterable, Hashable, Identifiable, RawRepresentable where RawValue == String {
     var displayName: String { get }
 }
@@ -131,8 +133,8 @@ struct AccentPreset: Identifiable, Hashable {
 }
 
 @Observable
-final class SettingsStore {
-    nonisolated(unsafe) static let shared = SettingsStore()
+final class SettingsStore: @unchecked Sendable {
+    static let shared = SettingsStore()
 
     // MARK: - Appearance
 
@@ -385,7 +387,7 @@ final class SettingsStore {
         static let canvasOverCellular = "settings.canvasOverCellular"
     }
 
-    nonisolated(unsafe) private static let defaults: UserDefaults = .standard
+    private static let defaults: UserDefaults = .standard
 
     private static func load<T>(_ key: String, default defaultValue: T) -> T {
         defaults.object(forKey: key) as? T ?? defaultValue
@@ -463,7 +465,7 @@ final class SettingsStore {
 // MARK: - Environment Key
 
 private struct SettingsStoreKey: EnvironmentKey {
-    nonisolated(unsafe) static let defaultValue: SettingsStore = .shared
+    static let defaultValue: SettingsStore = .shared
 }
 
 extension EnvironmentValues {

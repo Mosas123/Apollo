@@ -28,6 +28,13 @@ struct DetectedCrop {
 /// Mutable state shared between the mpv event-loop thread and the main actor.
 /// Guarded by a single mutex; `String?` fields are read cross-thread, which is
 /// the one thing a torn read can actually crash on.
+/// A `@unchecked Sendable` box for non-Sendable handles (`OpaquePointer`, `Thread`)
+/// whose access is serialized by `mpvAccessQueue` or written once and never read.
+private final class SendableBox<Value>: @unchecked Sendable {
+    let value: Value
+    init(_ value: Value) { self.value = value }
+}
+
 private struct MPVSharedState: Sendable {
     var isRunning = false
     var currentVideoId: String?
@@ -61,11 +68,11 @@ final class PlayerController {
         return MPMediaItemArtwork(boundsSize: image.size) { _ in box.image }
     }
 
-    nonisolated(unsafe) private var _mpv: OpaquePointer?
+    nonisolated private var _mpv: SendableBox<OpaquePointer>?
     /// Serial queue for all mpv property read/write calls
     let mpvAccessQueue = DispatchQueue(label: "com.686udjie.PlayerController.mpvAccess")
 
-    nonisolated(unsafe) private var eventLoopThread: Thread?
+    nonisolated private var eventLoopThread: SendableBox<Thread>?
 
     private var lastDetectedCrop: String?
     private var detectedCropRepeatCount = 0
@@ -81,14 +88,14 @@ final class PlayerController {
     /// writes happen on the main actor from `setVideoMode` / `loadFileReplacing`.
     /// Cross-thread access is serialized by the event loop reading these values
     /// synchronously before dispatching work to the main actor.
-    nonisolated(unsafe) var videoModeSwitchInFlight = false
-    nonisolated(unsafe) var loadedMuxedURL: String?
-    nonisolated(unsafe) var loadedVideoOnlyURL: String?
-    nonisolated(unsafe) var voWarmedVideoId: String?
-    nonisolated(unsafe) var muxedActive = false
-    nonisolated(unsafe) var muxedVideoId: String?
-    nonisolated(unsafe) var hasPresentedVideo = false
-    nonisolated(unsafe) var voInitDrawableSize: CGSize = .zero
+    var videoModeSwitchInFlight = false
+    var loadedMuxedURL: String?
+    var loadedVideoOnlyURL: String?
+    var voWarmedVideoId: String?
+    var muxedActive = false
+    var muxedVideoId: String?
+    var hasPresentedVideo = false
+    var voInitDrawableSize: CGSize = .zero
     private var lastGeometryRefreshAt = Date.distantPast
     private var videoAttachTask: Task<Bool, Never>?
     private var videoAttachTaskId: String?
@@ -143,14 +150,14 @@ final class PlayerController {
 
     deinit {
         sharedState.withLock { $0.isRunning = false }
-        if let mpv = _mpv { mpv_wakeup(mpv) }
+        if let box = _mpv { mpv_wakeup(box.value) }
     }
 
     nonisolated func withMpv<T: Sendable>(_ body: @escaping @Sendable (OpaquePointer) -> T) -> T? {
         var result: T?
         mpvAccessQueue.sync {
-            guard let handle = _mpv else { return }
-            result = body(handle)
+            guard let box = _mpv else { return }
+            result = body(box.value)
         }
         return result
     }
@@ -375,7 +382,7 @@ extension PlayerController {
             Self.applyPostInitProperties(mpv)
             Self.applyObservedProperties(mpv)
 
-            self._mpv = mpv
+            self._mpv = SendableBox(mpv)
             Log.player.info("mpv handle published — event loop starting")
 
             Task { @MainActor [weak self] in
@@ -396,7 +403,7 @@ extension PlayerController {
                 self.sharedState.withLock { $0.isRunning = true }
                 self.eventLoop(mpv)
             }
-            self.eventLoopThread = thread
+            self.eventLoopThread = SendableBox(thread)
             thread.name = "com.686udjie.PlayerController.eventLoop"
             thread.start()
         }
