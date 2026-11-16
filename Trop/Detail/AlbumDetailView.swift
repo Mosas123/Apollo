@@ -307,6 +307,7 @@ struct AlbumDetailView: View {
     @State private var pendingRoute: DetailRoute?
     @State private var showMoreSheet = false
     @State private var backdropColors: [Color] = []
+    @State private var descriptionExpanded = false
 
     @Environment(\.dismiss) private var dismiss
 
@@ -393,7 +394,111 @@ struct AlbumDetailView: View {
             } else {
                 songList(for: album)
             }
+
+            if !album.videos.isEmpty {
+                carousel(title: "Music Videos") {
+                    ForEach(Array(album.videos.prefix(12).enumerated()), id: \.offset) { _, video in
+                        videoCard(video)
+                    }
+                }
+            }
+
+            if !album.featuredPlaylists.isEmpty {
+                carousel(title: "Featured On") {
+                    ForEach(Array(album.featuredPlaylists.prefix(12).enumerated()), id: \.offset) { _, playlist in
+                        playlistCard(playlist)
+                    }
+                }
+            }
+
+            if !album.relatedAlbums.isEmpty {
+                carousel(title: "You Might Also Like") {
+                    ForEach(Array(album.relatedAlbums.prefix(12).enumerated()), id: \.offset) { _, related in
+                        albumCard(related)
+                    }
+                }
+            }
         }
+    }
+
+    @ViewBuilder
+    private func carousel<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.title3.bold())
+                .padding(.horizontal, 20)
+                .padding(.top, 24)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 14) {
+                    content()
+                }
+                .padding(.horizontal, 20)
+            }
+        }
+    }
+
+    private func albumCard(_ album: AlbumItem) -> some View {
+        NavigationLink(value: DetailRoute.album(browseId: album.browseId)) {
+            VStack(alignment: .leading, spacing: 6) {
+                AsyncImageView(url: album.thumbnailUrl)
+                    .frame(width: 150, height: 150)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                Text(album.title)
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
+                    .frame(width: 150, alignment: .leading)
+                Text(album.artists.map(\.name).joined(separator: ", "))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(width: 150, alignment: .leading)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func playlistCard(_ playlist: PlaylistItem) -> some View {
+        NavigationLink(value: DetailRoute.playlist(playlistId: playlist.id)) {
+            VStack(alignment: .leading, spacing: 6) {
+                AsyncImageView(url: playlist.thumbnailUrl)
+                    .frame(width: 150, height: 150)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                Text(playlist.title)
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
+                    .frame(width: 150, alignment: .leading)
+                if let author = playlist.author {
+                    Text(author)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(width: 150, alignment: .leading)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func videoCard(_ video: SongItem) -> some View {
+        Button {
+            PlaybackQueue.play([video], log: Log.albumDetail, context: "Music video")
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                AsyncImageView(url: video.thumbnailUrl)
+                    .frame(width: 220, height: 124)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                Text(video.title)
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
+                    .frame(width: 220, alignment: .leading)
+                Text(video.artistNamesDisplay)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(width: 220, alignment: .leading)
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -448,6 +553,25 @@ struct AlbumDetailView: View {
                 onShuffle: { shufflePlay(album) },
                 onMore: { showMoreSheet = true }
             )
+
+            if let description = album.descriptionText, !description.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(description)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(descriptionExpanded ? nil : 3)
+                    Button(descriptionExpanded ? "LESS" : "MORE") {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            descriptionExpanded.toggle()
+                        }
+                    }
+                    .font(.caption.weight(.semibold))
+                    .buttonStyle(.plain)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24)
+                .padding(.top, 4)
+            }
         }
         .padding(.vertical, 16)
         .sheet(isPresented: $showMoreSheet) {
