@@ -340,6 +340,7 @@ final class SettingsStore {
         static let accentName = "settings.accentName"
         static let playerBackgroundStyle = "settings.playerBackgroundStyle"
         static let defaultTab = "settings.defaultTab"
+        static let defaultTabMigrated = "settings.defaultTabMigrated"
         static let lyricsFontSize = "settings.lyricsFontSize"
         static let lyricsAlignment = "settings.lyricsAlignment"
         static let lyricsOffsetSeconds = "settings.lyricsOffsetSeconds"
@@ -400,9 +401,15 @@ final class SettingsStore {
             .color ?? AccentPreset.all[0].color
         accentName = d.string(forKey: Keys.accentName) ?? AccentPreset.all[0].name
         playerBackgroundStyle = Self.loadEnum(Keys.playerBackgroundStyle, default: .dynamic)
-        // Migrated when Explore took index 2 (was Search): stored 2 → 3.
-        let storedTab = Self.load(Keys.defaultTab, default: 0)
-        defaultTab = storedTab == 2 ? 3 : storedTab
+        // One-time migration: when Explore took index 2 (was Search), stored 2 → 3.
+        if !Self.defaults.bool(forKey: Keys.defaultTabMigrated) {
+            let storedTab = Self.load(Keys.defaultTab, default: 0)
+            if storedTab == 2 {
+                Self.defaults.set(3, forKey: Keys.defaultTab)
+            }
+            Self.defaults.set(true, forKey: Keys.defaultTabMigrated)
+        }
+        defaultTab = Self.load(Keys.defaultTab, default: 0)
         lyricsFontSize = Self.load(Keys.lyricsFontSize, default: 17)
         lyricsAlignment = Self.loadEnum(Keys.lyricsAlignment, default: .center)
         lyricsOffsetSeconds = Self.load(Keys.lyricsOffsetSeconds, default: 0)

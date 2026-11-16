@@ -77,7 +77,7 @@ enum PlaybackQueue {
 
     private static func preservingArtists(_ songs: [SongItem], over current: [SongItem]) -> [SongItem] {
         guard !current.isEmpty else { return songs }
-        let existingById = Dictionary(uniqueKeysWithValues: current.map { ($0.videoId, $0) })
+        let existingById = Dictionary(current.map { ($0.videoId, $0) }, uniquingKeysWith: { first, _ in first })
         return songs.map { song in
             guard let old = existingById[song.videoId], old.artists.count > song.artists.count else { return song }
             var merged = song

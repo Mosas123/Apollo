@@ -35,6 +35,7 @@ struct TropApp: App {
             } onChange: {
                 Task { @MainActor in
                     PlayerController.shared.applyPlaybackSettings()
+                    register()
                 }
             }
         }

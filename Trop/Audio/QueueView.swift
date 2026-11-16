@@ -66,7 +66,7 @@ struct QueueView<ProgressSlider: View>: View {
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                     } else {
-                        ForEach(Array(np.queueSongs.enumerated()), id: \.element.videoId) { index, song in
+                        ForEach(Array(np.queueSongs.enumerated()), id: \.offset) { index, song in
                             queueRow(song: song, index: index)
                         }
                         .onMove(perform: np.moveQueueSongs)

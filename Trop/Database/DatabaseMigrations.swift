@@ -203,7 +203,7 @@ enum DatabaseMigrations {
                 try db.alter(table: "downloaded_track") { t in
                     let added = t.add(column: col.name, col.type)
                     if col.notNull {
-                        added.notNull().defaults(to: col.name == "downloaded_at" ? "" : "")
+                        added.notNull().defaults(to: "")
                     }
                 }
             }
@@ -219,9 +219,13 @@ enum DatabaseMigrations {
             try createDownloadedTrackTable(db, named: "downloaded_track_new")
             // Carry over rows that have the columns we need (id + local_path).
             if try db.columns(in: "downloaded_track").contains(where: { $0.name == "local_path" }) {
-                // Use a real ISO8601 timestamp for any row missing downloaded_at,
+                // Use a GRDB-compatible timestamp for any row missing downloaded_at,
                 // so GRDB can decode it back into a Date on fetch.
-                let fallbackDate = ISO8601DateFormatter().string(from: Date())
+                let fallback = DateFormatter()
+                fallback.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+                fallback.locale = Locale(identifier: "en_US_POSIX")
+                fallback.timeZone = TimeZone(secondsFromGMT: 0)
+                let fallbackDate = fallback.string(from: Date())
                 try db.execute(
                     sql: """
                         INSERT INTO downloaded_track_new (id, title, artist, duration, thumbnail_url, local_path, downloaded_at)

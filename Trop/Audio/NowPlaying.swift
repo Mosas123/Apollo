@@ -157,6 +157,7 @@ final class NowPlaying {
         if originalQueue == nil {
             originalQueue = queueSongs
         }
+        guard queueSongs.indices.contains(queueIndex) else { return }
         let prefix = queueIndex > 0 ? Array(queueSongs[0..<queueIndex]) : []
         let current = queueSongs[queueIndex]
         var rest = queueIndex + 1 < queueSongs.count ? Array(queueSongs[(queueIndex + 1)...]) : []
