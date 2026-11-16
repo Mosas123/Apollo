@@ -50,6 +50,12 @@ class LikeStore: ObservableObject {
             } else {
                 try await SyncBridge.mutations.unlikeSong(videoId: videoId)
             }
+            let primaryArtist = song.artists.first?.name ?? song.artistNamesDisplay
+            if target {
+                TasteProfileStore.shared.recordLike(artist: primaryArtist)
+            } else {
+                TasteProfileStore.shared.recordUnlike(artist: primaryArtist)
+            }
             let artist = song.artists.map(\.name).joined(separator: ", ")
             let track = song.title
             if !artist.isEmpty, !track.isEmpty {

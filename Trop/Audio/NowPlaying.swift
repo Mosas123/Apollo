@@ -242,7 +242,13 @@ final class NowPlaying {
     func playNext(automatic: Bool = false) {
         guard hasNext else { return }
         guard !isResolvingNext else { return }
-        if !automatic { lastManualSkipTime = Date() }
+        if !automatic {
+            lastManualSkipTime = Date()
+            let progress = duration > 0 ? currentTime / duration : 0
+            if progress < 0.5 {
+                TasteProfileStore.shared.recordSkip(artist: artist)
+            }
+        }
         queueIndex += 1
         playCurrentSong(logContext: "playNext")
     }
@@ -324,6 +330,7 @@ final class NowPlaying {
             artists: song.artists,
             thumbnailUrl: song.thumbnailUrl
         )
+        TasteProfileStore.shared.recordPlay(artist: song.artists.first?.name ?? song.artistNamesDisplay)
     }
 
     /// Records video availability: the watchable-video verdict comes from
@@ -372,6 +379,7 @@ final class NowPlaying {
             return
         }
         currentTime = duration
+        TasteProfileStore.shared.recordCompletion(artist: artist)
         if let finishedId = videoId,
            duration >= 600 || musicVideoType == "MUSIC_VIDEO_TYPE_PODCAST_EPISODE" {
             Task { await EpisodePlaybackStore.shared.markPlayed(videoId: finishedId) }
@@ -400,8 +408,9 @@ final class NowPlaying {
     /// Refills an AI "Surprise me" session when its queue runs out, asking the
     /// AI for a fresh batch so it keeps choosing based on the listener's taste.
     private func continueSurprise() {
+        let seed = videoId
         Task {
-            let items = await SurpriseMeService.musicQueue(currentVideoId: nil, refreshAI: true)
+            let items = await SurpriseMeService.musicQueue(seedVideoId: seed, refreshAI: true)
             guard !items.isEmpty else {
                 isPlaying = false
                 stopTimer()

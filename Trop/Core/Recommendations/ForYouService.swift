@@ -173,7 +173,10 @@ enum ForYouService {
     }
 
     private static func loadProfile() async -> (artists: [String], liked: [String]) {
-        let artists = (try? await DatabaseService.shared.fetchArtists(limit: 12))?.map(\.name) ?? []
+        var artists = (try? await DatabaseService.shared.fetchArtists(limit: 12))?.map(\.name) ?? []
+        for artist in TasteProfileStore.shared.topArtists(limit: 8) where !artists.contains(artist) {
+            artists.append(artist)
+        }
         let liked = (try? await DatabaseService.shared.fetchAllLikedSongs())?
             .prefix(20)
             .map { "\($0.title) — \($0.artistName ?? "")" } ?? []

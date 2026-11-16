@@ -54,25 +54,87 @@ enum SurpriseMeService {
         return SongItem(entity: pick)
     }
 
-    /// A longer, AI-assisted queue for a "Surprise me" session. AI picks come
-    /// first (so the next songs reflect what it learned), then the library.
-    static func musicQueue(currentVideoId: String?, refreshAI: Bool = false) async -> [SongItem] {
+    /// A longer queue for a "Surprise me" session: AI picks first (when
+    /// configured), then YouTube Music recommendations (radio) from a seed.
+    /// Never just replays the user's library; the AI/radio keeps suggesting.
+    static func musicQueue(
+        seedVideoId: String?,
+        excluding: String? = nil,
+        refreshAI: Bool = false
+    ) async -> [SongItem] {
         var items: [SongItem] = []
         var seen = Set<String>()
 
-        for song in await ForYouService.musicSongs(force: refreshAI) {
-            guard song.videoId != currentVideoId, seen.insert(song.videoId).inserted else { continue }
-            items.append(song)
+        // 1) AI picks, fresh on refill so it keeps learning from the profile.
+        if AIProviderClient.configured() != nil {
+            for song in await ForYouService.musicSongs(force: refreshAI) {
+                guard song.videoId != excluding,
+                      song.videoId != seedVideoId,
+                      seen.insert(song.videoId).inserted else { continue }
+                items.append(song)
+            }
         }
 
-        let liked = (try? await DatabaseService.shared.fetchAllLikedSongs()) ?? []
-        for entity in liked.shuffled() {
-            let song = SongItem(entity: entity)
-            guard song.videoId != currentVideoId, seen.insert(song.videoId).inserted else { continue }
-            items.append(song)
-            if items.count >= 30 { break }
+        // 2) YouTube Music recommendations until ~30 songs.
+        if items.count < 30 {
+            for seed in await radioSeeds(preferred: seedVideoId, excluding: excluding) {
+                guard MusicPlaybackIdentity.isYouTube(seed),
+                      let radio = try? await PersonalizationService.shared.fetchRadio(videoId: seed) else { continue }
+                for song in radio.songs {
+                    guard song.videoId != excluding,
+                          song.videoId != seed,
+                          MusicPlaybackIdentity.isYouTube(song.videoId),
+                          seen.insert(song.videoId).inserted else { continue }
+                    items.append(song)
+                    if items.count >= 30 { break }
+                }
+                if items.count >= 30 { break }
+            }
         }
+
+        // 3) Last resort: songs by the listener's learned top artists.
+        if items.count < 8 {
+            for artist in TasteProfileStore.shared.topArtists(limit: 4) {
+                guard let raw = try? await SearchService.shared.search(query: artist) else { continue }
+                let songs = SearchParser.parseSearchResults(from: raw)
+                    .flatMap(\.items)
+                    .compactMap { item -> SongItem? in
+                        if case .song(let song) = item { return song }
+                        return nil
+                    }
+                for song in songs where song.videoId != excluding && song.videoId != seedVideoId {
+                    guard seen.insert(song.videoId).inserted else { continue }
+                    items.append(song)
+                    if items.count >= 15 { break }
+                }
+                if items.count >= 15 { break }
+            }
+        }
+
         return items
+    }
+
+    /// Top-played and liked songs act as radio seeds (not as the queue itself).
+    private static func radioSeeds(preferred: String?, excluding: String?) async -> [String] {
+        var seeds: [String] = []
+        if let preferred, preferred != excluding, MusicPlaybackIdentity.isYouTube(preferred) {
+            seeds.append(preferred)
+        }
+        if seeds.count < 2 {
+            let top = (try? await DatabaseService.shared.fetchTopSongs(limit: 10)) ?? []
+            for song in top.shuffled() where MusicPlaybackIdentity.isYouTube(song.id) {
+                if !seeds.contains(song.id) { seeds.append(song.id) }
+                if seeds.count >= 2 { break }
+            }
+        }
+        if seeds.count < 2 {
+            let liked = (try? await DatabaseService.shared.fetchAllLikedSongs()) ?? []
+            for entity in liked.shuffled() where MusicPlaybackIdentity.isYouTube(entity.id) {
+                if !seeds.contains(entity.id) { seeds.append(entity.id) }
+                if seeds.count >= 2 { break }
+            }
+        }
+        return Array(seeds.prefix(2))
     }
 
     /// All episodes available in the current sections, deduped.

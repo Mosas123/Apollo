@@ -359,7 +359,7 @@ struct HomeScreenView: View {
             // "All" surprises with music only, as requested. Starts a longer
             // AI-assisted queue; the AI keeps refilling it as it plays.
             Task {
-                let items = await SurpriseMeService.musicQueue(currentVideoId: NowPlaying.shared.videoId)
+                let items = await SurpriseMeService.musicQueue(seedVideoId: NowPlaying.shared.videoId)
                 guard !items.isEmpty, let start = items.indices.randomElement() else { return }
                 PlaybackQueue.play(items, startIndex: start, log: Log.homeScreenView, context: "Surprise music")
                 NowPlaying.shared.isSurpriseSession = true
