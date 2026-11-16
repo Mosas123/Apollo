@@ -1,0 +1,20 @@
+name: Music Addon Manager Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Core/MusicAddons/**"
+      - "Trop/Settings/MusicAddonsSettingsView.swift"
+      - "Trop/Settings/IntegrationsSettingsView.swift"
+      - "tests/MusicAddons/MusicAddonManagerChecks.swift"
+      - "scripts/test-music-addon-manager.sh"
+      - ".github/workflows/music-addon-manager-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate addon manager ordering, state and approval rules
+        run: bash scripts/test-music-addon-manager.sh

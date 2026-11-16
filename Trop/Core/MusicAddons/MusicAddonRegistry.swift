@@ -47,6 +47,15 @@ struct MusicAddonRegistry: Sendable {
         installations[index].isEnabled = enabled
     }
 
+    /// Reorder only; no provider requests and no capability changes.
+    mutating func move(from source: Int, to target: Int) {
+        guard installations.indices.contains(source),
+              installations.indices.contains(target),
+              source != target else { return }
+        let entry = installations.remove(at: source)
+        installations.insert(entry, at: target)
+    }
+
     mutating func remove(key: String) throws {
         guard let index = installations.firstIndex(where: { $0.key == key }) else {
             throw MusicAddonError.notInstalled

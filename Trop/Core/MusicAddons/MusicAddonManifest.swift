@@ -130,6 +130,12 @@ struct MusicAddonPackage: Sendable {
         }
     }
 
+    /// Preflight validation must run *before* any network request.
+    /// The package is fully validated again after download.
+    static func validatedManifestURL(_ url: URL) -> URL? {
+        canonicalManifestURL(url)
+    }
+
     private static func canonicalManifestURL(_ url: URL) -> URL? {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               components.scheme?.lowercased() == "https",
