@@ -365,7 +365,7 @@ struct ArtistDetailView: View {
 
             Spacer(minLength: 0)
 
-            topBarCopyLinkButton
+            topBarMenuButton
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -389,14 +389,35 @@ struct ArtistDetailView: View {
         )
     }
 
-    private var topBarCopyLinkButton: some View {
-        topBarCircleButton(
-            systemName: linkCopied ? "checkmark" : "link",
-            fadedColor: linkCopied ? Color.accentColor : .primary,
-            accessibilityLabel: linkCopied ? "Artist link copied" : "Copy artist link",
-            action: { copyArtistLink() }
-        )
+    private var topBarMenuButton: some View {
+        Menu {
+            if let artist = viewModel.artist,
+               let url = URL(string: "https://music.youtube.com/channel/\(artist.browseId)") {
+                ShareLink(item: url) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+            }
+            Button { copyArtistLink() } label: {
+                Label(linkCopied ? "Link Copied" : "Copy Link",
+                      systemImage: linkCopied ? "checkmark" : "link")
+            }
+        } label: {
+            ZStack {
+                Image(systemName: "ellipsis")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
+                    .opacity(1 - barProgress)
+                Image(systemName: "ellipsis")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .opacity(barProgress)
+            }
+            .frame(width: 40, height: 40)
+            .contentShape(Rectangle())
+        }
         .disabled(viewModel.artist == nil)
+        .accessibilityLabel("Artist options")
     }
 
     /// Round top-bar button matching the back chevron: white with shadow over
@@ -443,6 +464,10 @@ struct ArtistDetailView: View {
     private func artistContent(for artist: ArtistDetailInfo) -> some View {
         LazyVStack(spacing: 0) {
             header(for: artist)
+
+            if let featured = artist.albums.first {
+                featuredAlbumCard(featured)
+            }
 
             if !artist.songs.isEmpty {
                 songsSection(songs: artist.songs)
@@ -693,6 +718,56 @@ struct ArtistDetailView: View {
                 .padding(.horizontal, 16)
         }
         .padding(.vertical, 16)
+    }
+
+    private func featuredAlbumCard(_ album: AlbumItem) -> some View {
+        HStack(spacing: 12) {
+            NavigationLink(value: DetailRoute.album(browseId: album.browseId)) {
+                HStack(spacing: 12) {
+                    AsyncImageView(url: album.thumbnailUrl)
+                        .frame(width: 64, height: 64)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Featured Album")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(album.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        Text(featuredSubtitle(album))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 8)
+                }
+            }
+            .buttonStyle(.plain)
+
+            Button { AlbumActions.toggleSave(album) } label: {
+                Image(systemName: "plus")
+                    .font(.title3.weight(.semibold))
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(.quaternary))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Save album")
+        }
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+    }
+
+    private func featuredSubtitle(_ album: AlbumItem) -> String {
+        var parts: [String] = []
+        let artists = album.artists.map(\.name).joined(separator: ", ")
+        if !artists.isEmpty { parts.append(artists) }
+        if let year = album.year { parts.append(String(year)) }
+        return parts.joined(separator: " · ")
     }
 
     @ViewBuilder
