@@ -37,7 +37,7 @@ struct ContentView: View {
                 }
             }
 
-            Tab("Search", systemImage: "magnifyingglass", value: 3, role: .search) {
+            Tab("Search", systemImage: "magnifyingglass", value: 3) {
                 SearchView()
             }
         }
