@@ -245,6 +245,7 @@ struct FullPlayerView: View {
                     .detailRouteSheet(item: $pendingRoute)
             )
         }
+        .preferredColorScheme(.dark)
     }
 
     // MARK: - Go to album/artist
