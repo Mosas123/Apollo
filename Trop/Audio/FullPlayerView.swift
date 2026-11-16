@@ -181,7 +181,12 @@ struct FullPlayerView: View {
                         )
                         .scaleEffect(isCompact ? 0.92 : 1)
 
-                        Color.clear.frame(height: isCompact ? 2 : 8)
+                        // The card/background is full-bleed, but the content must
+                        // clear the home indicator (safe area), per Apple's
+                        // guidance: backgrounds ignore it, content respects it.
+                        Color.clear.frame(
+                            height: max(isCompact ? 2 : 8, geometry.safeAreaInsets.bottom)
+                        )
                     }
                 }
                 .frame(maxWidth: .infinity)
