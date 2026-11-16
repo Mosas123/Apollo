@@ -15,6 +15,14 @@ struct LyricsSettingsView: View {
 
         List {
             Section {
+                Toggle(isOn: $settings.lyricsEnabled) {
+                    Label("Lyrics", systemImage: "music.quote")
+                }
+            } footer: {
+                Text("When off, lyrics are not fetched or shown in the player.")
+            }
+
+            Section {
                 ForEach(LyricsProviderRegistry.all, id: \.id) { provider in
                     Toggle(isOn: Binding(
                         get: { !settings.disabledLyricsProviders.contains(provider.id) },

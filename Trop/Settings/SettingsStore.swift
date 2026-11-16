@@ -190,6 +190,11 @@ final class SettingsStore {
         didSet { Self.defaults.set(romanizeCurrentTrack, forKey: Keys.romanizeCurrentTrack) }
     }
 
+    /// Master switch: when off, lyrics are not fetched or shown anywhere.
+    var lyricsEnabled: Bool {
+        didSet { Self.defaults.set(lyricsEnabled, forKey: Keys.lyricsEnabled) }
+    }
+
     // MARK: - Playback
 
     var equalizerEnabled: Bool {
@@ -346,6 +351,7 @@ final class SettingsStore {
         static let lyricsOffsetSeconds = "settings.lyricsOffsetSeconds"
         static let showIntervalIndicator = "settings.showIntervalIndicator"
         static let romanizeCurrentTrack = "settings.romanizeCurrentTrack"
+        static let lyricsEnabled = "settings.lyricsEnabled"
         static let equalizerEnabled = "settings.equalizerEnabled"
         static let equalizerPresetID = "settings.equalizerPresetID"
         static let equalizerGains = "settings.equalizerGains"
@@ -415,6 +421,7 @@ final class SettingsStore {
         lyricsOffsetSeconds = Self.load(Keys.lyricsOffsetSeconds, default: 0)
         showIntervalIndicator = Self.load(Keys.showIntervalIndicator, default: true)
         romanizeCurrentTrack = Self.load(Keys.romanizeCurrentTrack, default: true)
+        lyricsEnabled = Self.load(Keys.lyricsEnabled, default: true)
         equalizerEnabled = Self.load(Keys.equalizerEnabled, default: false)
         equalizerPresetID = Self.loadString(Keys.equalizerPresetID, default: "flat")
         if let saved = d.array(forKey: Keys.equalizerGains) as? [Double], saved.count == equalizerFrequencies.count {

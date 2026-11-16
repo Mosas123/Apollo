@@ -288,12 +288,17 @@ struct FullPlayerView: View {
     // MARK: - Player Content
 
     private func preloadLyrics() {
+        guard settings.lyricsEnabled else { return }
         guard let id = np.videoId else { return }
         let upcoming = np.upcomingSongs(prefixLimit: 3).map(\.videoId)
         Task { await LyricsService.shared.preload(videoId: id, upcoming: upcoming) }
     }
 
     private func loadCurrentLyrics() async {
+        guard settings.lyricsEnabled else {
+            currentLyrics = []
+            return
+        }
         guard let videoId = np.videoId else {
             currentLyrics = []
             return
