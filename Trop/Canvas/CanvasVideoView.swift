@@ -150,14 +150,16 @@ private final class CanvasPlayerUIView: UIView {
     }
 }
 
-/// Owns the queue player + looper for one clip URL. Torn down with the view.
-@MainActor
+/// A `Sendable` box for a `NotificationCenter` observer token, so the
+/// `deinit` (which is nonisolated) can remove it without crossing isolation.
 private final class ObserverToken: @unchecked Sendable {
     let token: NSObjectProtocol
     init(_ token: NSObjectProtocol) { self.token = token }
 }
 
-private final class Coordinator: @unchecked Sendable {
+/// Owns the queue player + looper for one clip URL. Torn down with the view.
+@MainActor
+private final class Coordinator {
     private weak var view: CanvasPlayerUIView?
     private var player: AVQueuePlayer?
     private var readyObservation: NSKeyValueObservation?
