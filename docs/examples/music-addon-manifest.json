@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "demo.music",
+  "name": "Example Music Provider",
+  "version": "1.0.0",
+  "description": "Documentation-only example. Not a live audio service.",
+  "capabilities": [
+    "search",
+    "lyrics"
+  ],
+  "endpoints": {
+    "search": "/v1/search",
+    "lyrics": "/v1/lyrics"
+  }
+}
