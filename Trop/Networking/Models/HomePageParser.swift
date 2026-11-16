@@ -45,8 +45,10 @@ extension HomePageParser {
             guard let chipRenderer = chipDict["chipCloudChipRenderer"] as? [String: Any] else { return nil }
             let title = InnerTubeJSON.runsText(chipRenderer["text"] as? [String: Any]) ?? ""
             let nav = chipRenderer["navigationEndpoint"] as? [String: Any]
-            let params = (nav?["browseEndpoint"] as? [String: Any])?["params"] as? String
-            return HomePage.Chip(title: title, params: params)
+            let browse = nav?["browseEndpoint"] as? [String: Any]
+            let params = browse?["params"] as? String
+            let browseId = browse?["browseId"] as? String
+            return HomePage.Chip(title: title, params: params, browseId: browseId)
         }
     }
 }

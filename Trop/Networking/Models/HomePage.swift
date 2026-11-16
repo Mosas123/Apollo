@@ -15,6 +15,7 @@ struct HomePage {
     struct Chip: Hashable {
         var title: String
         var params: String?
+        var browseId: String?
     }
 
     struct Section {

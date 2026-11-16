@@ -101,10 +101,12 @@ actor PlaybackManager {
 
     private func playNetworkResult(_ result: PlaybackResult, videoId: String) async {
         let queueSong = await queueSong(for: videoId)
+        let artistName = queueSong.map { artistDisplayString(from: $0.artists) } ?? result.author ?? ""
+        let rawTitle = queueSong?.title ?? result.title ?? ""
         await PlayerController.shared.play(
             url: result.streamUrl,
-            title: result.title,
-            artist: result.author,
+            title: cleanedTitle(rawTitle, artist: artistName),
+            artist: artistName,
             videoId: videoId,
             duration: result.duration.flatMap { $0 > 0 ? TimeInterval($0) : nil },
             artists: queueSong?.artists ?? [],
@@ -121,6 +123,23 @@ actor PlaybackManager {
     /// Queue song for resolve-time metadata (artists, artwork, video type).
     /// One MainActor hop instead of one per field, so the snapshot is
     /// consistent even if the queue changes mid-resolve.
+    /// Strips a leading/trailing "Artist - " that YouTube titles often carry so
+    /// the player shows just the song name.
+    private func cleanedTitle(_ title: String, artist: String) -> String {
+        var text = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return text }
+        let lower = text.lowercased()
+        let suffix = " - \(name)".lowercased()
+        let prefix = "\(name) - ".lowercased()
+        if lower.hasSuffix(suffix) {
+            text = String(text.dropLast(suffix.count))
+        } else if lower.hasPrefix(prefix) {
+            text = String(text.dropFirst(prefix.count))
+        }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private func queueSong(for videoId: String) async -> SongItem? {
         await MainActor.run {
             NowPlaying.shared.queueSongs.first { $0.videoId == videoId }

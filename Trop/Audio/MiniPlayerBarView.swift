@@ -66,7 +66,11 @@ struct MiniPlayerBarView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            pagingArea
+            if isDetached {
+                detachedNowPlaying
+            } else {
+                pagingArea
+            }
             playPauseButton
                 .padding(.trailing, 16)
         }
@@ -198,6 +202,52 @@ struct MiniPlayerBarView: View {
     private var currentSong: SongItem? {
         guard np.queueSongs.indices.contains(np.queueIndex) else { return nil }
         return np.queueSongs[np.queueIndex]
+    }
+
+    /// True when the current playback isn't backed by the queue (e.g. internet
+    /// radio), so the bar must read live NowPlaying data instead of queueSongs.
+    private var isDetached: Bool {
+        guard let videoId = np.videoId else { return false }
+        guard let current = currentSong else { return true }
+        return current.videoId != videoId
+    }
+
+    private var detachedNowPlaying: some View {
+        HStack(spacing: 8) {
+            ZStack {
+                if let image = np.thumbnailUIImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Color.white.opacity(0.12)
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.system(size: 14))
+                        .foregroundStyle(titleColor.opacity(0.6))
+                }
+            }
+            .frame(width: artworkSize, height: artworkSize)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text(np.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .foregroundStyle(titleColor)
+                Text(np.displayArtist)
+                    .font(.system(size: 12, weight: .regular))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .foregroundStyle(artistColor)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onTapGesture { onExpand() }
     }
 
     private var prevSong: SongItem? {

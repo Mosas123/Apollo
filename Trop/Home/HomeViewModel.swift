@@ -272,7 +272,7 @@ final class HomeViewModel {
         cleanup.chipTask = Task {
             do {
                 let json = try await InnerTubeClient.tropShared.browse(
-                    browseId: "FEmusic_home",
+                    browseId: chip?.browseId ?? "FEmusic_home",
                     params: chip?.params
                 ).value
                 guard !Task.isCancelled, generation == loadGeneration else { return }
