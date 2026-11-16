@@ -7,6 +7,7 @@
 
 import Combine
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     @Environment(SettingsStore.self) private var settings
