@@ -52,11 +52,6 @@ jobs:
           restore-keys: |
             trop-dd-${{ runner.os }}-
 
-      - name: Configure git credentials for private packages
-        run: |
-          echo "machine github.com login ${{ github.actor }} password ${{ secrets.THRUMTUBE_PAT }}" > ~/.netrc
-          chmod 600 ~/.netrc
-
       - name: Make build script executable
         run: chmod +x ./build_ipa.sh
 

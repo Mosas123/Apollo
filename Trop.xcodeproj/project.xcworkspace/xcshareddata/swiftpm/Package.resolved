@@ -36,15 +36,6 @@
         "revision" : "83e19143355b02e9261edb2323b3e1e93287ebb9",
         "version" : "12.9.0"
       }
-    },
-    {
-      "identity" : "swiftytube",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/Mosas123/ThrumTube.git",
-      "state" : {
-        "revision" : "4320e7033eb53085f556c07ea50082915eb80b8a",
-        "version" : "0.0.9"
-      }
     }
   ],
   "version" : 3

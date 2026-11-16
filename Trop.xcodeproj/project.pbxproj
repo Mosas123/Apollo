@@ -211,7 +211,7 @@
 				14B578DA2FF20000006B3990 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
 				14B578DD2FF20DCC006B3990 /* XCRemoteSwiftPackageReference "Nuke" */,
 				14B578E32FF20DCF006B3990 /* XCRemoteSwiftPackageReference "Marquee" */,
-				14B578F12FF21000006B3990 /* XCRemoteSwiftPackageReference "SwiftyTube" */,
+				14B578F12FF21000006B3990 /* XCLocalSwiftPackageReference "ThrumTube" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 14B576302FF190EF006B3990 /* Products */;
@@ -525,13 +525,9 @@
 				minimumVersion = 0.3.0;
 			};
 		};
-		14B578F12FF21000006B3990 /* XCRemoteSwiftPackageReference "SwiftyTube" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/Mosas123/ThrumTube.git";
-			requirement = {
-				kind = exactVersion;
-				version = 0.0.9;
-			};
+		14B578F12FF21000006B3990 /* XCLocalSwiftPackageReference "ThrumTube" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ThrumTube;
 		};
 /* End XCRemoteSwiftPackageReference section */
 
@@ -558,7 +554,7 @@
 		};
 		14B578F22FF21001006B3990 /* SwiftyTube */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 14B578F12FF21000006B3990 /* XCRemoteSwiftPackageReference "SwiftyTube" */;
+			package = 14B578F12FF21000006B3990 /* XCLocalSwiftPackageReference "ThrumTube" */;
 			productName = SwiftyTube;
 		};
 /* End XCSwiftPackageProductDependency section */
