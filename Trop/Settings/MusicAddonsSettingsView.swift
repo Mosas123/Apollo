@@ -43,50 +43,7 @@ struct MusicAddonsSettingsView: View {
             await accountState.restoreSession()
         }
         .sheet(item: $pendingInstall) { candidate in
-            NavigationStack {
-                Form {
-                    Section("Provider") {
-                        LabeledContent("Name", value: candidate.package.manifest.name)
-                        LabeledContent("Version", value: candidate.package.manifest.version)
-                        Text(candidate.package.manifest.description ?? "No description provided.")
-                            .foregroundStyle(.secondary)
-                    }
-                    Section("Requested capabilities") {
-                        ForEach(candidate.package.manifest.capabilities, id: \.self) { capability in
-                            Label(capabilityTitle(capability), systemImage: capabilityIcon(capability))
-                        }
-                    } footer: {
-                        Text("Review this provider before installing. It will start disabled.")
-                    }
-                    Section("Manifest address") {
-                        Text(candidate.package.manifestURL.absoluteString)
-                            .font(.caption)
-                            .textSelection(.enabled)
-                    }
-                }
-                .navigationTitle("Review Addon")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { pendingInstall = nil }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Install Disabled") {
-                            do {
-                                try addonStore.install(
-                                    candidate.data, from: candidate.package.manifestURL
-                                )
-                                pendingInstall = nil
-                                manifestURL = ""
-                            } catch {
-                                pendingInstall = nil
-                                show(error.localizedDescription)
-                            }
-                        }
-                    }
-                }
-            }
-            .presentationDetents([.medium, .large])
+            reviewSheet(for: candidate)
         }
         .confirmationDialog(
             "Remove this music addon?",
@@ -111,6 +68,58 @@ struct MusicAddonsSettingsView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(message ?? "Unable to complete this action.")
+        }
+    }
+
+    private func reviewSheet(for candidate: PendingInstall) -> some View {
+        let manifest = candidate.package.manifest
+        return NavigationStack {
+            Form {
+                Section("Provider") {
+                    LabeledContent("Name", value: manifest.name)
+                    LabeledContent("Version", value: manifest.version)
+                    Text(manifest.description ?? "No description provided.")
+                        .foregroundStyle(.secondary)
+                }
+                Section {
+                    ForEach(manifest.capabilities, id: \.self) { capability in
+                        Label(capabilityTitle(capability), systemImage: capabilityIcon(capability))
+                    }
+                } header: {
+                    Text("Requested capabilities")
+                } footer: {
+                    Text("Review this provider before installing. It will start disabled.")
+                }
+                Section("Manifest address") {
+                    Text(candidate.package.manifestURL.absoluteString)
+                        .font(.caption)
+                        .textSelection(.enabled)
+                }
+            }
+            .navigationTitle("Review Addon")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { pendingInstall = nil }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Install Disabled") {
+                        install(candidate)
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func install(_ candidate: PendingInstall) {
+        do {
+            try addonStore.install(candidate.data, from: candidate.package.manifestURL)
+            pendingInstall = nil
+            manifestURL = ""
+        } catch {
+            pendingInstall = nil
+            show(error.localizedDescription)
         }
     }
 
