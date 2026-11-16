@@ -161,6 +161,8 @@ struct LibraryView: View {
             rowDivider
             libraryRow(icon: "music.note", title: "Songs", route: .autoPlaylist(.likedSongs))
             rowDivider
+            libraryRow(icon: "antenna.radiowaves.left.and.right", title: "Podcasts", route: .libraryPodcasts)
+            rowDivider
             libraryRow(icon: "arrow.down.circle", title: "Downloaded", route: .downloads)
         }
         .padding(.vertical, 4)

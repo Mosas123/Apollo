@@ -5,12 +5,14 @@ enum LibraryListKind: Equatable {
     case playlists
     case artists
     case albums
+    case podcasts
 
     var title: String {
         switch self {
         case .playlists: return "Playlists"
         case .artists: return "Artists"
         case .albums: return "Albums"
+        case .podcasts: return "Podcasts"
         }
     }
 }
@@ -24,6 +26,7 @@ struct LibraryListScreen: View {
     @State private var playlists: [PlaylistEntity] = []
     @State private var artists: [ArtistEntity] = []
     @State private var albums: [AlbumEntity] = []
+    @State private var podcasts: [PodcastEntity] = []
     @State private var isLoading = true
     @State private var showCreateDialog = false
     @State private var playlistToDelete: PlaylistEntity?
@@ -76,6 +79,13 @@ struct LibraryListScreen: View {
                             title: album.title,
                             subtitle: album.songCount > 0 ? "\(album.songCount) songs" : nil
                         )
+                    }
+                }
+
+            case .podcasts:
+                ForEach(podcasts, id: \.id) { podcast in
+                    NavigationLink(value: DetailRoute.podcast(browseId: podcast.id)) {
+                        artworkRow(image: podcast.thumbnailUrl, title: podcast.name, subtitle: nil)
                     }
                 }
             }
@@ -176,6 +186,8 @@ struct LibraryListScreen: View {
                 )
             case .albums:
                 albums = try await DatabaseService.shared.fetchAllAlbums()
+            case .podcasts:
+                podcasts = try await DatabaseService.shared.fetchAllPodcasts()
             }
             isLoading = false
         } catch {

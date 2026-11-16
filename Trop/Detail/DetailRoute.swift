@@ -24,6 +24,7 @@ enum DetailRoute: Hashable, Identifiable {
         case .libraryPlaylists: return "library_playlists"
         case .libraryArtists: return "library_artists"
         case .libraryAlbums: return "library_albums"
+        case .libraryPodcasts: return "library_podcasts"
         }
     }
 
@@ -38,6 +39,7 @@ enum DetailRoute: Hashable, Identifiable {
     case libraryPlaylists
     case libraryArtists
     case libraryAlbums
+    case libraryPodcasts
 }
 
 /// Shared view resolving a `DetailRoute` to its target destination view.
@@ -68,6 +70,8 @@ struct DetailRouteDestinationView: View {
             LibraryListScreen(kind: .artists)
         case .libraryAlbums:
             LibraryListScreen(kind: .albums)
+        case .libraryPodcasts:
+            LibraryListScreen(kind: .podcasts)
         }
     }
 }
