@@ -8,6 +8,7 @@
 @preconcurrency import SwiftyTube
 import Nuke
 import SwiftUI
+import UIKit
 
 // MARK: - View Model
 
@@ -274,6 +275,8 @@ struct ArtistDetailView: View {
 
     @State private var scrollOffset: CGFloat = 0
     @State private var linkCopied = false
+    @State private var showInfo = false
+    @State private var backdropColors: [Color] = []
     @State private var linkResetTask: Task<Void, Never>?
 
     private static let barFadeStart: CGFloat = 80
@@ -312,12 +315,21 @@ struct ArtistDetailView: View {
             )
             .ignoresSafeArea(edges: .top)
             .toolbar(.hidden, for: .navigationBar)
+            .background(artistBackdrop)
             .task {
                 guard viewModel.isLoading else { return }
                 await viewModel.load()
             }
+            .task(id: viewModel.artist?.thumbnailUrl) {
+                await loadBackdrop(for: viewModel.artist?.thumbnailUrl)
+            }
 
             customTopBar
+        }
+        .sheet(isPresented: $showInfo) {
+            if let artist = viewModel.artist {
+                artistInfoSheet(for: artist)
+            }
         }
         .onDisappear { linkResetTask?.cancel() }
     }
@@ -470,7 +482,7 @@ struct ArtistDetailView: View {
             GeometryReader { proxy in
                 headerBanner(for: artist, size: proxy.size)
             }
-            .aspectRatio(1, contentMode: .fit)
+            .aspectRatio(0.85, contentMode: .fit)
             .accessibilityElement(children: .contain)
         }
     }
@@ -478,7 +490,7 @@ struct ArtistDetailView: View {
     private static let iPadBannerHeight: CGFloat = 400
 
     private func headerBanner(for artist: ArtistDetailInfo, size: CGSize) -> some View {
-        ZStack(alignment: .bottomLeading) {
+        ZStack(alignment: .bottom) {
             Color(.systemGray5)
 
             AsyncImageView(
@@ -488,72 +500,132 @@ struct ArtistDetailView: View {
             .frame(width: size.width, height: size.height)
             .clipped()
 
+            // Fades the photo into the artist's dominant color so the page reads
+            // as one surface (Apple Music artist page).
             LinearGradient(
-                colors: [.clear, .black.opacity(0.18), .black.opacity(0.78)],
+                colors: [.clear, backdropColor.opacity(0.35), backdropColor],
                 startPoint: .center,
                 endPoint: .bottom
             )
 
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(spacing: 16) {
                 Text(artist.name)
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .font(.system(size: 34, weight: .bold))
                     .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
                     .lineLimit(2)
-                    .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
+                    .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
 
-                if let subText = artist.subscriberCountText, !subText.isEmpty {
-                    Text(subscriberLabel(for: subText))
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.88))
-                        .lineLimit(1)
-                }
+                HStack(spacing: 28) {
+                    Button { showInfo = true } label: {
+                        Image(systemName: "info")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 48, height: 48)
+                            .background(Circle().fill(.white.opacity(0.22)))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Artist info")
 
-                HStack(spacing: 12) {
-                    Button(action: { playArtist(artist) }, label: {
+                    Button { playArtist(artist) } label: {
                         Image(systemName: "play.fill")
-                            .font(.title3.weight(.bold))
+                            .font(.system(size: 28, weight: .bold))
                             .foregroundStyle(.black)
-                            .frame(width: 52, height: 52)
+                            .frame(width: 70, height: 70)
                             .background(Circle().fill(.white))
-                    })
+                    }
                     .buttonStyle(.plain)
                     .disabled(artist.songs.isEmpty)
                     .accessibilityLabel("Play artist")
 
-                    Button(action: { shufflePlay(artist) }, label: {
-                        Image(systemName: "shuffle")
-                            .font(.title3.weight(.bold))
+                    Button { toggleSubscribe(artist) } label: {
+                        Image(systemName: artist.isSubscribed ? "star.fill" : "star")
+                            .font(.title3.weight(.semibold))
                             .foregroundStyle(.white)
-                            .frame(width: 52, height: 52)
-                            .glassEffect(in: Circle())
-                    })
+                            .frame(width: 48, height: 48)
+                            .background(Circle().fill(.white.opacity(0.22)))
+                    }
                     .buttonStyle(.plain)
-                    .disabled(artist.songs.isEmpty)
-                    .accessibilityLabel("Shuffle artist")
+                    .accessibilityLabel(artist.isSubscribed ? "Unfollow artist" : "Follow artist")
+                }
 
-                    Spacer(minLength: 0)
-
-                    Button(action: { toggleSubscribe(artist) }, label: {
-                        Text(artist.isSubscribed ? "Subscribed" : "Subscribe")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(artist.isSubscribed ? Color.white : Color.black)
-                            .padding(.horizontal, 20)
-                            .frame(height: 44)
-                            .background(
-                                Capsule()
-                                    .fill(artist.isSubscribed ? Color.clear : Color.white)
-                            )
-                            .overlay(
-                                Capsule()
-                                    .stroke(.white, lineWidth: artist.isSubscribed ? 1.5 : 0)
-                            )
-                    })
-                    .buttonStyle(.plain)
+                if let subText = artist.subscriberCountText, !subText.isEmpty {
+                    Text(subscriberLabel(for: subText))
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.8))
                 }
             }
-            .padding(.horizontal, horizontalSizeClass == .regular ? 32 : 20)
-            .padding(.bottom, 24)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
         }
+    }
+
+    private var backdropColor: Color {
+        backdropColors.first ?? Color(.systemGray)
+    }
+
+    private var artistBackdrop: some View {
+        LinearGradient(
+            colors: [backdropColor.opacity(0.55), Color(.systemBackground)],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+
+    private func loadBackdrop(for urlString: String?) async {
+        guard let urlString, let url = URL(string: urlString) else { return }
+        guard let (data, _) = try? await URLSession.shared.data(from: url),
+              let image = UIImage(data: data) else { return }
+        let colors = image.extractDominantColors()
+        withAnimation(.easeInOut(duration: 0.4)) {
+            backdropColors = colors
+        }
+    }
+
+    private func artistInfoSheet(for artist: ArtistDetailInfo) -> some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    AsyncImageView(url: artist.thumbnailUrl, contentMode: .fill)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 340)
+                        .clipped()
+
+                    Text(artist.name)
+                        .font(.largeTitle.bold())
+                        .padding(.horizontal, 20)
+
+                    if let subText = artist.subscriberCountText, !subText.isEmpty {
+                        Text(subscriberLabel(for: subText))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 20)
+                    }
+
+                    if let description = artist.descriptionText, !description.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("About")
+                                .font(.title3.bold())
+                            Text(description)
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 20)
+                    }
+                }
+                .padding(.bottom, 28)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { showInfo = false } label: {
+                        Image(systemName: "xmark")
+                    }
+                }
+            }
+        }
+        .presentationDetents([.large])
     }
 
     private func subscriberLabel(for count: String) -> String {
@@ -583,11 +655,15 @@ struct ArtistDetailView: View {
     @ViewBuilder
     private func songsSection(songs: [SongItem]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(LocalizedStringKey("Songs"))
-                .font(.title2)
-                .fontWeight(.bold)
-                .padding(.horizontal, 16)
-                .padding(.top, 20)
+            HStack(spacing: 6) {
+                Text("Top Songs")
+                    .font(.title3.weight(.bold))
+                Image(systemName: "chevron.right")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 24)
 
             ForEach(Array(songs.enumerated()), id: \.offset) { index, song in
                                 Button(action: { playSong(song) }, label: {
