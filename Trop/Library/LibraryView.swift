@@ -76,19 +76,6 @@ struct LibraryView: View {
             .frame(maxHeight: .infinity, alignment: .top)
             .toolbar(.hidden, for: .navigationBar)
             .detailRouteDestinations()
-            .overlay(alignment: .bottomTrailing) {
-                                Button(action: { showCreateDialog = true }, label: {
-                    Image(systemName: "plus")
-                        .font(.title2.weight(.semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 56, height: 56)
-                        .background(Circle().fill(settings.accentColor))
-                        .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
-                })
-                .accessibilityLabel("Create playlist")
-                .padding(.trailing, 20)
-                .padding(.bottom, 20)
-            }
             .overlay {
                 if showCreateDialog {
                     CreatePlaylistDialog(
@@ -151,31 +138,103 @@ struct LibraryView: View {
 
     // MARK: - Feed Content
 
-    @ViewBuilder
     private var feedContent: some View {
         ScrollView {
-            LazyVStack(spacing: 0) {
-                filterBar
-
-                switch selectedFilter {
-                case .playlists:
-                    playlistsSection
-                case .albums:
-                    if !albums.isEmpty { albumsSection }
-                case .artists:
-                    if !artists.isEmpty { artistsSection }
-                case .podcasts:
-                    if !podcasts.isEmpty { podcastsSection }
-                case nil:
-                    playlistsSection
-                    if !albums.isEmpty { albumsSection }
-                    if !artists.isEmpty { artistsSection }
-                    if !podcasts.isEmpty { podcastsSection }
-                }
+            VStack(alignment: .leading, spacing: 0) {
+                libraryRowList
+                recentlyAddedSection
             }
+            .padding(.bottom, 28)
         }
         .scrollIndicators(.automatic)
         .miniPlayerTracksScroll()
+    }
+
+    /// Simple grouped list of library destinations, Apple Music style.
+    private var libraryRowList: some View {
+        VStack(spacing: 0) {
+            libraryRow(icon: "music.note.list", title: "Playlists", route: .libraryPlaylists)
+            rowDivider
+            libraryRow(icon: "music.mic", title: "Artists", route: .libraryArtists)
+            rowDivider
+            libraryRow(icon: "square.stack", title: "Albums", route: .libraryAlbums)
+            rowDivider
+            libraryRow(icon: "music.note", title: "Songs", route: .autoPlaylist(.likedSongs))
+            rowDivider
+            libraryRow(icon: "arrow.down.circle", title: "Downloaded", route: .downloads)
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 14)
+        .background(
+            Color(uiColor: .secondarySystemGroupedBackground),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+    }
+
+    private var rowDivider: some View {
+        Divider().padding(.leading, 44)
+    }
+
+    private func libraryRow(icon: String, title: String, route: DetailRoute) -> some View {
+        NavigationLink(value: route) {
+            HStack(spacing: 14) {
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(settings.accentColor)
+                    .frame(width: 30)
+                Text(LocalizedStringKey(title))
+                    .font(.body)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var recentlyAddedSection: some View {
+        let recent = albums
+            .sorted { ($0.bookmarkedAt ?? .distantPast) > ($1.bookmarkedAt ?? .distantPast) }
+            .prefix(8)
+        return Group {
+            if !recent.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Recently Added")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .padding(.horizontal, 16)
+
+                    LazyVGrid(columns: gridColumns, spacing: 16) {
+                        ForEach(Array(recent), id: \.id) { album in
+                            NavigationLink(value: DetailRoute.album(browseId: album.id)) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    AsyncImageView(url: album.thumbnailUrl)
+                                        .frame(maxWidth: .infinity)
+                                        .aspectRatio(1, contentMode: .fit)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                    Text(album.title)
+                                        .lineLimit(1)
+                                        .font(.callout)
+                                    if album.songCount > 0 {
+                                        Text("\(album.songCount) songs")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+                .padding(.top, 22)
+            }
+        }
     }
 
     // MARK: - Playlists (Auto + User)
