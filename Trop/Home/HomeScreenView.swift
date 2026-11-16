@@ -28,7 +28,8 @@ struct HomeScreenView: View {
                     accountIsLoggedIn: accountState.isLoggedIn,
                     accountImageUrl: accountState.accountImageUrl,
                     onHistory: { router.homePath.append(DetailRoute.history) },
-                    onAccount: { router.homePath.append(DetailRoute.settings) }
+                    onAccount: { router.homePath.append(DetailRoute.settings) },
+                    accountInitial: accountState.accountName.first.map(String.init)
                 )
 
                 if viewModel.isLoading {

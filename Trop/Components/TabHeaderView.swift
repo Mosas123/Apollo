@@ -15,6 +15,7 @@ struct TabHeaderView: View {
     var accountImageUrl: String?
     var onHistory: () -> Void
     var onAccount: () -> Void
+    var accountInitial: String? = nil
 
     var body: some View {
         HStack(alignment: .center) {
@@ -22,22 +23,14 @@ struct TabHeaderView: View {
                 .font(.largeTitle)
                 .fontWeight(.bold)
             Spacer()
-            HStack(spacing: 12) {
-                Button(action: onHistory) {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.system(size: 22, weight: .regular))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("History")
-
-                AccountButtonView(
-                    isLoggedIn: accountIsLoggedIn,
-                    accountImageUrl: accountImageUrl,
-                    onTap: onAccount
-                )
-                .accessibilityLabel("Account")
-            }
+            AccountButtonView(
+                isLoggedIn: accountIsLoggedIn,
+                accountImageUrl: accountImageUrl,
+                size: 44,
+                initial: accountInitial,
+                onTap: onAccount
+            )
+            .accessibilityLabel("Account")
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
