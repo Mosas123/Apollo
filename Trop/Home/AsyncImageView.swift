@@ -8,11 +8,44 @@
 import Nuke
 import SwiftUI
 
+/// Sticky in-memory artwork cache that survives view re-creation (LazyVStack
+/// recycling), independently of Nuke's evictable cache. A row that already
+/// showed a cover must never flash — or get stuck on — the placeholder when it
+/// scrolls back in or the list re-lays out.
+private final class StickyArtworkCache: @unchecked Sendable {
+    private let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 500
+        return cache
+    }()
+
+    func image(for key: String) -> UIImage? {
+        cache.object(forKey: key as NSString)
+    }
+
+    func store(_ image: UIImage, for key: String) {
+        cache.setObject(image, forKey: key as NSString)
+    }
+}
+
+private enum StickyArtwork {
+    static let cache = StickyArtworkCache()
+
+    static func image(for key: String) -> UIImage? {
+        cache.image(for: key)
+    }
+
+    static func store(_ image: UIImage, for key: String) {
+        cache.store(image, for: key)
+    }
+}
+
 struct AsyncImageView: View {
     let url: String?
     var contentMode: ContentMode = .fill
     @Environment(\.displayScale) private var displayScale
     @State private var loadedImage: UIImage?
+    @State private var loadedKey: String?
 
     var body: some View {
         GeometryReader { geometry in
@@ -36,6 +69,7 @@ struct AsyncImageView: View {
     private func loadImage(targetSize: CGSize) async {
         guard let urlString = url else {
             loadedImage = nil
+            loadedKey = nil
             return
         }
         let scale = displayScale
@@ -49,28 +83,47 @@ struct AsyncImageView: View {
         // so rows, cards and headers each share one cache entry.
         let rung = ArtworkURLs.rung(for: max(displaySize.width, displaySize.height))
         let normalized = normalizeThumbnailURL(urlString, pixels: rung)
-        guard let url = URL(string: normalized) else {
+
+        // A recycled row must not keep a previous song's cover while the new one
+        // loads; a re-created row starts empty and is refilled from the sticky
+        // cache below, so a previously shown cover never flickers back.
+        if loadedKey != normalized {
             loadedImage = nil
-            return
+            loadedKey = nil
         }
-        let request: ImageRequest
-        if contentMode == .fill {
-            request = ImageRequest(
-                url: url,
+        if loadedImage == nil, let sticky = StickyArtwork.image(for: normalized) {
+            loadedImage = sticky
+            loadedKey = normalized
+        }
+
+        guard let imageURL = URL(string: normalized) else { return }
+        let request: ImageRequest = contentMode == .fill
+            ? ImageRequest(
+                url: imageURL,
                 processors: [.resize(size: displaySize, unit: .pixels, contentMode: .aspectFill)]
             )
-        } else {
-            request = ImageRequest(url: url)
-        }
-        do {
-            let image = try await ImagePipeline.shared.image(for: request)
+            : ImageRequest(url: imageURL)
+
+        if let image = try? await ImagePipeline.shared.image(for: request) {
             guard !Task.isCancelled else { return }
+            StickyArtwork.store(image, for: normalized)
+            loadedKey = normalized
             withAnimation(.easeInOut(duration: 0.2)) {
                 loadedImage = image
             }
-        } catch {
-            guard !Task.isCancelled else { return }
-            loadedImage = nil
+            return
+        }
+        guard !Task.isCancelled else { return }
+        // One retry so a transient failure (rate-limit, blip, a cancelled
+        // neighbour request) doesn't leave a permanent placeholder.
+        try? await Task.sleep(for: .milliseconds(400))
+        guard !Task.isCancelled else { return }
+        if let image = try? await ImagePipeline.shared.image(for: request) {
+            StickyArtwork.store(image, for: normalized)
+            loadedKey = normalized
+            withAnimation(.easeInOut(duration: 0.2)) {
+                loadedImage = image
+            }
         }
     }
 
