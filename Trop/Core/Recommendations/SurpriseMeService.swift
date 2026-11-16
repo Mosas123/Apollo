@@ -54,7 +54,7 @@ enum SurpriseMeService {
         return SongItem(entity: pick)
     }
 
-    static func episode(from sections: [HomePage.Section]) -> SongItem? {
+    static func episode(from sections: [HomeSection]) -> SongItem? {
         let episodes = sections.flatMap(\.items).compactMap { item -> SongItem? in
             if case .episode(let episode) = item { return episode.toSongItem() }
             return nil
@@ -62,7 +62,7 @@ enum SurpriseMeService {
         return episodes.randomElement()
     }
 
-    static func audiobook(from sections: [HomePage.Section]) -> AlbumItem? {
+    static func audiobook(from sections: [HomeSection]) -> AlbumItem? {
         let books = sections.flatMap(\.items).compactMap { item -> AlbumItem? in
             if case .album(let album) = item, album.isAudiobook { return album }
             return nil
