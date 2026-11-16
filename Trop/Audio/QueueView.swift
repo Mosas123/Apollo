@@ -178,9 +178,31 @@ struct QueueView<ProgressSlider: View>: View {
                 }
             }
             pillButton(isOn: $isRepeatOn, icon: "repeat")
+            sleepTimerPill
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 8)
+    }
+
+    private var sleepTimerPill: some View {
+        Menu {
+            Button("Off") { np.cancelSleepTimer() }
+            Button("15 minutes") { np.scheduleSleepTimer(minutes: 15) }
+            Button("30 minutes") { np.scheduleSleepTimer(minutes: 30) }
+            Button("45 minutes") { np.scheduleSleepTimer(minutes: 45) }
+            Button("1 hour") { np.scheduleSleepTimer(minutes: 60) }
+        } label: {
+            Image(systemName: np.sleepTimerEndsAt != nil ? "moon.fill" : "moon")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 34)
+                .background(
+                    Capsule()
+                        .fill(np.sleepTimerEndsAt != nil ? .white.opacity(0.15) : .white.opacity(0.07))
+                )
+        }
+        .accessibilityLabel("Sleep timer")
     }
 
     private func pillButton(isOn: Binding<Bool>, icon: String, action: (() -> Void)? = nil) -> some View {

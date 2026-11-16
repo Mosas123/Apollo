@@ -63,6 +63,8 @@ final class NowPlaying {
     }
 
     private var timer: Timer?
+    var sleepTimerEndsAt: Date?
+    @ObservationIgnored private var sleepTimerTask: Task<Void, Never>?
     var lastManualSkipTime: Date?
     private var isResolvingNext = false
     /// Timestamps of the last mid-play failure per videoId, to bound retries.
@@ -575,6 +577,27 @@ final class NowPlaying {
     private func stopTimer() {
         timer?.invalidate()
         timer = nil
+    }
+
+    // MARK: Sleep timer
+
+    /// Schedules a pause after `minutes`, replacing any existing sleep timer.
+    func scheduleSleepTimer(minutes: Double) {
+        cancelSleepTimer()
+        let endsAt = Date().addingTimeInterval(minutes * 60)
+        sleepTimerEndsAt = endsAt
+        sleepTimerTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(endsAt.timeIntervalSinceNow))
+            guard let self, !Task.isCancelled else { return }
+            self.sleepTimerEndsAt = nil
+            PlayerController.shared.setPaused(true)
+        }
+    }
+
+    func cancelSleepTimer() {
+        sleepTimerTask?.cancel()
+        sleepTimerTask = nil
+        sleepTimerEndsAt = nil
     }
 
     @MainActor
