@@ -104,7 +104,7 @@ struct FullPlayerView: View {
                     artwork
                         .aspectRatio(1, contentMode: .fit)
                         .frame(maxWidth: min(geometry.size.width - 48, 520))
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .shadow(color: .black.opacity(0.4), radius: 28, y: 16)
                         .padding(.top, geometry.safeAreaInsets.top + 36)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -174,6 +174,19 @@ struct FullPlayerView: View {
                         .scaleEffect(isCompact ? 0.94 : 1)
                         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: np.isPlaying)
                         .padding(.bottom, isCompact ? 2 : 8)
+
+                        HStack(spacing: 12) {
+                            Image(systemName: "speaker.fill")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.5))
+                            PlayerVolumeSlider()
+                                .frame(height: 28)
+                            Image(systemName: "speaker.wave.3.fill")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.5))
+                        }
+                        .padding(.horizontal, horizontalPadding)
+                        .padding(.bottom, 4)
 
                         SecondaryActionsRow(
                             showQueue: $showQueue,
@@ -634,19 +647,34 @@ struct FullPlayerView: View {
                 }
             )
 
+            let current = isEditingSlider ? TimeInterval(editingProgress) * np.duration : np.currentTime
+            let remaining = max(0, np.duration - current)
+
             HStack {
-                Text(DurationFormat.playbackTime(isEditingSlider
-                    ? TimeInterval(editingProgress) * np.duration
-                    : np.currentTime))
+                Text(DurationFormat.playbackTime(current))
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.white.opacity(0.6))
                     .contentTransition(.numericText())
 
                 Spacer()
 
-                Text(DurationFormat.playbackTime(np.duration))
+                Text("-\(DurationFormat.playbackTime(remaining))")
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.white.opacity(0.6))
+                    .contentTransition(.numericText())
+            }
+            .overlay {
+                if let videoId = np.videoId, MusicPlaybackIdentity.isQobuz(videoId) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "waveform")
+                        Text("Lossless")
+                    }
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(.white.opacity(0.12)))
+                }
             }
         }
         .padding(.horizontal, horizontalPadding)
