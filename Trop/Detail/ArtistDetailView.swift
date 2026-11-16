@@ -293,6 +293,7 @@ struct ArtistDetailView: View {
     @State private var scrollOffset: CGFloat = 0
     @State private var linkCopied = false
     @State private var showInfo = false
+    @State private var infoGenre: String?
     @State private var backdropColors: [Color] = []
     @State private var linkResetTask: Task<Void, Never>?
 
@@ -601,23 +602,41 @@ struct ArtistDetailView: View {
     }
 
     private func artistInfoSheet(for artist: ArtistDetailInfo) -> some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    AsyncImageView(url: artist.thumbnailUrl, contentMode: .fill)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 340)
-                        .clipped()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                ZStack(alignment: .bottomLeading) {
+                    AsyncImageView(
+                        url: ArtworkURLs.sized(artist.thumbnailUrl, width: 1200, height: 1200),
+                        contentMode: .fill
+                    )
+                    .frame(height: 430)
+                    .clipped()
+
+                    LinearGradient(
+                        colors: [.clear, backdropColor.opacity(0.45), backdropColor],
+                        startPoint: .center,
+                        endPoint: .bottom
+                    )
 
                     Text(artist.name)
-                        .font(.largeTitle.bold())
+                        .font(.system(size: 34, weight: .bold))
+                        .foregroundStyle(.white)
                         .padding(.horizontal, 20)
+                        .padding(.bottom, 18)
+                }
 
-                    if let subText = artist.subscriberCountText, !subText.isEmpty {
-                        Text(subscriberLabel(for: subText))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 20)
+                VStack(alignment: .leading, spacing: 20) {
+                    if let genre = infoGenre {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Genre")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            Text(genre)
+                                .font(.subheadline.weight(.medium))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 6)
+                                .background(Capsule().fill(.quaternary))
+                        }
                     }
 
                     if let description = artist.descriptionText, !description.isEmpty {
@@ -626,22 +645,34 @@ struct ArtistDetailView: View {
                                 .font(.title3.bold())
                             Text(description)
                                 .font(.body)
-                                .foregroundStyle(.secondary)
                         }
-                        .padding(.horizontal, 20)
+                    }
+
+                    if let subText = artist.subscriberCountText, !subText.isEmpty {
+                        Text(subscriberLabel(for: subText))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .padding(.bottom, 28)
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { showInfo = false } label: {
-                        Image(systemName: "xmark")
-                    }
-                }
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 36)
             }
         }
+        .background(artistBackdrop)
+        .overlay(alignment: .topLeading) {
+            Button { showInfo = false } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(.ultraThinMaterial))
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 14)
+            .padding(.leading, 16)
+        }
+        .task { infoGenre = await ArtistGenreResolver.genre(for: artist.name) }
         .presentationDetents([.large])
     }
 
