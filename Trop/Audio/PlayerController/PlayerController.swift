@@ -24,18 +24,24 @@ struct DetectedCrop {
 
 // MARK: - PlayerController
 
-/// `UIImage` is not Sendable, but `MPMediaItemArtwork`'s request handler runs on a
-/// background queue. Wrapping the rendered image lets the `@Sendable` handler
-/// capture it without inheriting `@MainActor` isolation (which would trap at
-/// runtime under Swift 6).
-final class SendableArtwork: @unchecked Sendable {
-    let image: UIImage
-    init(_ image: UIImage) { self.image = image }
-}
-
 @MainActor
 final class PlayerController {
     static let shared = PlayerController()
+
+    /// `UIImage` is not Sendable, but `MPMediaItemArtwork`'s request handler runs
+    /// on a background queue. Wrap the rendered image so the `@Sendable` handler
+    /// can capture it without inheriting `@MainActor` isolation.
+    private final class SendableArtwork: @unchecked Sendable {
+        let image: UIImage
+        init(_ image: UIImage) { self.image = image }
+    }
+
+    /// Builds the artwork on a nonisolated context so its request handler closure
+    /// does not inherit `@MainActor` isolation (which traps under Swift 6).
+    private nonisolated static func makeArtwork(from image: UIImage) -> MPMediaItemArtwork {
+        let box = SendableArtwork(image)
+        return MPMediaItemArtwork(boundsSize: image.size) { _ in box.image }
+    }
 
     nonisolated(unsafe) private var _mpv: OpaquePointer?
     /// Serial queue for all mpv property read/write calls
@@ -1033,8 +1039,7 @@ extension PlayerController {
         nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackQueueIndex] = np.queueIndex
         nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackQueueCount] = np.queueSongs.count
         if let image = np.thumbnailUIImage {
-            let artwork = SendableArtwork(image)
-            nowPlayingInfo[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in artwork.image }
+            nowPlayingInfo[MPMediaItemPropertyArtwork] = Self.makeArtwork(from: image)
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
         MPNowPlayingInfoCenter.default().playbackState = np.isPlaying ? .playing : .paused
@@ -1048,8 +1053,7 @@ extension PlayerController {
     func updateNowPlayingArtwork() {
         let np = NowPlaying.shared
         if let image = np.thumbnailUIImage {
-            let artwork = SendableArtwork(image)
-            nowPlayingInfo[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in artwork.image }
+            nowPlayingInfo[MPMediaItemPropertyArtwork] = Self.makeArtwork(from: image)
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
     }
