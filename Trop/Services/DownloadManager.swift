@@ -575,58 +575,69 @@ extension DownloadManager {
         }
     }
 
-    /// Runs FFmpeg off the main actor via the async API; optionally reports size stats.
+    /// Runs FFmpeg off the main actor via the async API; optionally reports size
+    /// stats. Cancelling the calling task also cancels the FFmpeg session.
     private func runFFmpeg(
         arguments: [String],
         videoId: String? = nil,
         onSize: ((Int64) -> Void)? = nil
     ) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            let lock = NSLock()
-            var finished = false
-            let finish: (Result<Void, Error>) -> Void = { result in
-                lock.lock()
-                defer { lock.unlock() }
-                guard !finished else { return }
-                finished = true
-                continuation.resume(with: result)
-            }
+        let sessionBox = FFmpegSessionBox()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                let lock = NSLock()
+                var finished = false
+                let finish: (Result<Void, Error>) -> Void = { result in
+                    lock.lock()
+                    defer { lock.unlock() }
+                    guard !finished else { return }
+                    finished = true
+                    continuation.resume(with: result)
+                }
 
-            let session = FFmpegKit.execute(
-                withArgumentsAsync: arguments,
-                withCompleteCallback: { [weak self] session in
-                    if let videoId {
-                        Task { @MainActor in
-                            self?.activeFFmpegSessions.removeValue(forKey: videoId)
+                let session = FFmpegKit.execute(
+                    withArgumentsAsync: arguments,
+                    withCompleteCallback: { [weak self] session in
+                        sessionBox.set(nil)
+                        if let videoId {
+                            Task { @MainActor in
+                                self?.activeFFmpegSessions.removeValue(forKey: videoId)
+                            }
                         }
+                        let rc = session?.getReturnCode()
+                        if ReturnCode.isSuccess(rc) {
+                            finish(.success(()))
+                        } else if ReturnCode.isCancel(rc) {
+                            finish(.failure(CancellationError()))
+                        } else {
+                            let output = session?.getOutput() ?? "unknown"
+                            Log.downloadManager.debug("FFmpeg output: \(output)")
+                            finish(.failure(NSError(
+                                domain: "DownloadManager",
+                                code: -1,
+                                userInfo: [NSLocalizedDescriptionKey: "FFmpeg processing failed"]
+                            )))
+                        }
+                    },
+                    withLogCallback: nil,
+                    withStatisticsCallback: { statistics in
+                        guard let statistics, let onSize else { return }
+                        onSize(Int64(statistics.getSize()))
                     }
-                    let rc = session?.getReturnCode()
-                    if ReturnCode.isSuccess(rc) {
-                        finish(.success(()))
-                    } else if ReturnCode.isCancel(rc) {
-                        finish(.failure(CancellationError()))
-                    } else {
-                        let output = session?.getOutput() ?? "unknown"
-                        Log.downloadManager.debug("FFmpeg output: \(output)")
-                        finish(.failure(NSError(
-                            domain: "DownloadManager",
-                            code: -1,
-                            userInfo: [NSLocalizedDescriptionKey: "FFmpeg processing failed"]
-                        )))
-                    }
-                },
-                withLogCallback: nil,
-                withStatisticsCallback: { statistics in
-                    guard let statistics, let onSize else { return }
-                    onSize(Int64(statistics.getSize()))
-                }
-            )
+                )
 
-            if let videoId, let session {
-                Task { @MainActor in
-                    self.activeFFmpegSessions[videoId] = session
+                sessionBox.set(session)
+                if Task.isCancelled {
+                    session?.cancel()
+                }
+                if let videoId, let session {
+                    Task { @MainActor in
+                        self.activeFFmpegSessions[videoId] = session
+                    }
                 }
             }
+        } onCancel: {
+            sessionBox.current?.cancel()
         }
     }
 
@@ -882,5 +893,25 @@ extension EnvironmentValues {
     var downloadManager: DownloadManager {
         get { self[DownloadManagerEnvironmentKey.self] }
         set { self[DownloadManagerEnvironmentKey.self] = newValue }
+    }
+}
+
+
+/// Lets the cancellation handler reach the FFmpeg session created inside the
+/// continuation without sharing non-Sendable state unsafely.
+private final class FFmpegSessionBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var session: FFmpegSession?
+
+    func set(_ session: FFmpegSession?) {
+        lock.lock()
+        self.session = session
+        lock.unlock()
+    }
+
+    var current: FFmpegSession? {
+        lock.lock()
+        defer { lock.unlock() }
+        return session
     }
 }
