@@ -305,7 +305,9 @@ final class NowPlaying {
         startTimer()
         loadThumbnail(videoId: videoId, thumbnailUrl: thumbnailUrl)
         preloadNextTrack()
-        CanvasPrefetch.request(videoId: videoId, title: title, artist: self.artist, album: album)
+        if MusicPlaybackIdentity.isYouTube(videoId) {
+            CanvasPrefetch.request(videoId: videoId, title: title, artist: self.artist, album: album)
+        }
     }
 
     /// Convenience pushing a `SongItem`'s metadata into the player state.
@@ -376,7 +378,9 @@ final class NowPlaying {
         }
         if hasNext {
             playNext(automatic: true)
-        } else if SettingsStore.shared.autoplaySimilar, let endedVideoId = videoId {
+        } else if SettingsStore.shared.autoplaySimilar,
+                  MusicPlaybackIdentity.isYouTube(videoId),
+                  let endedVideoId = videoId {
             autoplaySimilar(from: endedVideoId)
         } else {
             // End of queue, pause but keep the last song shown in the player.
@@ -487,7 +491,8 @@ final class NowPlaying {
 
         Task {
             // For downloaded songs, try to extract embedded artwork from the local file first.
-            if let localURL = await DownloadManager.shared.localURL(for: videoId) {
+            if !MusicPlaybackIdentity.isAudius(videoId),
+               let localURL = await DownloadManager.shared.localURL(for: videoId) {
                 loadArtworkFromLocalFile(localURL, videoId: videoId)
                 return
             }
@@ -502,7 +507,7 @@ final class NowPlaying {
     private func enrichArtwork(videoId: String) {
         // Radio stations already carry their own name and favicon; never match
         // them against music/podcast catalogues.
-        guard playbackKind != .radio else { return }
+        guard playbackKind != .radio, !MusicPlaybackIdentity.isAudius(videoId) else { return }
         let title = title
         let artist = artist
         let kind = queueSongs.first { $0.videoId == videoId }?.contentKind
@@ -561,7 +566,9 @@ final class NowPlaying {
         // Best source first: the track's own artwork upgraded to full
         // resolution, then ytimg step-downs, then the guaranteed hqdefault.
         var candidates: [String] = []
-        if let upgraded = ArtworkURLs.highRes(thumbnailUrl) {
+        if MusicPlaybackIdentity.isAudius(videoId), let thumbnailUrl {
+            candidates.append(thumbnailUrl)
+        } else if let upgraded = ArtworkURLs.highRes(thumbnailUrl) {
             if let maxRes = ArtworkURLs.maxResVariant(upgraded) {
                 candidates.append(maxRes)
             }
@@ -570,9 +577,11 @@ final class NowPlaying {
             }
             candidates.append(upgraded)
         }
-        let fallback = Self.artworkURL(for: videoId)
-        if !candidates.contains(fallback) {
-            candidates.append(fallback)
+        if !MusicPlaybackIdentity.isAudius(videoId) {
+            let fallback = Self.artworkURL(for: videoId)
+            if !candidates.contains(fallback) {
+                candidates.append(fallback)
+            }
         }
         let urls = candidates.compactMap(URL.init(string:))
         guard !urls.isEmpty else {
@@ -631,7 +640,9 @@ final class NowPlaying {
     private func preloadNextTrack() {
         guard hasNext else { return }
         let nextId = queueSongs[queueIndex + 1].videoId
-        SponsorBlockIntegration.shared.warm(for: nextId)
+        if MusicPlaybackIdentity.isYouTube(nextId) {
+            SponsorBlockIntegration.shared.warm(for: nextId)
+        }
         loggedTask(Log.nowPlaying, "Pre-resolve failed") {
             _ = try await PlaybackManager.shared.resolve(videoId: nextId)
             Log.nowPlaying.debug("Pre-resolved next track: \(nextId)")
@@ -656,7 +667,9 @@ final class NowPlaying {
         currentTime = PlayerController.shared.currentTime
         duration = PlayerController.shared.duration
         PlayerController.shared.updateNowPlayingProgress()
-        SponsorBlockIntegration.shared.tick()
+        if MusicPlaybackIdentity.isYouTube(videoId) {
+            SponsorBlockIntegration.shared.tick()
+        }
         icyTick += 1
         if icyTick % 4 == 0, playbackKind == .radio {
             refreshLiveTitle()

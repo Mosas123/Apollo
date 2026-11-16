@@ -4,9 +4,8 @@ on:
   push:
     branches:
       - main
+  # Also build stacked PRs targeting feature branches.
   pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 concurrency:

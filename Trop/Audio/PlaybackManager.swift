@@ -19,9 +19,60 @@ actor PlaybackManager {
 
     private init() {}
 
+    /// Audius uses its own full-track streaming endpoint and never passes a
+    /// provider-prefixed ID to the YouTube stream resolver.
+    private func resolveAudius(videoId: String) async throws -> PlaybackResult {
+        guard let identifier = MusicCatalogID(storageKey: videoId),
+              identifier.source == .audius,
+              let song = await queueSong(for: videoId) else {
+            throw MusicCatalogError.unavailableTrack
+        }
+        let sourceTrack = MusicCatalogTrack(
+            id: identifier,
+            title: song.title,
+            artist: song.artistNamesDisplay,
+            durationSeconds: song.duration,
+            artworkURL: song.thumbnailUrl.flatMap(URL.init(string:)),
+            permalinkURL: nil,
+            isStreamable: true
+        )
+        let streamURL = try AudiusClient().streamURL(for: sourceTrack)
+        return PlaybackResult(
+            streamUrl: streamURL.absoluteString,
+            itag: 0,
+            mimeType: "audio/mpeg",
+            bitrate: 0,
+            audioQuality: "audius",
+            videoId: videoId,
+            title: song.title,
+            author: sourceTrack.artist,
+            duration: song.duration,
+            expiresInSeconds: 0,
+            clientName: "audius",
+            musicVideoType: nil,
+            hasVideoContent: false,
+            muxedStreamUrl: nil,
+            loudnessDb: nil
+        )
+    }
+
     /// Resolve a video and start playback. Returns the result used, or throws.
     @discardableResult
     func resolveAndPlay(videoId: String) async throws -> PlaybackResult {
+        if MusicPlaybackIdentity.isAudius(videoId) {
+            let result = try await resolveAudius(videoId: videoId)
+            let song = await queueSong(for: videoId)
+            await PlayerController.shared.play(
+                url: result.streamUrl,
+                title: song?.title,
+                artist: song?.artistNamesDisplay,
+                videoId: videoId,
+                duration: song.map { TimeInterval($0.duration) },
+                artists: song?.artists ?? [],
+                thumbnailUrl: song?.thumbnailUrl
+            )
+            return result
+        }
         await MainActor.run { SponsorBlockIntegration.shared.warm(for: videoId) }
         if let localPath = await DownloadManager.shared.localURL(for: videoId) {
             let song = await MainActor.run { NowPlaying.shared.queueSongs.first { $0.videoId == videoId } }
@@ -212,6 +263,10 @@ actor PlaybackManager {
     static let sessionId: String = UUID().uuidString
     /// Resolve a video without playing. Useful for previews / testing.
     func resolve(videoId: String, preferredFormat: Format? = nil, forDownload: Bool = false) async throws -> PlaybackResult {
+        if MusicPlaybackIdentity.isAudius(videoId) {
+            guard !forDownload else { throw MusicCatalogError.unavailableTrack }
+            return try await resolveAudius(videoId: videoId)
+        }
         if !forDownload, let cached = await StreamCache.shared.get(videoId: videoId) {
             return cached
         }

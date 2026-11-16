@@ -13,6 +13,21 @@ struct MusicCatalogID: Codable, Hashable, Sendable {
     let rawValue: String
 
     var storageKey: String { "\(source.rawValue):\(rawValue)" }
+
+    init(source: MusicCatalogSource, rawValue: String) {
+        self.source = source
+        self.rawValue = rawValue
+    }
+
+    /// Only provider-scoped IDs are parsed. Legacy YouTube IDs stay unchanged.
+    init?(storageKey: String) {
+        guard let separator = storageKey.firstIndex(of: ":"),
+              let source = MusicCatalogSource(rawValue: String(storageKey[..<separator])),
+              source != .youtube else { return nil }
+        let rawValue = String(storageKey[storageKey.index(after: separator)...])
+        guard !rawValue.isEmpty else { return nil }
+        self.init(source: source, rawValue: rawValue)
+    }
 }
 
 /// Provider-agnostic search result. This intentionally does not conform to `SongItem`:
@@ -40,4 +55,19 @@ protocol MusicCatalogProvider: Sendable {
     var source: MusicCatalogSource { get }
     func searchTracks(query: String, limit: Int) async throws -> [MusicCatalogTrack]
     func streamURL(for track: MusicCatalogTrack) throws -> URL
+}
+
+ 
+/// Existing queues store raw YouTube video IDs; external providers use a
+/// namespaced ID such as `audius:D7KyD`. Keep routing deterministic.
+enum MusicPlaybackIdentity {
+    static func isAudius(_ playbackID: String?) -> Bool {
+        playbackID?.hasPrefix("audius:") == true
+    }
+
+    static func isYouTube(_ playbackID: String?) -> Bool {
+        guard let playbackID, !playbackID.isEmpty else { return false }
+        // Radio, Audius, Jamendo and future sources are not YouTube IDs.
+        return !playbackID.contains(":")
+    }
 }
