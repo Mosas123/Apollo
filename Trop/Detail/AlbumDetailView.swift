@@ -238,8 +238,9 @@ extension AlbumDetailViewModel {
                         featuredPlaylists.append(playlist)
                     }
                 default:
-                    if pageType == "MUSIC_PAGE_TYPE_VIDEO" || HomePageParser.hasWatchEndpoint(twoRow),
-                       let video = SongItem.from(twoRow) {
+                    let isVideoPage = pageType == "MUSIC_PAGE_TYPE_VIDEO"
+                    let hasWatchEndpoint = HomePageParser.hasWatchEndpoint(twoRow)
+                    if isVideoPage || hasWatchEndpoint, let video = SongItem.from(twoRow) {
                         videos.append(video)
                     }
                 }
