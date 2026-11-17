@@ -131,12 +131,11 @@ actor PlaybackManager {
 
     private let pencariCooldownKey = "pencari.cooldownUntil"
     private var pencariMatchCache: [String: String] = [:]
+    /// Prefetched FLAC resolutions keyed by the YouTube videoId they upgrade.
+    private var pencariResultCache: [String: (result: PlaybackResult, at: Date)] = [:]
+    private let pencariResultTTL: TimeInterval = 600
 
-    /// Hard budget for the lossless attempt on the playback path. If FLAC
-    /// isn't ready in this window we play YouTube immediately — never stall.
-    private let losslessBudget: Duration = .milliseconds(1500)
-
-    /// Persisted so a down origin doesn't cost every relaunch a fresh timeout.
+    /// Persisted so a slow/empty origin doesn't cost every relaunch a timeout.
     private var isPencariCoolingDown: Bool {
         let until = UserDefaults.standard.double(forKey: pencariCooldownKey)
         return until > Date().timeIntervalSince1970
@@ -149,25 +148,16 @@ actor PlaybackManager {
         )
     }
 
-    /// Runs the lossless upgrade against a hard deadline. On timeout it marks a
-    /// cooldown so the next play goes straight to YouTube.
-    private func losslessWithinBudget(videoId: String) async -> PlaybackResult? {
+    /// Only ever returns an *already prefetched* FLAC, so the play path never
+    /// touches the network for lossless. Misses go straight to YouTube.
+    private func prefetchedLossless(videoId: String) -> PlaybackResult? {
         guard SettingsStore.shared.preferLosslessAudio else { return nil }
         guard !MusicPlaybackIdentity.isExternal(videoId) else { return nil }
-        guard !isPencariCoolingDown else { return nil }
-        let budget = losslessBudget
-        let result = await withTaskGroup(of: PlaybackResult?.self) { group -> PlaybackResult? in
-            group.addTask { await self.resolveLosslessUpgrade(videoId: videoId) }
-            group.addTask {
-                try? await Task.sleep(for: budget)
-                return nil
-            }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first
+        guard let cached = pencariResultCache[videoId],
+              Date().timeIntervalSince(cached.at) < pencariResultTTL else {
+            return nil
         }
-        if result == nil { markPencariCooldown() }
-        return result
+        return cached.result
     }
 
     /// When the user prefers lossless, tries to find the same track on the
@@ -189,7 +179,15 @@ actor PlaybackManager {
             pencariId = cached
         } else {
             let query = artist.isEmpty ? title : "\(artist) \(title)"
-            let tracks = (try? await client.searchTracks(query: query, limit: 8)) ?? []
+            let tracks: [MusicCatalogTrack]
+            do {
+                tracks = try await client.searchTracks(query: query, limit: 8)
+            } catch {
+                // Origin timed out/errored: back off briefly instead of hitting
+                // it again for every following track.
+                markPencariCooldown(120)
+                return nil
+            }
             guard let best = Self.bestPencariMatch(tracks, title: title, artist: artist) else { return nil }
             pencariId = best.id.rawValue
             if pencariMatchCache.count >= 500 { pencariMatchCache.removeAll(keepingCapacity: true) }
@@ -198,7 +196,7 @@ actor PlaybackManager {
 
         do {
             let url = try await client.resolveStreamURLFast(for: pencariId)
-            return PlaybackResult(
+            let result = PlaybackResult(
                 streamUrl: url.absoluteString,
                 itag: 0,
                 mimeType: "audio/flac",
@@ -215,10 +213,32 @@ actor PlaybackManager {
                 muxedStreamUrl: nil,
                 loudnessDb: nil
             )
+            if pencariResultCache.count >= 100 {
+                pencariResultCache.removeAll(keepingCapacity: true)
+            }
+            pencariResultCache[videoId] = (result, Date())
+            return result
         } catch {
             markPencariCooldown()
             return nil
         }
+    }
+
+    /// Warms the FLAC for the next queue track while the current one plays, so
+    /// lossless is ready with zero delay when it comes up. Runs off the play
+    /// path and respects the origin cooldown.
+    private func prefetchNextLossless(after videoId: String) async {
+        guard SettingsStore.shared.preferLosslessAudio, !isPencariCoolingDown else { return }
+        let queue = await MainActor.run { NowPlaying.shared.queueSongs }
+        guard let index = queue.firstIndex(where: { $0.videoId == videoId }),
+              queue.indices.contains(index + 1) else { return }
+        let next = queue[index + 1].videoId
+        guard !MusicPlaybackIdentity.isExternal(next) else { return }
+        if let cached = pencariResultCache[next],
+           Date().timeIntervalSince(cached.at) < pencariResultTTL {
+            return
+        }
+        _ = await resolveLosslessUpgrade(videoId: next)
     }
 
     private static func losslessLabel(_ result: PlaybackResult) -> String? {
@@ -353,9 +373,8 @@ actor PlaybackManager {
     /// Runs the client fallback chain for playback. Only called once per
     /// videoId by `resolveAndPlay`, which owns the in-flight dedup entry.
     private func resolveAndPlayFromNetwork(videoId: String) async throws -> PlaybackResult {
-        // Lossless-first: a match on the bundled addon plays FLAC; otherwise we
-        // silently continue to the YouTube resolver below.
-        if let lossless = await losslessWithinBudget(videoId: videoId) {
+        // Lossless if it was prefetched ahead of time; never blocks the play.
+        if let lossless = prefetchedLossless(videoId: videoId) {
             await playNetworkResult(lossless, videoId: videoId)
             return lossless
         }
@@ -367,6 +386,14 @@ actor PlaybackManager {
             providers: .tropLive
         )
         await playNetworkResult(result, videoId: videoId)
+        // Warm this track (for replays) and the next one while it plays. Off the
+        // play path: never delays audio.
+        Task {
+            if self.pencariResultCache[videoId] == nil {
+                _ = await self.resolveLosslessUpgrade(videoId: videoId)
+            }
+            await self.prefetchNextLossless(after: videoId)
+        }
         return result
     }
 
