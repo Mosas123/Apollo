@@ -3,8 +3,10 @@ import Foundation
 /// Resolves artist profile photos from keyless sources, since the YouTube
 /// Music catalogue is currently the only one feeding them.
 ///
-/// Order: Deezer (`picture_xl`, 1000px) → Wikipedia/Wikimedia
-/// (`pageimages.original`) → the YouTube thumbnail we already have.
+/// Order: Apple Music artist page (`AMBArtistImages`, up to 2400px, keyless —
+/// the public web page exposes the image in `og:image`) → Deezer
+/// (`picture_xl`, 1000px) → Wikipedia/Wikimedia (`pageimages.original`) → the
+/// YouTube thumbnail we already have.
 enum ArtistImageResolver {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var hits: [String: URL] = [:]
@@ -19,6 +21,10 @@ enum ArtistImageResolver {
         if misses.contains(key) { lock.unlock(); return youTubeURL }
         lock.unlock()
 
+        if let apple = await appleMusicImage(name: name) {
+            store(key, apple)
+            return apple
+        }
         if let deezer = await deezerImage(name: name) {
             store(key, deezer)
             return deezer
@@ -36,6 +42,68 @@ enum ArtistImageResolver {
         if hits.count >= 300 { hits.removeAll(keepingCapacity: true) }
         hits[key] = url
         lock.unlock()
+    }
+
+    // MARK: - Apple Music (web page, keyless)
+
+    private struct ITunesArtists: Decodable {
+        struct Artist: Decodable {
+            let artistName: String?
+            let artistId: Int?
+        }
+        let results: [Artist]?
+    }
+
+    /// Finds the artist on iTunes, opens their public Apple Music page, and
+    /// rewrites the `AMBArtistImages` URL to a large square crop. No developer
+    /// token is involved — this is the same image the website shows.
+    private static func appleMusicImage(name: String) async -> URL? {
+        var search = URLComponents(string: "https://itunes.apple.com/search")
+        search?.queryItems = [
+            URLQueryItem(name: "term", value: name),
+            URLQueryItem(name: "entity", value: "musicArtist"),
+            URLQueryItem(name: "limit", value: "5")
+        ]
+        guard let searchURL = search?.url,
+              let artists: ITunesArtists = try? await decode(searchURL) else { return nil }
+        let target = normalize(name)
+        let match = artists.results?.first { normalize($0.artistName ?? "") == target }
+            ?? artists.results?.first { artist in
+                let other = normalize(artist.artistName ?? "")
+                return !other.isEmpty && (other.contains(target) || target.contains(other))
+            }
+        guard let artistId = match?.artistId else { return nil }
+
+        var pageRequest = URLRequest(url: URL(string: "https://music.apple.com/us/artist/\(artistId)")!)
+        pageRequest.timeoutInterval = 15
+        pageRequest.setValue(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            forHTTPHeaderField: "User-Agent"
+        )
+        guard let (data, response) = try? await URLSession.shared.data(for: pageRequest),
+              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+              let html = String(data: data, encoding: .utf8) else { return nil }
+        return appleImageURL(fromHTML: html)
+    }
+
+    static func appleImageURL(fromHTML html: String) -> URL? {
+        // Greedy so it captures the full URL including the trailing
+        // `/1200x630cw.png` transform segment, not the base filename.
+        let pattern = #"https://is\d+-ssl\.mzstatic\.com/image/thumb/AMCArtistImages[^"']+\.(?:png|jpg|jpeg|webp)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+              let range = Range(match.range, in: html) else { return nil }
+        let original = String(html[range])
+        // Replace the trailing /WxHcc… suffix with a large square crop.
+        let rewrite = #"/\d+x\d+[a-zA-Z-]*(?:-\d+)?\.(?:webp|jpg|jpeg|png)$"#
+        guard let sizeRegex = try? NSRegularExpression(pattern: rewrite, options: .caseInsensitive) else {
+            return URL(string: original)
+        }
+        let full = NSRange(original.startIndex..., in: original)
+        let sized = sizeRegex.stringByReplacingMatches(
+            in: original, range: full, withTemplate: "/1800x1800cc-100.jpg"
+        )
+        return URL(string: sized)
     }
 
     // MARK: - Deezer
