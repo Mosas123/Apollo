@@ -29,10 +29,10 @@ enum MetadataResolver {
         // MusicBrainz and Deezer are fallbacks only.
         var resolved = await iTunes(title: title, artist: artist, album: album)
         if resolved == nil {
-            resolved = await musicBrainz(title: title, artist: artist)
+            resolved = await deezer(title: title, artist: artist)
         }
         if resolved == nil {
-            resolved = await deezer(title: title, artist: artist)
+            resolved = await musicBrainz(title: title, artist: artist)
         }
         await MetadataCache.shared.store(key, resolved)
         return resolved
@@ -82,8 +82,8 @@ enum MetadataResolver {
         // Apple serves up to 3000px from the same URL template; 1200 is a
         // crisp cover without wasting memory on lists.
         let artwork = best.artworkUrl100?
-            .replacingOccurrences(of: "100x100bb", with: "1200x1200bb")
-            .replacingOccurrences(of: "100x100", with: "1200x1200")
+            .replacingOccurrences(of: "100x100bb", with: "1500x1500bb")
+            .replacingOccurrences(of: "100x100", with: "1500x1500")
         let year = best.releaseDate.flatMap { Int($0.prefix(4)) }
         return ResolvedMetadata(
             title: best.trackName ?? title,
