@@ -39,6 +39,7 @@ struct ContentView: View {
                     .transition(.move(edge: .bottom))
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .environment(scrollState)
         .onAppear {
             if selectedTab == 1 && !settings.showRadioTab { selectedTab = 0 }
