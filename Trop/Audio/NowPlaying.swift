@@ -44,6 +44,9 @@ final class NowPlaying {
     var videoId: String?
     var artists: [YTArtist] = []
     var isPlaying = false
+    /// True while the current stream is lossless (FLAC / Qobuz CD). Drives the
+    /// player's "Lossless" badge.
+    var isLosslessStream = false
     var currentTime: TimeInterval = 0
     var duration: TimeInterval = 0
     var progress: Float {

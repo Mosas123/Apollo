@@ -220,9 +220,11 @@ extension PlayerController {
         duration: TimeInterval? = nil,
         artists: [YTArtist] = [],
         loudnessDb: Double? = nil,
-        thumbnailUrl: String? = nil
+        thumbnailUrl: String? = nil,
+        isLossless: Bool = false
     ) async {
         currentLoudnessDb = loudnessDb
+        NowPlaying.shared.isLosslessStream = isLossless
         guard let url = URL(string: url) else {
             Log.player.error("Invalid URL: \(url)")
             return

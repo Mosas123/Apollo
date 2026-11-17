@@ -701,7 +701,7 @@ struct FullPlayerView: View {
                     .contentTransition(.numericText())
             }
             .overlay {
-                if let videoId = np.videoId, MusicPlaybackIdentity.isQobuz(videoId) {
+                if np.isLosslessStream {
                     HStack(spacing: 4) {
                         Image(systemName: "waveform")
                         Text("Lossless")

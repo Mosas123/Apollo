@@ -183,6 +183,13 @@ actor PlaybackManager {
         }
     }
 
+    private static func isLossless(_ result: PlaybackResult) -> Bool {
+        result.mimeType.caseInsensitiveCompare("audio/flac") == .orderedSame
+            || result.audioQuality == "qobuz-cd"
+            || result.audioQuality == "pencari-flac"
+            || result.audioQuality.lowercased().contains("lossless")
+    }
+
     private static func normalizedMatchKey(_ value: String) -> String {
         value
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
@@ -229,7 +236,8 @@ actor PlaybackManager {
                 videoId: videoId,
                 duration: song.map { TimeInterval($0.duration) },
                 artists: song?.artists ?? [],
-                thumbnailUrl: song?.thumbnailUrl
+                thumbnailUrl: song?.thumbnailUrl,
+                isLossless: Self.isLossless(result)
             )
             return result
         }
@@ -244,7 +252,8 @@ actor PlaybackManager {
                 videoId: videoId,
                 duration: song.map { TimeInterval($0.duration) },
                 artists: artists,
-                thumbnailUrl: song?.thumbnailUrl
+                thumbnailUrl: song?.thumbnailUrl,
+                isLossless: localPath.pathExtension.lowercased() == "flac"
             )
             await MainActor.run {
                 NowPlaying.shared.updateVideoAvailability()
@@ -278,7 +287,8 @@ actor PlaybackManager {
                 duration: cached.duration.flatMap { $0 > 0 ? TimeInterval($0) : nil },
                 artists: queueSong?.artists ?? [],
                 loudnessDb: cached.loudnessDb,
-                thumbnailUrl: queueSong?.thumbnailUrl
+                thumbnailUrl: queueSong?.thumbnailUrl,
+                isLossless: Self.isLossless(cached)
             )
             await publishVideoAvailability(result: cached, videoId: videoId, rowType: queueSong?.musicVideoType)
             return cached
@@ -331,7 +341,8 @@ actor PlaybackManager {
             duration: result.duration.flatMap { $0 > 0 ? TimeInterval($0) : nil },
             artists: queueSong?.artists ?? [],
             loudnessDb: result.loudnessDb,
-            thumbnailUrl: queueSong?.thumbnailUrl
+            thumbnailUrl: queueSong?.thumbnailUrl,
+            isLossless: Self.isLossless(result)
         )
         await publishVideoAvailability(result: result, videoId: videoId, rowType: queueSong?.musicVideoType)
     }
