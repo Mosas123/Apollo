@@ -128,6 +128,9 @@ final class PlayerController {
     let playState = CurrentValueSubject<State, Never>(.stopped)
     var pendingResumeAt: TimeInterval = 0
     var nowPlayingInfo = [String: Any]()
+    /// Temporary volume (0…1) used to mask the lossless hot-swap. `nil` means
+    /// follow the user setting.
+    private var volumeOverride: Double?
     private var pendingSeek: (target: TimeInterval, deadline: Date)?
     private var metadataDebounceTask: Task<Void, Never>?
 
@@ -343,10 +346,6 @@ extension PlayerController {
     func togglePlayPause() {
         setPaused(playState.value == .playing)
     }
-
-    /// Temporary volume (0…1) used to mask the lossless hot-swap. `nil` means
-    /// follow the user setting.
-    private var volumeOverride: Double?
 
     func setVolumeOverride(_ value: Double?) {
         volumeOverride = value
