@@ -240,6 +240,11 @@ actor PlaybackManager {
         }
         guard snapshot.0 == videoId, snapshot.2 else { return }
         let song = await queueSong(for: videoId)
+        let target = await MainActor.run { SettingsStore.shared.playerVolume }
+
+        // Fade out, load the FLAC at the same position while muted, fade in.
+        // The user hears a ~0.3s dip, not a click/pop or a restart.
+        await PlayerController.shared.fadeVolume(to: 0, duration: 0.10)
         await PlayerController.shared.play(
             url: result.streamUrl,
             title: song?.title,
@@ -251,6 +256,8 @@ actor PlaybackManager {
             losslessLabel: "FLAC",
             startAt: snapshot.1
         )
+        await PlayerController.shared.fadeVolume(to: target, duration: 0.18)
+        await MainActor.run { PlayerController.shared.setVolumeOverride(nil) }
     }
 
     /// Warms the FLAC for the next queue track while the current one plays, so

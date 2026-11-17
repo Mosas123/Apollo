@@ -342,11 +342,31 @@ extension PlayerController {
         setPaused(playState.value == .playing)
     }
 
+    /// Temporary volume (0…1) used to mask the lossless hot-swap. `nil` means
+    /// follow the user setting.
+    private var volumeOverride: Double?
+
+    func setVolumeOverride(_ value: Double?) {
+        volumeOverride = value
+        applyPlayerVolume()
+    }
+
     func applyPlayerVolume() {
-        let vol = SettingsStore.shared.playerVolume
+        let vol = volumeOverride ?? SettingsStore.shared.playerVolume
         withMpv { mpv in
             var val = Double(vol * 100)
             mpv_set_property(mpv, "volume", MPV_FORMAT_DOUBLE, &val)
+        }
+    }
+
+    /// Short volume ramp so a stream swap doesn't click or pop.
+    func fadeVolume(to fraction: Double, duration: TimeInterval) async {
+        let start = volumeOverride ?? SettingsStore.shared.playerVolume
+        let steps = 6
+        for step in 1...steps {
+            let progress = Double(step) / Double(steps)
+            setVolumeOverride(start + (fraction - start) * progress)
+            try? await Task.sleep(for: .seconds(duration / Double(steps)))
         }
     }
 
