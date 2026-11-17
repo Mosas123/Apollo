@@ -247,6 +247,43 @@ extension TropLibraryStore {
         _ = try await db.insert(SongEntity(sync: song), onConflict: .ignore)
     }
 
+    /// Batched hydration: one read (chunked IN query) instead of N fetchOne hops.
+    func fetchSongs(ids: [String]) async throws -> [String: SyncSong] {
+        guard !ids.isEmpty else { return [:] }
+        return try await db.read { db in
+            var result: [String: SyncSong] = [:]
+            result.reserveCapacity(ids.count)
+            for start in stride(from: 0, to: ids.count, by: 500) {
+                let chunk = Array(ids[start..<min(start + 500, ids.count)])
+                for entity in try SongEntity.fetchAll(db, keys: chunk) {
+                    result[entity.id] = entity.toSync()
+                }
+            }
+            return result
+        }
+    }
+
+    /// Batched save: one write transaction instead of N actor hops.
+    func saveSongs(_ songs: [SyncSong]) async throws {
+        guard !songs.isEmpty else { return }
+        let entities = songs.map { SongEntity(sync: $0) }
+        try await db.write { db in
+            for entity in entities { try entity.save(db) }
+        }
+    }
+
+    func insertMapsIgnoringConflicts(_ entries: [SyncPlaylistEntry]) async throws {
+        guard !entries.isEmpty else { return }
+        try await db.write { db in
+            for entry in entries {
+                try db.execute(sql: """
+                    INSERT OR IGNORE INTO playlist_song_map (playlist_id, song_id, position, set_video_id)
+                    VALUES (?, ?, ?, ?)
+                    """, arguments: [entry.playlistId, entry.songId, entry.position, entry.setVideoId])
+            }
+        }
+    }
+
     func fetchOrphanSongIds() async throws -> [String] {
         try await db.orphanSongIds()
     }

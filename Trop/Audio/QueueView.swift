@@ -125,8 +125,8 @@ struct QueueView<ProgressSlider: View>: View {
     private var queueHeader: some View {
         HStack(spacing: 12) {
             if let uiImage = np.thumbnailUIImage {
-                let cropped = uiImage.centerCroppedSquare()
-                Image(uiImage: cropped)
+                // Already center-cropped by NowPlaying.
+                Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFill()
                     .frame(width: 64, height: 64)

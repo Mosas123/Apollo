@@ -52,8 +52,13 @@ public actor PlaylistDetailService {
         )
         try await store.savePlaylist(entity)
 
-        // Clear existing song mappings and re-insert
+        // Clear existing song mappings and re-insert in one batched pass:
+        // gather rows, hydrate all songs with a single query, then save songs
+        // and mappings in bulk. Previously this did 2 DB round-trips per row.
         try await store.deleteMapsForPlaylist(playlistId: playlistId)
+
+        var parsed: [(index: Int, videoId: String, setVideoId: String?, raw: [String: Any])] = []
+        parsed.reserveCapacity(snapshot.count)
         var skipped = 0
         for (index, rawItem) in snapshot.enumerated() {
             guard let renderer = rawItem["musicResponsiveListItemRenderer"] as? [String: Any],
@@ -63,29 +68,35 @@ public actor PlaylistDetailService {
             }
             let nav = renderer["navigationEndpoint"] as? [String: Any]
             let watch = nav?["watchEndpoint"] as? [String: Any]
-            let setVideoId = watch?["playlistSetVideoId"] as? String
+            parsed.append((index, videoId, watch?["playlistSetVideoId"] as? String, rawItem))
+        }
 
-            if let songItem = LibraryBrowseParser.parseSong(rawItem) {
-                let existing = try await store.fetchSong(id: videoId)
-                let entity = SyncSong.merging(
-                    existing: existing,
-                    id: videoId,
+        let existingSongs = try await store.fetchSongs(ids: parsed.map(\.videoId))
+        var songsToSave: [SyncSong] = []
+        songsToSave.reserveCapacity(parsed.count)
+        var entries: [SyncPlaylistEntry] = []
+        entries.reserveCapacity(parsed.count)
+        for row in parsed {
+            if let songItem = LibraryBrowseParser.parseSong(row.raw) {
+                songsToSave.append(SyncSong.merging(
+                    existing: existingSongs[row.videoId],
+                    id: row.videoId,
                     title: songItem.title,
                     artistName: songItem.artists.first,
                     albumName: songItem.album,
                     duration: songItem.duration,
                     thumbnailUrl: songItem.thumbnailUrl
-                )
-                try await store.saveSong(entity)
+                ))
             }
-
-            try await store.insertMapIgnoringConflicts(SyncPlaylistEntry(
+            entries.append(SyncPlaylistEntry(
                 playlistId: playlistId,
-                songId: videoId,
-                position: index,
-                setVideoId: setVideoId
+                songId: row.videoId,
+                position: row.index,
+                setVideoId: row.setVideoId
             ))
         }
+        try await store.saveSongs(songsToSave)
+        try await store.insertMapsIgnoringConflicts(entries)
         if skipped > 0 {
             SwiftyTubeLog.debug("fetchPlaylist \(playlistId): skipped \(skipped)/\(snapshot.count) rows without video id")
         }

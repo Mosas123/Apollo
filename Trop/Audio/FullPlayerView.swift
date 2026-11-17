@@ -643,9 +643,9 @@ struct FullPlayerView: View {
     private var artworkImage: some View {
         ZStack {
             if let uiImage = np.thumbnailUIImage {
-                let cropped = uiImage.centerCroppedSquare()
+                // `thumbnailUIImage` is already center-cropped by NowPlaying.
                 GeometryReader { geo in
-                    Image(uiImage: cropped)
+                    Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
                         .frame(width: geo.size.width, height: geo.size.height)

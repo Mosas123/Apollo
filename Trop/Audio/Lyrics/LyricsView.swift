@@ -363,7 +363,8 @@ struct LyricsView<ProgressSlider: View>: View {
     private var songInfoRow: some View {
         HStack(spacing: 12) {
             if let uiImage = np.thumbnailUIImage {
-                Image(uiImage: uiImage.centerCroppedSquare())
+                // Already center-cropped by NowPlaying.
+                Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFill()
                     .frame(width: 64, height: 64)

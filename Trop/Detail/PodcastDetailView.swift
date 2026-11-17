@@ -667,9 +667,8 @@ struct PodcastMoreSheet: View {
     }
 
     private func downloadAll() {
-        for episode in podcast.episodes {
-            Task { await DownloadManager.shared.download(song: episode.toSongItem()) }
-        }
+        let songs = podcast.episodes.map { $0.toSongItem() }
+        Task { await DownloadManager.shared.downloadAll(songs) }
     }
 
     private func share() {
