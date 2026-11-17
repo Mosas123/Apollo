@@ -349,20 +349,12 @@ actor PlaybackManager {
         return upgradeRate > currentRate
     }
 
+    /// Badge text is a tier, not a codec: Standard / High / Lossless.
     private static func qualityLabel(_ result: PlaybackResult) -> String? {
-        if let lossless = losslessLabel(result) { return lossless }
-        let mime = result.mimeType.lowercased()
-        let kbps = result.bitrate > 0 ? " \(Int((Double(result.bitrate) / 1000).rounded()))" : ""
-        if mime.contains("flac") { return "FLAC" }
-        if mime.contains("aac") || mime.contains("mp4") || result.audioQuality.lowercased().contains("aac") {
-            return "AAC\(kbps)"
-        }
-        if mime.contains("opus") || mime.contains("ogg") || mime.contains("webm") {
-            return "Opus\(kbps)"
-        }
-        if mime.contains("mpeg") { return "MP3\(kbps)" }
-        if result.audioQuality.lowercased().contains("jiosaavn") { return "AAC\(kbps.isEmpty ? " 320" : kbps)" }
-        return kbps.isEmpty ? nil : "Audio\(kbps)"
+        if losslessLabel(result) != nil { return "Lossless" }
+        if result.bitrate >= 160_000 { return "High" }
+        if result.audioQuality.lowercased().contains("jiosaavn") { return "High" }
+        return "Standard"
     }
 
     private static func normalizedMatchKey(_ value: String) -> String {
@@ -432,7 +424,7 @@ actor PlaybackManager {
                 artists: artists,
                 thumbnailUrl: song?.thumbnailUrl,
                 losslessLabel: localPath.pathExtension.lowercased() == "flac" ? "FLAC" : nil,
-                qualityLabel: localPath.pathExtension.lowercased() == "flac" ? "FLAC" : "File"
+                qualityLabel: localPath.pathExtension.lowercased() == "flac" ? "Lossless" : "Standard"
             )
             await MainActor.run {
                 NowPlaying.shared.updateVideoAvailability()
