@@ -48,6 +48,9 @@ final class SearchViewModel {
     }
 
     private(set) var phase: Phase = .idle
+    /// True only while a network fetch is actually in flight (after the debounce),
+    /// so the spinner doesn't flash on every keystroke.
+    private(set) var isFetching = false
 
     // MARK: - Field & results
 
@@ -313,6 +316,8 @@ final class SearchViewModel {
     }
 
     private func fetchResults(for query: String, includeProviders: Bool) async {
+        isFetching = true
+        defer { isFetching = false }
         async let localResults = try? SearchService.shared.localSearch(query: query)
         var youtubeFailure: Error?
         do {

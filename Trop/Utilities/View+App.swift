@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 extension View {
     /// Keeps the mini player's inline layout in sync with this scroll container:
@@ -34,5 +35,17 @@ extension View {
     func appSheetChrome(_ detents: Set<PresentationDetent> = [.medium, .large]) -> some View {
         presentationDetents(detents)
             .presentationDragIndicator(.visible)
+    }
+}
+
+extension Color {
+    /// Black or white, whichever reads better on top of this color. Used for
+    /// text on accent-filled chips so dark accents stay legible.
+    var readableForeground: Color {
+        let ui = UIColor(self)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        guard ui.getRed(&r, green: &g, blue: &b, alpha: &a) else { return .white }
+        let luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        return luminance > 0.6 ? .black : .white
     }
 }

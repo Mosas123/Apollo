@@ -470,7 +470,7 @@ struct HomeScreenView: View {
                                 isOn ? settings.accentColor : Color(uiColor: .secondarySystemBackground),
                                 in: Capsule()
                             )
-                            .foregroundStyle(isOn ? .black : .primary)
+                            .foregroundStyle(isOn ? settings.accentColor.readableForeground : .primary)
                     }
                     .buttonStyle(.plain)
                 }
