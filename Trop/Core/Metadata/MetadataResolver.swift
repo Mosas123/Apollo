@@ -1,7 +1,7 @@
 import Foundation
 
 /// Canonical metadata resolved from an external catalogue.
-struct ResolvedMetadata: Sendable {
+struct ResolvedMetadata: Sendable, Codable {
     let title: String
     let artist: String
     let album: String?
@@ -194,7 +194,7 @@ enum MetadataResolver {
 
     private static func decode<T: Decodable>(_ url: URL, headers: [String: String]) async throws -> T {
         var request = URLRequest(url: url)
-        request.timeoutInterval = 15
+        request.timeoutInterval = 8
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         for (key, value) in headers {
             request.setValue(value, forHTTPHeaderField: key)
@@ -212,14 +212,36 @@ enum MetadataResolver {
 actor MetadataCache {
     static let shared = MetadataCache()
 
-    struct Entry: Sendable {
+    struct Entry: Codable, Sendable {
         let value: ResolvedMetadata?
+        let storedAt: Date
+        let expiresAt: Date
     }
 
     private var store: [String: Entry] = [:]
+    private let diskURL: URL
+    private let positiveTTL: TimeInterval = 30 * 24 * 3600
+    private let negativeTTL: TimeInterval = 30 * 60
+    private var persistTask: Task<Void, Never>?
+
+    private init() {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        diskURL = base.appendingPathComponent("metadata-cache.json")
+        if let data = try? Data(contentsOf: diskURL),
+           let decoded = try? JSONDecoder().decode([String: Entry].self, from: data) {
+            let now = Date()
+            store = decoded.filter { $0.value.expiresAt > now }
+        }
+    }
 
     func lookup(_ key: String) -> Entry? {
-        store[key]
+        guard let entry = store[key] else { return nil }
+        guard entry.expiresAt > Date() else {
+            store[key] = nil
+            return nil
+        }
+        return entry
     }
 
     func store(_ key: String, _ value: ResolvedMetadata?) {
@@ -228,6 +250,24 @@ actor MetadataCache {
                 store.removeValue(forKey: victim)
             }
         }
-        store[key] = Entry(value: value)
+        let now = Date()
+        let ttl = value == nil ? negativeTTL : positiveTTL
+        store[key] = Entry(value: value, storedAt: now, expiresAt: now.addingTimeInterval(ttl))
+        schedulePersist()
+    }
+
+    /// Debounced disk write so a burst of resolutions isn't 100 file writes.
+    private func schedulePersist() {
+        persistTask?.cancel()
+        persistTask = Task {
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            persistNow()
+        }
+    }
+
+    private func persistNow() {
+        guard let data = try? JSONEncoder().encode(store) else { return }
+        try? data.write(to: diskURL, options: .atomic)
     }
 }
