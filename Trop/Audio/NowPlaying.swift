@@ -610,19 +610,18 @@ final class NowPlaying {
         }
     }
 
-    /// Background metadata enrichment: fetch a canonical cover (iTunes first,
-    /// then MusicBrainz / Cover Art Archive) and swap it in if the track is
-    /// still current. Keeps the player showing clean, consistent album art.
+    /// Background metadata enrichment. Apple/iTunes is the primary catalogue
+    /// (matching the app's design), with MusicBrainz/Deezer as fallback inside
+    /// `MetadataResolver`. On a strict title+artist match it updates the
+    /// canonical text and cover for the currently playing track.
     private func enrichArtwork(videoId: String, replaceArtwork: Bool) {
         // Radio stations already carry their own name and favicon; never match
         // them against music/podcast catalogues.
         guard playbackKind != .radio, !MusicPlaybackIdentity.isExternal(videoId) else { return }
-        // Keep the track's own artwork when it has one.
-        guard replaceArtwork else { return }
         let title = title
         let artist = artist
         let kind = queueSongs.first { $0.videoId == videoId }?.contentKind
-        guard !title.isEmpty, !artist.isEmpty else { return }
+        guard !title.isEmpty else { return }
         enrichTask?.cancel()
         enrichTask = Task {
             guard !Task.isCancelled else { return }
@@ -632,11 +631,43 @@ final class NowPlaying {
             } else {
                 resolved = await MetadataResolver.enrich(title: title, artist: artist)
             }
-            guard let resolved, let artworkURL = resolved.artworkURL,
-                  let image = try? await ArtworkLoader.image(for: artworkURL) else { return }
+            guard let resolved else { return }
             guard lastLoadedVideoId == videoId else { return }
-            publishArtwork(image)
+
+            if kind == .episode || kind == .podcast {
+                if !resolved.title.isEmpty { self.title = resolved.title }
+                if !resolved.artist.isEmpty { self.artist = resolved.artist }
+                if let album = resolved.album, !album.isEmpty { self.albumTitle = album }
+            } else {
+                // Only rewrite when the catalogue clearly means this same track.
+                guard Self.metadataIdentity(resolved.title) == Self.metadataIdentity(title) else { return }
+                if !artist.isEmpty {
+                    let mine = Self.metadataIdentity(artist)
+                    let theirs = Self.metadataIdentity(resolved.artist)
+                    guard mine.contains(theirs) || theirs.contains(mine) else { return }
+                }
+                if !resolved.title.isEmpty { self.title = resolved.title }
+                if !resolved.artist.isEmpty { self.artist = resolved.artist }
+                if let album = resolved.album, !album.isEmpty { self.albumTitle = album }
+            }
+
+            if let artworkURL = resolved.artworkURL,
+               let image = try? await ArtworkLoader.image(for: artworkURL) {
+                guard lastLoadedVideoId == videoId else { return }
+                publishArtwork(image)
+            } else if replaceArtwork {
+                return
+            }
+            PlayerController.shared.setNowPlayingMetadata()
         }
+    }
+
+    private static func metadataIdentity(_ value: String) -> String {
+        value
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .replacingOccurrences(of: "\\s*[\\[(][^\\])]*[\\])]", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "[^a-z0-9 ]", with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
     }
 
     private func loadArtworkFromLocalFile(_ fileURL: URL, videoId: String) {
