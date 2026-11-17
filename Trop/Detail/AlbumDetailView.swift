@@ -331,7 +331,7 @@ struct AlbumDetailView: View {
         }
         .scrollDisabled(viewModel.isLoading || viewModel.error != nil || viewModel.album == nil)
         .background(albumBackdrop)
-        .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
+        .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
         .navigationTitle(viewModel.album?.title ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)

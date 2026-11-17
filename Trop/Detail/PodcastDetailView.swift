@@ -439,7 +439,7 @@ struct PodcastDetailView: View {
             }
         }
         .scrollDisabled(viewModel.isLoading || viewModel.error != nil || viewModel.podcast == nil)
-        .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
+        .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
         .navigationTitle(viewModel.podcast?.title ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)

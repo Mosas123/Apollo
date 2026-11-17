@@ -159,7 +159,7 @@ struct HistoryScreenView: View {
             }
         }
         .listStyle(.plain)
-        .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
+        .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
     }
 
     @ViewBuilder
@@ -269,7 +269,7 @@ struct HistoryScreenView: View {
             }
         }
         .listStyle(.plain)
-        .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
+        .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
     }
 
 }

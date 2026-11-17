@@ -323,7 +323,7 @@ struct ArtistDetailView: View {
                 }
             }
             .scrollDisabled(viewModel.isLoading || viewModel.error != nil || viewModel.artist == nil)
-            .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
+            .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
             .onScrollGeometryChange(
                 for: CGFloat.self,
                 of: { $0.contentOffset.y },

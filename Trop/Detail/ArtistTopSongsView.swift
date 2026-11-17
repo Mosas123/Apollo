@@ -24,7 +24,7 @@ struct ArtistTopSongsView: View {
         .toolbar(.visible, for: .navigationBar)
         .navigationTitle("Top Songs")
         .navigationBarTitleDisplayMode(.inline)
-        .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
+        .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
         .sheet(isPresented: $showMenu) {
             if let menuSong {
                 SongMenuSheet(song: menuSong, onNavigate: { AppRouter.shared.open($0) })
