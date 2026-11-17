@@ -120,6 +120,9 @@ final class NowPlaying {
     private static let queueIndexKey = "nowPlaying.queueIndex"
     private static let shuffleKey = "nowPlaying.shuffle"
     private static let repeatKey = "nowPlaying.repeat"
+    /// Last queue snapshot encoded to disk; lets `persistQueueState` skip the
+    /// JSON encode when only index/shuffle/repeat changed.
+    private var lastPersistedQueue: [SongItem]?
 
     private init() {
         restoreQueueIfNeeded()
@@ -148,6 +151,7 @@ final class NowPlaying {
         isShuffleOn = UserDefaults.standard.bool(forKey: Self.shuffleKey)
         isRepeatOn = UserDefaults.standard.bool(forKey: Self.repeatKey)
         queueIndex = max(0, queueIndex)
+        lastPersistedQueue = songs
     }
 
     func persistQueueState() {
@@ -157,10 +161,15 @@ final class NowPlaying {
             UserDefaults.standard.removeObject(forKey: Self.queueIndexKey)
             UserDefaults.standard.removeObject(forKey: Self.shuffleKey)
             UserDefaults.standard.removeObject(forKey: Self.repeatKey)
+            lastPersistedQueue = []
             return
         }
-        if let data = try? JSONEncoder().encode(queueSongs) {
-            UserDefaults.standard.set(data, forKey: Self.queueKey)
+        // Only re-encode the (potentially large) array when it actually changed.
+        if queueSongs != lastPersistedQueue {
+            if let data = try? JSONEncoder().encode(queueSongs) {
+                UserDefaults.standard.set(data, forKey: Self.queueKey)
+                lastPersistedQueue = queueSongs
+            }
         }
         UserDefaults.standard.set(queueIndex, forKey: Self.queueIndexKey)
         UserDefaults.standard.set(isShuffleOn, forKey: Self.shuffleKey)

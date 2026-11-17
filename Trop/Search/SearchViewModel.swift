@@ -323,7 +323,13 @@ final class SearchViewModel {
         do {
             let raw = try await SearchService.shared.search(query: query)
             guard !Task.isCancelled, query == submittedQuery else { return }
-            let parsed = SearchParser.parseSearchResults(from: raw)
+            // Parse off the main actor. TubeJSON is the Sendable box the
+            // engine already uses to move raw JSON across isolation.
+            let box = TubeJSON(raw)
+            let parsed = await Task.detached(priority: .userInitiated) {
+                SearchParser.parseSearchResults(from: box.value)
+            }.value
+            guard !Task.isCancelled, query == submittedQuery else { return }
             resultCache[query] = parsed
             cacheOrder.removeAll { $0 == query }
             cacheOrder.append(query)

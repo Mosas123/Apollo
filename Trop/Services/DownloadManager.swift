@@ -16,6 +16,14 @@ import SwiftUI
 import UIKit
 @preconcurrency import ffmpegkit
 
+/// Per-download progress cell. Isolating the high-frequency 0–99% updates in
+/// a per-id object means only that row re-renders, not every row observing
+/// the manager.
+@MainActor
+final class DownloadProgressBox: ObservableObject {
+    @Published var fraction: Double = 0
+}
+
 @MainActor
 final class DownloadManager: ObservableObject {
     static let shared = DownloadManager()
@@ -41,6 +49,7 @@ final class DownloadManager: ObservableObject {
     private var cancelledDownloadIds: Set<String> = []
     private var lastReportedProgress: [String: Double] = [:]
     private var lastProgressTime: [String: CFTimeInterval] = [:]
+    private var progressBoxes: [String: DownloadProgressBox] = [:]
     private var activeFFmpegSessions: [String: FFmpegSession] = [:]
 
     private var tracksById: [String: DownloadedTrackEntity] = [:]
@@ -311,7 +320,7 @@ extension DownloadManager {
         }
 
         cancelledDownloadIds.remove(videoId)
-        lastReportedProgress.removeValue(forKey: videoId)
+        clearProgress(for: videoId)
         let artist = song.artists.map(\.name).joined(separator: ", ")
         let downloadStart = CFAbsoluteTimeGetCurrent()
         Log.downloadManager.debug("Starting download: \(artist) - \(song.title) (\(videoId))")
@@ -407,7 +416,7 @@ extension DownloadManager {
 
             if cancelledDownloadIds.contains(videoId) {
                 cancelledDownloadIds.remove(videoId)
-                lastReportedProgress.removeValue(forKey: videoId)
+                clearProgress(for: videoId)
                 try? fileManager.removeItem(at: fileURL)
                 downloads[videoId] = .notStarted
                 return
@@ -425,18 +434,18 @@ extension DownloadManager {
             await register(entity)
 
             downloads[videoId] = .completed
-            lastReportedProgress.removeValue(forKey: videoId)
+            clearProgress(for: videoId)
             let totalElapsed = CFAbsoluteTimeGetCurrent() - downloadStart
             Log.downloadManager.debug("DONE \(String(format: "%.1f", totalElapsed))s total: \(artist) - \(song.title)")
         } catch is CancellationError {
             cancelledDownloadIds.remove(videoId)
-            lastReportedProgress.removeValue(forKey: videoId)
+            clearProgress(for: videoId)
             try? fileManager.removeItem(at: fileURL)
             downloads[videoId] = .notStarted
         } catch {
             if cancelledDownloadIds.contains(videoId) || (error as? URLError)?.code == .cancelled {
                 cancelledDownloadIds.remove(videoId)
-                lastReportedProgress.removeValue(forKey: videoId)
+                clearProgress(for: videoId)
                 try? fileManager.removeItem(at: fileURL)
                 downloads[videoId] = .notStarted
                 return
@@ -445,7 +454,7 @@ extension DownloadManager {
                 try? fileManager.removeItem(at: fileURL)
             }
             downloads[videoId] = .failed(userFacingDownloadError(error))
-            lastReportedProgress.removeValue(forKey: videoId)
+            clearProgress(for: videoId)
             Log.downloadManager.error("Failed download \(videoId): \(error.localizedDescription)")
         }
     }
@@ -557,19 +566,37 @@ extension DownloadManager {
         activeFFmpegSessions.removeAll()
     }
 
+    func progressBox(for videoId: String) -> DownloadProgressBox {
+        if let box = progressBoxes[videoId] { return box }
+        let box = DownloadProgressBox()
+        progressBoxes[videoId] = box
+        return box
+    }
+
+    private func clearProgress(for videoId: String) {
+        lastReportedProgress.removeValue(forKey: videoId)
+        lastProgressTime.removeValue(forKey: videoId)
+        progressBoxes[videoId]?.fraction = 0
+    }
+
     private func setProgress(_ fraction: Double, for videoId: String) {
         let clamped = min(0.99, max(0, fraction))
         let last = lastReportedProgress[videoId] ?? -1
         guard clamped >= 0.99 || last < 0 || clamped - last >= 0.02 else { return }
-        // Publishing `downloads` invalidates every observing song row, so cap
-        // it to ~5 Hz per download instead of firing on every 2% step.
+        // Cap the published bar to ~5 Hz; the per-id box re-renders only the
+        // one row, while the coarse `.downloading` state stays in `downloads`.
         if clamped < 0.99 {
             let now = CACurrentMediaTime()
             if now - (lastProgressTime[videoId] ?? 0) < 0.2 { return }
             lastProgressTime[videoId] = now
         }
         lastReportedProgress[videoId] = clamped
-        downloads[videoId] = .downloading(clamped)
+        if case .downloading = (downloads[videoId] ?? .notStarted) {
+            // already flagged as downloading
+        } else {
+            downloads[videoId] = .downloading(0)
+        }
+        progressBox(for: videoId).fraction = clamped
     }
 
     private func prefetchArtwork(from thumbnailUrl: String?) async -> Data? {
@@ -688,7 +715,7 @@ extension DownloadManager {
         if let session = activeFFmpegSessions.removeValue(forKey: videoId) {
             session.cancel()
         }
-        lastReportedProgress.removeValue(forKey: videoId)
+        clearProgress(for: videoId)
         downloads[videoId] = .notStarted
         tracksById.removeValue(forKey: videoId)
 
@@ -790,8 +817,8 @@ extension DownloadManager {
 
     var activeDownloads: [(videoId: String, progress: Double)] {
         downloads.compactMap { videoId, state in
-            if case .downloading(let progress) = state {
-                return (videoId, progress)
+            if case .downloading = state {
+                return (videoId, progressBoxes[videoId]?.fraction ?? 0)
             }
             return nil
         }

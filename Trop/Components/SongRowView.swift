@@ -106,20 +106,27 @@ struct SongRowView: View {
 /// Full-cell progress background shown while a song is downloading.
 struct DownloadCellProgressView: View {
     let song: SongItem
-    @ObservedObject private var downloadManager = DownloadManager.shared
+    // Only this row observes the fast-changing 0–99% value, instead of every
+    // row observing the whole manager.
+    @StateObject private var progress: DownloadProgressBox
+
+    @MainActor
+    init(song: SongItem) {
+        self.song = song
+        _progress = StateObject(wrappedValue: DownloadManager.shared.progressBox(for: song.videoId))
+    }
 
     var body: some View {
-        let state = downloadManager.state(for: song.videoId)
-        return GeometryReader { geo in
-            if case .downloading(let fraction) = state {
+        GeometryReader { geo in
+            if progress.fraction > 0 {
                 Color.accentColor.opacity(0.25)
                     .frame(
-                        width: geo.size.width * CGFloat(min(max(fraction, 0), 1)),
+                        width: geo.size.width * CGFloat(min(max(progress.fraction, 0), 1)),
                         height: geo.size.height
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: state)
+        .animation(.easeInOut(duration: 0.3), value: progress.fraction)
     }
 }
