@@ -53,6 +53,9 @@ final class NowPlaying {
     var qualityBadgeLabel: String?
     /// True while a better source is being resolved for the current track.
     var isUpgradingQuality = false
+    /// Current stream URL + lossless label, kept to roll back a failed upgrade.
+    var currentStreamURL: String?
+    var currentLosslessLabel: String?
     var currentTime: TimeInterval = 0
     var duration: TimeInterval = 0
     var progress: Float {

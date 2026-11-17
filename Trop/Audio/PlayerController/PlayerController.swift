@@ -232,6 +232,8 @@ extension PlayerController {
         NowPlaying.shared.losslessFormatLabel = losslessLabel
         NowPlaying.shared.isLosslessStream = losslessLabel != nil
         NowPlaying.shared.qualityBadgeLabel = qualityLabel ?? losslessLabel
+        NowPlaying.shared.currentStreamURL = url
+        NowPlaying.shared.currentLosslessLabel = losslessLabel
         guard let url = URL(string: url) else {
             Log.player.error("Invalid URL: \(url)")
             return

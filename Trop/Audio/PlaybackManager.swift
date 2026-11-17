@@ -336,17 +336,23 @@ actor PlaybackManager {
     /// stream at the same position, fades back in, and updates the badge.
     private func applyUpgradeIfEnabled(_ result: PlaybackResult, videoId: String) async {
         guard SettingsStore.shared.upgradeDuringPlayback else { return }
-        let snapshot = await MainActor.run {
-            (
-                NowPlaying.shared.videoId,
-                NowPlaying.shared.currentTime,
-                NowPlaying.shared.isPlaying,
-                NowPlaying.shared.qualityBadgeLabel
-            )
-        }
-        guard snapshot.0 == videoId, snapshot.2 else { return }
+        let currentVideoId = await MainActor.run { NowPlaying.shared.videoId }
+        let isPlaying = await MainActor.run { NowPlaying.shared.isPlaying }
+        guard currentVideoId == videoId, isPlaying else { return }
+        let position = await MainActor.run { NowPlaying.shared.currentTime }
+        let oldLabel = await MainActor.run { NowPlaying.shared.qualityBadgeLabel }
+        let oldURL = await MainActor.run { NowPlaying.shared.currentStreamURL }
+        let oldLossless = await MainActor.run { NowPlaying.shared.currentLosslessLabel }
+
         let newLabel = Self.qualityLabel(result)
-        guard Self.tierRank(newLabel) > Self.tierRank(snapshot.3) else { return }
+        guard Self.tierRank(newLabel) > Self.tierRank(oldLabel) else { return }
+
+        // Never cut the current audio for a stream that can't even serve bytes.
+        guard await Self.verifyStream(result.streamUrl) else {
+            if result.audioQuality.lowercased().contains("pencari") { markPencariCooldown() }
+            return
+        }
+
         let song = await queueSong(for: videoId)
         let targetVolume = await MainActor.run { SettingsStore.shared.playerVolume }
         await PlayerController.shared.fadeVolume(to: 0, duration: 0.12)
@@ -360,10 +366,48 @@ actor PlaybackManager {
             thumbnailUrl: song?.thumbnailUrl,
             losslessLabel: Self.losslessLabel(result),
             qualityLabel: newLabel,
-            startAt: snapshot.1
+            startAt: position
         )
         await PlayerController.shared.fadeVolume(to: targetVolume, duration: 0.2)
         await MainActor.run { PlayerController.shared.setVolumeOverride(nil) }
+
+        // Confirm it actually started decoding; otherwise roll back silently.
+        try? await Task.sleep(for: .seconds(1.5))
+        let advanced = await MainActor.run { NowPlaying.shared.currentTime }
+        let currentId = await MainActor.run { NowPlaying.shared.videoId }
+        if currentId == videoId, advanced <= position + 0.05, let oldURL {
+            if result.audioQuality.lowercased().contains("pencari") { markPencariCooldown() }
+            await PlayerController.shared.play(
+                url: oldURL,
+                title: song?.title,
+                artist: song?.artistNamesDisplay,
+                videoId: videoId,
+                duration: song.map { TimeInterval($0.duration) },
+                artists: song?.artists ?? [],
+                thumbnailUrl: song?.thumbnailUrl,
+                losslessLabel: oldLossless,
+                qualityLabel: oldLabel ?? "Standard",
+                startAt: position
+            )
+        }
+    }
+
+    /// Cheap reachability check: Range request, 200/206, audio-ish content type.
+    private static func verifyStream(_ urlString: String) async -> Bool {
+        guard let url = URL(string: urlString) else { return false }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
+        request.setValue("bytes=0-1", forHTTPHeaderField: "Range")
+        guard let (_, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse else { return false }
+        guard http.statusCode == 200 || http.statusCode == 206 else { return false }
+        if let type = http.value(forHTTPHeaderField: "Content-Type")?.lowercased() {
+            return type.contains("audio")
+                || type.contains("flac")
+                || type.contains("octet-stream")
+                || type.contains("video/mp4")
+        }
+        return true
     }
 
     /// Boundary-only upgrade: warm this track (for replays) and the next one
