@@ -135,29 +135,6 @@ struct SearchView: View {
         .padding(.vertical, 8)
     }
 
-    private var sortMenu: some View {
-        Menu {
-            ForEach(SearchSort.allCases, id: \.self) { option in
-                Button {
-                    viewModel.sort = option
-                } label: {
-                    if viewModel.sort == option {
-                        Label(LocalizedStringKey(option.title), systemImage: "checkmark")
-                    } else {
-                        Text(LocalizedStringKey(option.title))
-                    }
-                }
-            }
-        } label: {
-            Image(systemName: "arrow.up.arrow.down")
-                .font(.body)
-                .foregroundStyle(.primary)
-                .frame(width: 44, height: 44)
-                .background(Circle().fill(Color(.systemGray5).opacity(0.6)))
-        }
-        .accessibilityLabel("Sort results")
-    }
-
     // MARK: - Content
 
     @ViewBuilder
@@ -170,21 +147,47 @@ struct SearchView: View {
                 searchHistoryView
             }
         case .loading:
-            loadingView
+            liveSearchStatus {
+                ProgressView().padding()
+            }
         case .results:
             searchResultsList
         case .noResults:
-            noResultsView
+            liveSearchStatus { noResultsView }
         case .failed:
-            errorView(viewModel.error)
+            liveSearchStatus { errorView(viewModel.error) }
         }
     }
 
-    private var loadingView: some View {
-        VStack {
-            Spacer()
-            ShimmerLoadingView()
-            Spacer()
+    private func liveSearchStatus<Status: View>(@ViewBuilder status: () -> Status) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                suggestionRows
+                status().frame(maxWidth: .infinity)
+            }
+        }
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    private var suggestionRows: some View {
+        ForEach(viewModel.suggestions, id: \.self) { suggestion in
+            Button {
+                submit(suggestion)
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    Text(suggestion)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            Divider().padding(.leading, 16)
         }
     }
 
@@ -251,11 +254,9 @@ struct SearchView: View {
     private var searchResultsList: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
+                suggestionRows
                 if !viewModel.availableFilters.isEmpty {
-                    HStack(spacing: 4) {
-                        filterChips
-                        sortMenu.padding(.trailing, 16)
-                    }
+                    filterChips
                 }
 
                 if let hero = viewModel.heroArtist {

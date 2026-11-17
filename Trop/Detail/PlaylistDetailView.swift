@@ -18,6 +18,7 @@ final class PlaylistDetailViewModel {
     var playlist: PlaylistDetailInfo?
     var isLoading = true
     var error: Error?
+    private var loadGeneration = UUID()
 
     let autoRoute: AutoPlaylistRoute?
     var autoSongSort: LibrarySongSort = .recentlyAdded
@@ -36,8 +37,11 @@ final class PlaylistDetailViewModel {
     /// Fetches every playlist page from InnerTube and parses the response.
     /// Prependes "VL" to the playlistId if not already present (required by the browse endpoint).
     func load() async {
+        let generation = UUID()
+        loadGeneration = generation
         if let route = autoRoute {
             await loadAutoPlaylist(route: route)
+            await enrichVideoMetadata(generation: generation)
             return
         }
 
@@ -48,6 +52,7 @@ final class PlaylistDetailViewModel {
         if let entity = try? await DatabaseService.shared.fetchOne(PlaylistEntity.self, key: playlistId),
            entity.browseId == nil {
             await loadLocalPlaylist(entity: entity)
+            await enrichVideoMetadata(generation: generation)
             return
         }
 
@@ -97,12 +102,54 @@ final class PlaylistDetailViewModel {
                 }
             }
 
+            guard !Task.isCancelled, generation == loadGeneration else { return }
             playlist = parsed
             isLoading = false
+            await enrichVideoMetadata(generation: generation)
         } catch {
             self.error = error
             isLoading = false
         }
+    }
+
+    /// Correct video fallbacks after the playlist is visible. Sequential lookups
+    /// bound catalogue traffic; MetadataResolver caches successes and misses.
+    private func enrichVideoMetadata(generation: UUID) async {
+        let candidates = playlist?.songs ?? []
+        for song in candidates {
+            guard !Task.isCancelled, generation == loadGeneration else { return }
+            guard !MusicPlaybackIdentity.isExternal(song.videoId),
+                  song.contentKind == nil || song.contentKind == .music,
+                  song.thumbnailUrl == nil || song.thumbnailUrl?.contains("ytimg.com/") == true else { continue }
+            var title = song.title
+            var artist = cleanArtistDisplay(song.artists.first?.name ?? "")
+            // Video upload titles often include the performer before a dash.
+            if let separator = title.range(of: " - ") {
+                artist = String(title[..<separator.lowerBound]).trimmingCharacters(in: .whitespaces)
+                title = String(title[separator.upperBound...])
+            }
+            title = title.replacingOccurrences(
+                of: #"(?i)\s*[\(\[]\s*(?:official\s+(?:music\s+)?video|official\s+audio|audio\s+oficial|video\s+oficial|lyrics?|lyric\s+video)\s*[\)\]]"#,
+                with: "", options: .regularExpression
+            ).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !artist.isEmpty, !title.isEmpty,
+                  let metadata = await MetadataResolver.enrich(title: title, artist: artist, album: song.album),
+                  Self.metadataIdentity(metadata.title) == Self.metadataIdentity(title),
+                  Self.metadataIdentity(metadata.artist) == Self.metadataIdentity(artist) else { continue }
+            guard !Task.isCancelled, generation == loadGeneration else { return }
+            // Update every occurrence without changing playback IDs or artist links.
+            guard let indices = playlist?.songs.indices else { continue }
+            for index in indices where playlist?.songs[index].videoId == song.videoId {
+                playlist?.songs[index].title = metadata.title
+                if let url = metadata.artworkURL { playlist?.songs[index].thumbnailUrl = url.absoluteString }
+                if playlist?.songs[index].album == nil { playlist?.songs[index].album = metadata.album }
+            }
+        }
+    }
+
+    private static func metadataIdentity(_ value: String) -> String {
+        value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
     }
 
     private func loadLocalPlaylist(entity: PlaylistEntity) async {

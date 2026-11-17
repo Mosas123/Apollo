@@ -18,6 +18,12 @@ struct SearchSuggestionsTests {
         #expect(SearchSuggestions.parse(data: data) == ["cats", "cat videos"])
     }
 
+    @Test("Firefox autocomplete strings parse")
+    func firefoxArray() {
+        let data = Data(#"["bad",["bad bunny","bad romance"]]"#.utf8)
+        #expect(SearchSuggestions.parse(data: data) == ["bad bunny", "bad romance"])
+    }
+
     @Test("JSONP wrapper parses")
     func jsonp() {
         let data = Data(#"window.google.ac.h(["cat",[["cats",0],[123,0]]])"#.utf8)

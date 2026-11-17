@@ -80,6 +80,13 @@ struct MiniPlayerBarView: View {
         }
         .frame(height: barHeight)
         .frame(maxWidth: .infinity)
+        .onGeometryChange(for: CGRect.self) { proxy in
+            proxy.frame(in: .global)
+        } action: { frame in
+            if frame.width > 0, frame.height > 0 {
+                sheet.miniPlayerFrame = frame
+            }
+        }
         .overlay(alignment: .bottom) { progressLine }
         .clipShape(Capsule())
         .opacity(miniPlayerVisibility)
@@ -102,7 +109,7 @@ struct MiniPlayerBarView: View {
 
     /// Reveal the accessory contents as the full player moves toward them.
     private var miniPlayerVisibility: Double {
-        guard sheet.isExpanded else { return 1 }
+        guard sheet.isExpanded, !sheet.isCollapsing else { return 1 }
         let revealDistance = max(UIScreen.main.bounds.height * 0.65, 1)
         return Double(min(max(sheet.dragOffset / revealDistance, 0), 1))
     }

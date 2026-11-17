@@ -54,7 +54,8 @@ public enum SearchSuggestions: Sendable {
               root.count > 1,
               let entries = root[1] as? [Any] else { return [] }
         return entries.compactMap { entry in
-            (entry as? [Any])?.first as? String
+            if let text = entry as? String { return text }
+            return (entry as? [Any])?.first as? String
         }
     }
 }

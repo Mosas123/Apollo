@@ -148,7 +148,7 @@ struct HomeScreenView: View {
     private func sectionView(for section: HomeSection) -> some View {
         switch section {
         case .quickPicks:
-            quickPicksSection(section)
+            songRowsSection(section, includesPinned: true)
         case .keepListening:
             mixedSection(section)
         case .forgottenFavorites:
@@ -165,9 +165,10 @@ struct HomeScreenView: View {
     }
 
     @ViewBuilder
-    private func quickPicksSection(_ section: HomeSection) -> some View {
-        let pinnedSongs = speedDialEntries.map { $0.toSongItem() }
-        let pinnedIds = Set(speedDialEntries.map(\.videoId))
+    private func songRowsSection(_ section: HomeSection, includesPinned: Bool = false) -> some View {
+        let pinnedEntries = includesPinned ? speedDialEntries : []
+        let pinnedSongs = pinnedEntries.map { $0.toSongItem() }
+        let pinnedIds = Set(pinnedEntries.map(\.videoId))
         let visibleItems = section.items.filter { item in
             if case .song(let s) = item { return !pinnedIds.contains(s.videoId) }
             return true
@@ -179,7 +180,7 @@ struct HomeScreenView: View {
             if combinedQueue.isEmpty {
                 EmptyView()
             } else {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Text(section.displayTitle)
                             .font(.title2.bold())
@@ -198,48 +199,57 @@ struct HomeScreenView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
 
-                    LazyVGrid(
-                        columns: [
-                            GridItem(.flexible(), spacing: 8),
-                            GridItem(.flexible(), spacing: 8)
-                        ],
-                        spacing: 4
-                    ) {
-                        ForEach(speedDialEntries, id: \.videoId) { entry in
-                            let song = entry.toSongItem()
-                            quickPickCell(song, queue: combinedQueue)
-                                .overlay(alignment: .topTrailing) {
-                                    Image(systemName: "pin.fill")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundStyle(settings.accentColor)
-                                        .padding(4)
-                                }
-                                .contextMenu {
-                                    Button(role: .destructive) {
-                                        Task {
-                                            try? await DatabaseService.shared.removeFromSpeedDial(videoId: entry.videoId)
-                                            await reloadSpeedDial()
+                    GeometryReader { geometry in
+                        let columnWidth = max(1, geometry.size.width - 48)
+                        ScrollView(.horizontal) {
+                            LazyHGrid(
+                                rows: Array(repeating: GridItem(.fixed(56), spacing: 16), count: 4),
+                                spacing: 16
+                            ) {
+                                ForEach(pinnedEntries, id: \.videoId) { entry in
+                                    let song = entry.toSongItem()
+                                    quickPickCell(song, queue: combinedQueue)
+                                        .frame(width: columnWidth)
+                                        .overlay(alignment: .topTrailing) {
+                                            Image(systemName: "pin.fill")
+                                                .font(.system(size: 9, weight: .bold))
+                                                .foregroundStyle(settings.accentColor)
+                                                .padding(4)
                                         }
-                                    } label: {
-                                        Label("Unpin", systemImage: "pin.slash")
+                                        .contextMenu {
+                                            Button(role: .destructive) {
+                                                Task {
+                                                    try? await DatabaseService.shared.removeFromSpeedDial(videoId: entry.videoId)
+                                                    await reloadSpeedDial()
+                                                }
+                                            } label: {
+                                                Label("Unpin", systemImage: "pin.slash")
+                                            }
+                                        }
+                                }
+
+                                ForEach(visibleItems.indices, id: \.self) { i in
+                                    let item = visibleItems[i]
+                                    if case .song(let s) = item {
+                                        quickPickCell(s, queue: combinedQueue)
+                                            .frame(width: columnWidth)
+                                    } else {
+                                        YouTubeListItemView(
+                                            item: item,
+                                            onTap: { handleItemTap(item) },
+                                            onNavigate: { pendingRoute = $0 }
+                                        )
+                                        .frame(width: columnWidth, height: 56)
                                     }
                                 }
-                        }
-
-                        ForEach(visibleItems.indices, id: \.self) { i in
-                            let item = visibleItems[i]
-                            if case .song(let s) = item {
-                                quickPickCell(s, queue: combinedQueue)
-                            } else {
-                                YouTubeListItemView(
-                                    item: item,
-                                    onTap: { handleItemTap(item) },
-                                    onNavigate: { pendingRoute = $0 }
-                                )
                             }
+                            .scrollTargetLayout()
                         }
+                        .contentMargins(.horizontal, 16, for: .scrollContent)
+                        .scrollTargetBehavior(.viewAligned)
+                        .scrollIndicators(.hidden)
                     }
-                    .padding(.horizontal, 8)
+                    .frame(height: 4 * 56 + 3 * 16)
                 }
             }
         }
@@ -267,14 +277,14 @@ struct HomeScreenView: View {
     }
 
     private func quickPickCell(_ song: SongItem, queue: [SongItem]) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 16) {
             AsyncImageView(url: song.thumbnailUrl)
-                .frame(width: 48, height: 48)
+                .frame(width: 56, height: 56)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(song.title)
-                    .font(.headline)
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                 Text(quickPickSubtitle(song))
@@ -282,8 +292,10 @@ struct HomeScreenView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .clipped()
 
-            Spacer(minLength: 2)
+            Spacer(minLength: 0)
 
             Menu {
                 SongContextMenuButtons(song: song)
@@ -291,7 +303,7 @@ struct HomeScreenView: View {
                 Text("⋮")
                     .font(.body.weight(.black))
                     .foregroundStyle(.primary)
-                    .frame(width: 24, height: 44)
+                    .frame(width: 44, height: 56)
                     .contentShape(Rectangle())
             }
             .accessibilityLabel("More")
@@ -302,21 +314,7 @@ struct HomeScreenView: View {
     }
 
     private func songsSection(_ section: HomeSection) -> some View {
-        let queue = section.items.compactMap { if case .song(let s) = $0 { return s } else { return nil } }
-        return HorizontalSection(title: section.displayTitle, vSpacing: 8, contentVerticalPadding: 0) {
-            LazyHGrid(rows: Array(repeating: GridItem(.fixed(60)), count: 4), spacing: 12) {
-                ForEach(section.items.indices, id: \.self) { i in
-                    let item = section.items[i]
-                    if case .song(let s) = item {
-                        YouTubeListItemView(item: item, onTap: { handleSongTap(s, in: queue) }, onNavigate: { pendingRoute = $0 })
-                            .frame(width: 280)
-                    } else {
-                        YouTubeListItemView(item: item, onTap: { handleItemTap(item) }, onNavigate: { pendingRoute = $0 })
-                            .frame(width: 280)
-                    }
-                }
-            }
-        }
+        songRowsSection(section)
     }
 
     private func mixedSection(_ section: HomeSection) -> some View {

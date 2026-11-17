@@ -11,6 +11,8 @@ final class PlayerSheetState {
     var isExpanded = false
     var isCollapsing = false
     var hasExpandedArtwork = true
+    /// Measured in global coordinates by the native bottom accessory.
+    var miniPlayerFrame: CGRect = .zero
     /// Downward drag distance of the player card; 0 while fully expanded.
     var dragOffset: CGFloat = 0
 

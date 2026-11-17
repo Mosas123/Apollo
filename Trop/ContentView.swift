@@ -116,13 +116,18 @@ struct ContentView: View {
 
     private func collapsePlayer() {
         guard !sheet.isCollapsing else { return }
-        withAnimation(.smooth(duration: 0.3), completionCriteria: .logicallyComplete) {
+        withAnimation(.spring(duration: 0.38, bounce: 0.06), completionCriteria: .removed) {
             sheet.isCollapsing = true
-            sheet.dragOffset = max(UIScreen.main.bounds.height * 1.1, sheet.dragOffset)
-        } completion: {
-            sheet.isExpanded = false
+            // FullPlayerView contracts to the measured accessory frame.
             sheet.dragOffset = 0
-            sheet.isCollapsing = false
+        } completion: {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                sheet.isExpanded = false
+                sheet.dragOffset = 0
+                sheet.isCollapsing = false
+            }
         }
     }
 

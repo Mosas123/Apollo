@@ -47,6 +47,14 @@ struct FullPlayerView: View {
         GeometryReader { geometry in
             let horizontalPadding: CGFloat = geometry.size.width < 375 ? 24 : 32
             let isCompact = geometry.size.height < 700
+            let globalFrame = geometry.frame(in: .global)
+            let measuredMiniFrame = sheet.miniPlayerFrame
+            let miniFrame = measuredMiniFrame.isEmpty
+                ? CGRect(x: globalFrame.minX + 16,
+                         y: globalFrame.maxY - geometry.safeAreaInsets.bottom - 110,
+                         width: max(1, geometry.size.width - 32), height: 48 * 1.03)
+                : measuredMiniFrame
+            let isDocking = sheet.isCollapsing
 
             ZStack {
                 if np.isVideoMode && np.hasVideo {
@@ -199,7 +207,7 @@ struct FullPlayerView: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .opacity(1 - min(max((sheet.dragOffset - 40) / 180, 0), 1))
+                .opacity(isDocking ? 0 : 1)
                 .allowsHitTesting(sheet.dragOffset < 40 && !sheet.isCollapsing)
             }
             .overlay {
@@ -207,21 +215,29 @@ struct FullPlayerView: View {
                     goToMenuOverlay
                 }
             }
-            .overlay(alignment: .top) {
-                transitionMiniPlayer
-                    .opacity(min(max((sheet.dragOffset - 80) / 140, 0), 1))
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
+            // Keep the expanded layout stable while its outer card contracts.
+            // Artwork uses the shared namespace to travel into the accessory.
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .frame(
+                width: isDocking ? miniFrame.width : geometry.size.width,
+                height: isDocking ? miniFrame.height : geometry.size.height,
+                alignment: .topLeading
+            )
             .clipShape(
                 UnevenRoundedRectangle(
-                    topLeadingRadius: 38 * cardProgress,
-                    topTrailingRadius: 38 * cardProgress,
+                    topLeadingRadius: isDocking ? miniFrame.height / 2 : 38 * cardProgress,
+                    bottomLeadingRadius: isDocking ? miniFrame.height / 2 : 0,
+                    bottomTrailingRadius: isDocking ? miniFrame.height / 2 : 0,
+                    topTrailingRadius: isDocking ? miniFrame.height / 2 : 38 * cardProgress,
                     style: .continuous
                 )
             )
+            .opacity(isDocking ? 0 : 1)
             .ignoresSafeArea(.container, edges: .all)
-            .offset(y: sheet.dragOffset)
+            .offset(
+                x: isDocking ? miniFrame.minX - globalFrame.minX : 0,
+                y: isDocking ? miniFrame.minY - globalFrame.minY : sheet.dragOffset
+            )
             .animation(.easeInOut(duration: 0.35), value: showQueue)
             .simultaneousGesture(collapseDrag)
             .onChange(of: showsMainArtwork, initial: true) { _, visible in
@@ -264,31 +280,6 @@ struct FullPlayerView: View {
     }
 
     // MARK: - Go to album/artist
-
-    /// A compact representation follows the card as it approaches the accessory.
-    private var transitionMiniPlayer: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(np.title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-                Text(np.displayArtist)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.75))
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Image(systemName: np.isPlaying ? "pause.fill" : "play.fill")
-                .frame(width: 30, height: 40)
-            if np.hasNext {
-                Image(systemName: "forward.fill")
-                    .frame(width: 30, height: 40)
-            }
-        }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 20)
-        .padding(.top, 8)
-    }
 
     private var currentSong: SongItem? {
         np.queueSongs.indices.contains(np.queueIndex) ? np.queueSongs[np.queueIndex] : nil

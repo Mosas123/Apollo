@@ -6,6 +6,7 @@
 //
 
 import Foundation
+@preconcurrency import SwiftyTube
 import SwiftUI
 
 /// Result ordering for the search screen.
@@ -26,8 +27,7 @@ enum SearchSort: String, CaseIterable {
 }
 /// Drives the search screen.
 ///
-/// Results belong to the last *submitted* query and stay visible until a
-/// new submission replaces them.
+/// Debounced live queries and explicit submissions share cancellation guards.
 @MainActor
 @Observable
 final class SearchViewModel {
@@ -113,6 +113,11 @@ final class SearchViewModel {
     var searchHistory: [SearchHistoryEntity] = []
 
     private var fetchTask: Task<Void, Never>?
+    private var suggestionTask: Task<Void, Never>?
+    private(set) var suggestions: [String] = []
+    private var suggestionCache: [String: [String]] = [:]
+    private var resultCache: [String: [SearchSection]] = [:]
+    private var cacheOrder: [String] = []
 
     private static let historyKey = "Search.history"
     private static let historyNewestFirstKey = "Search.historyNewestFirst"
@@ -282,64 +287,77 @@ final class SearchViewModel {
 
         Log.search.debug("Submit query='\(query)' sort=\(sort.title)")
 
-        // Enter .loading FIRST so clearing the field below is treated as part
-        // of the submission rather than as new composition input.
-        phase = .loading
-        submittedQuery = query
-        error = nil
-        selectedSectionFilter = nil
-        isShowingLibrary = false
-        heroArtist = nil
-        heroSongs = []
-        audiusTracks = []
-        qobuzTracks = []
-
-        updateHistory(query: query)
         cancelTasks()
-
+        submittedQuery = query
+        suggestions = []
+        updateHistory(query: query)
+        prepareQuery()
         fetchTask = Task { [weak self] in
-            await self?.fetchResults(for: query)
+            await self?.fetchResults(for: query, includeProviders: true)
         }
     }
 
-    private func fetchResults(for query: String) async {
-        // Both catalogues run concurrently. A failed provider must not hide
-        // successful results from the other provider.
+    private func prepareQuery() {
+        error = nil
+        selectedSectionFilter = nil
+        isShowingLibrary = false
+        audiusTracks = []
+        qobuzTracks = []
+        localSongs = []
+        localArtists = []
+        localAlbums = []
+        localPlaylists = []
+        results = resultCache[submittedQuery] ?? []
+        extractHero()
+        phase = results.isEmpty && heroArtist == nil ? .loading : .results
+    }
+
+    private func fetchResults(for query: String, includeProviders: Bool) async {
         async let localResults = try? SearchService.shared.localSearch(query: query)
-        async let audiusResult = try? AudiusClient().searchTracks(query: query, limit: 25)
-        async let qobuzResult = QobuzCatalogService.shared.searchIfConfigured(query: query, limit: 25)
-        var rawYouTube: [String: Any]?
         var youtubeFailure: Error?
         do {
-            rawYouTube = try await SearchService.shared.search(query: query)
+            let raw = try await SearchService.shared.search(query: query)
+            guard !Task.isCancelled, query == submittedQuery else { return }
+            let parsed = SearchParser.parseSearchResults(from: raw)
+            resultCache[query] = parsed
+            cacheOrder.removeAll { $0 == query }
+            cacheOrder.append(query)
+            if cacheOrder.count > 20 {
+                resultCache.removeValue(forKey: cacheOrder.removeFirst())
+            }
+            results = parsed
+            extractHero()
         } catch {
+            guard !Task.isCancelled, query == submittedQuery else { return }
             youtubeFailure = error
         }
-        let remoteAudius = await audiusResult ?? []
-        let remoteQobuz = await qobuzResult
         let local = await localResults
-
         guard !Task.isCancelled, query == submittedQuery else { return }
-        if let youtubeFailure, Self.isCancellation(youtubeFailure) { return }
-
         if let local {
             localSongs = local.songs
             localArtists = local.artists
             localAlbums = local.albums
             localPlaylists = local.playlists
         }
-        results = rawYouTube.map { SearchParser.parseSearchResults(from: $0) } ?? []
-        audiusTracks = remoteAudius
-        qobuzTracks = remoteQobuz
-        selectedSectionFilter = nil
-        isShowingLibrary = false
-        extractHero()
+        error = youtubeFailure
+        updateResultPhase()
 
+        // Extra catalogues are fetched on submission; they never delay the
+        // primary results or generate requests for every partial word.
+        guard includeProviders else { return }
+        async let audius = try? AudiusClient().searchTracks(query: query, limit: 25)
+        async let qobuz = QobuzCatalogService.shared.searchIfConfigured(query: query, limit: 25)
+        let (remoteAudius, remoteQobuz) = await (audius, qobuz)
+        guard !Task.isCancelled, query == submittedQuery else { return }
+        audiusTracks = remoteAudius ?? []
+        qobuzTracks = remoteQobuz
+        updateResultPhase()
+    }
+
+    private func updateResultPhase() {
         if results.isEmpty && heroArtist == nil && audiusTracks.isEmpty && qobuzTracks.isEmpty {
-            error = youtubeFailure
-            phase = youtubeFailure == nil ? .noResults : .failed
+            phase = error == nil ? .noResults : .failed
         } else {
-            error = youtubeFailure
             phase = .results
         }
     }
@@ -381,19 +399,44 @@ final class SearchViewModel {
     }
 
     private func handleFieldTextChange() {
-        // While fetching, the field is owned by the submission flow.
-        // Otherwise any edit returns to recent searches — results only
-        // ever come from an explicit submission (return key).
-        if phase == .loading {
+        cancelTasks()
+        let query = fieldText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            resetToIdle()
             return
         }
-        resetToIdle()
+        submittedQuery = query
+        suggestions = suggestionCache[query] ?? []
+        prepareQuery()
+        suggestionTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(180))
+                guard let self, !Task.isCancelled else { return }
+                let values: [String]
+                if let cached = self.suggestionCache[query] {
+                    values = cached
+                } else {
+                    values = Array(try await SearchSuggestions.suggest(query: query).prefix(5))
+                }
+                guard !Task.isCancelled, self.submittedQuery == query else { return }
+                if self.suggestionCache.count >= 40 { self.suggestionCache.removeAll() }
+                self.suggestionCache[query] = values
+                self.suggestions = values
+            } catch { /* Suggestions are optional; results continue independently. */ }
+        }
+        fetchTask = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(350)) }
+            catch { return }
+            guard !Task.isCancelled else { return }
+            await self?.fetchResults(for: query, includeProviders: false)
+        }
     }
 
     /// Clears any shown results and returns to the recent-searches state.
     private func resetToIdle() {
         cancelTasks()
         submittedQuery = ""
+        suggestions = []
         results = []
         audiusTracks = []
         qobuzTracks = []
@@ -459,9 +502,7 @@ final class SearchViewModel {
 
     private func cancelTasks() {
         fetchTask?.cancel()
+        suggestionTask?.cancel()
     }
 
-    private static func isCancellation(_ error: Error) -> Bool {
-        (error as? URLError)?.code == .cancelled || error is CancellationError
-    }
 }

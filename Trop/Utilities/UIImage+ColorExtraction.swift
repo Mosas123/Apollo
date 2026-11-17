@@ -9,142 +9,103 @@ import UIKit
 import SwiftUI
 
 extension UIImage {
-    /// Chooses a representative album tint by grouping similarly coloured
-    /// pixels, so a small saturated detail cannot dominate the whole page.
+    /// Album pages and artist/player gradients share the same population-based
+    /// palette, rather than choosing an isolated high-saturation pixel.
     func extractAlbumBackdropColor() -> Color {
-        guard let image = cgImage else { return extractDominantColors()[0] }
-        let side = 32
-        var data = [UInt8](repeating: 0, count: side * side * 4)
-        guard let context = CGContext(
-            data: &data, width: side, height: side, bitsPerComponent: 8,
-            bytesPerRow: side * 4, space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return extractDominantColors()[0] }
-        context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
-
-        struct Bucket {
-            var red = 0.0
-            var green = 0.0
-            var blue = 0.0
-            var weight = 0.0
-        }
-        var buckets: [Int: Bucket] = [:]
-        for offset in stride(from: 0, to: data.count, by: 4) {
-            guard data[offset + 3] > 204 else { continue }
-            let red = Double(data[offset]) / 255
-            let green = Double(data[offset + 1]) / 255
-            let blue = Double(data[offset + 2]) / 255
-            let brightness = max(red, green, blue)
-            let minimum = min(red, green, blue)
-            // Near-black and near-white pixels are poor tint candidates.
-            guard brightness > 0.12, minimum < 0.88 else { continue }
-            let saturation = brightness > 0 ? (brightness - minimum) / brightness : 0
-            let weight = 0.4 + 0.6 * saturation
-            let key = Int(red * 4) * 25 + Int(green * 4) * 5 + Int(blue * 4)
-            var bucket = buckets[key, default: Bucket()]
-            bucket.red += red * weight
-            bucket.green += green * weight
-            bucket.blue += blue * weight
-            bucket.weight += weight
-            buckets[key] = bucket
-        }
-        guard let best = buckets.values.max(by: { $0.weight < $1.weight }), best.weight > 0 else {
-            return extractDominantColors()[0]
-        }
-        return Color(red: best.red / best.weight, green: best.green / best.weight, blue: best.blue / best.weight)
+        extractDominantColors()[0]
     }
 
-    /// Extracts a list of dominant vibrant colors from the image.
-    /// Returns a fallback set if extraction fails.
     func extractDominantColors() -> [Color] {
-        guard let cgImage = self.cgImage else {
-            return [Color(red: 0.15, green: 0.15, blue: 0.2), Color(red: 0.05, green: 0.05, blue: 0.08)]
-        }
+        let fallback = [Color(red: 0.15, green: 0.15, blue: 0.18),
+                        Color(red: 0.05, green: 0.05, blue: 0.06)]
+        guard let image = cgImage,
+              let space = CGColorSpace(name: CGColorSpace.sRGB) else { return fallback }
+        let side = 40
+        var data = [UInt8](repeating: 0, count: side * side * 4)
+        let bitmap = CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+        guard let context = CGContext(data: &data, width: side, height: side,
+                                      bitsPerComponent: 8, bytesPerRow: side * 4,
+                                      space: space, bitmapInfo: bitmap) else { return fallback }
+        context.interpolationQuality = .medium
+        context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
 
-        let width = 8
-        let height = 8
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let bytesPerPixel = 4
-        let bytesPerRow = bytesPerPixel * width
-        let bitsPerComponent = 8
-
-        var rawData = [UInt8](repeating: 0, count: width * height * bytesPerPixel)
-
-        guard let context = CGContext(
-            data: &rawData,
-            width: width,
-            height: height,
-            bitsPerComponent: bitsPerComponent,
-            bytesPerRow: bytesPerRow,
-            space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else {
-            return [Color(red: 0.15, green: 0.15, blue: 0.2), Color(red: 0.05, green: 0.05, blue: 0.08)]
-        }
-
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
-
-        struct RGBA {
-            let r: Double
-            let g: Double
-            let b: Double
-            let a: Double
-
-            var luminance: Double {
-                0.299 * r + 0.587 * g + 0.114 * b
-            }
-
+        struct Sample {
+            var r: Double
+            var g: Double
+            var b: Double
+            var count: Double
             var saturation: Double {
-                let maxVal = max(r, g, b)
-                let minVal = min(r, g, b)
-                return maxVal == 0 ? 0 : (maxVal - minVal) / maxVal
+                let high = max(r, g, b)
+                return high == 0 ? 0 : (high - min(r, g, b)) / high
+            }
+            func distance(to other: Sample) -> Double {
+                // Weighted RGB distance keeps nearby shades in one family.
+                0.30 * pow(r - other.r, 2) + 0.59 * pow(g - other.g, 2) + 0.11 * pow(b - other.b, 2)
+            }
+            var color: Color { Color(red: r, green: g, blue: b) }
+        }
+        var bins: [Int: Sample] = [:]
+        for offset in stride(from: 0, to: data.count, by: 4) {
+            let alpha = Double(data[offset + 3]) / 255
+            guard alpha > 0.8 else { continue }
+            // CGContext stores premultiplied channels; undo that before analysis.
+            let r = min(1, Double(data[offset]) / 255 / alpha)
+            let g = min(1, Double(data[offset + 1]) / 255 / alpha)
+            let b = min(1, Double(data[offset + 2]) / 255 / alpha)
+            let key = Int(r * 15) * 256 + Int(g * 15) * 16 + Int(b * 15)
+            var bin = bins[key] ?? Sample(r: 0, g: 0, b: 0, count: 0)
+            bin.r += r; bin.g += g; bin.b += b; bin.count += 1
+            bins[key] = bin
+        }
+        // Sort keys to make equal-population palettes reproducible.
+        let all = bins.keys.sorted().compactMap { key -> Sample? in
+            guard let bin = bins[key], bin.count > 0 else { return nil }
+            return Sample(r: bin.r / bin.count, g: bin.g / bin.count,
+                          b: bin.b / bin.count, count: bin.count)
+        }
+        guard !all.isEmpty else { return fallback }
+        let midtones = all.filter { max($0.r, $0.g, $0.b) > 0.10 && min($0.r, $0.g, $0.b) < 0.92 }
+        let midtoneCount = midtones.reduce(0) { $0 + $1.count }
+        let totalCount = all.reduce(0) { $0 + $1.count }
+        // Mostly monochrome covers keep their real neutral palette. A tiny
+        // colourful logo must not tint an otherwise black/white page.
+        let samples = midtoneCount >= totalCount * 0.15 ? midtones : all
+        guard let seed = samples.max(by: { $0.count < $1.count }) else { return fallback }
+        var centers = [seed]
+        while centers.count < min(5, samples.count) {
+            let next = samples.max { lhs, rhs in
+                let left = centers.map { lhs.distance(to: $0) }.min() ?? 0
+                let right = centers.map { rhs.distance(to: $0) }.min() ?? 0
+                return left * sqrt(lhs.count) < right * sqrt(rhs.count)
+            }!
+            guard (centers.map { next.distance(to: $0) }.min() ?? 0) > 0.002 else { break }
+            centers.append(next)
+        }
+        // A few bounded k-means passes merge shades split by quantisation.
+        for _ in 0..<8 {
+            var sums = centers.map { _ in Sample(r: 0, g: 0, b: 0, count: 0) }
+            for sample in samples {
+                let index = centers.indices.min { sample.distance(to: centers[$0]) < sample.distance(to: centers[$1]) }!
+                sums[index].r += sample.r * sample.count
+                sums[index].g += sample.g * sample.count
+                sums[index].b += sample.b * sample.count
+                sums[index].count += sample.count
+            }
+            centers = sums.filter { $0.count > 0 }.map {
+                Sample(r: $0.r / $0.count, g: $0.g / $0.count, b: $0.b / $0.count, count: $0.count)
             }
         }
-
-        var pixels: [RGBA] = []
-        for y in 0..<height {
-            for x in 0..<width {
-                let offset = (y * bytesPerRow) + (x * bytesPerPixel)
-                let r = Double(rawData[offset]) / 255
-                let g = Double(rawData[offset + 1]) / 255
-                let b = Double(rawData[offset + 2]) / 255
-                let a = Double(rawData[offset + 3]) / 255
-                if a > 0.8 {
-                    pixels.append(RGBA(r: r, g: g, b: b, a: a))
-                }
-            }
+        let ranked = centers.sorted {
+            $0.count * (0.85 + 0.15 * $0.saturation) > $1.count * (0.85 + 0.15 * $1.saturation)
         }
-
-        guard !pixels.isEmpty else {
-            return [Color(red: 0.15, green: 0.15, blue: 0.2), Color(red: 0.05, green: 0.05, blue: 0.08)]
+        guard let primary = ranked.first else { return fallback }
+        let population = samples.reduce(0) { $0 + $1.count }
+        let secondary = ranked.dropFirst().first {
+            $0.count >= population * 0.10 && $0.distance(to: primary) > 0.025
         }
-
-        // Sort by saturation and luminance
-        let sortedByVibrancy = pixels.sorted { p1, p2 in
-            let score1 = p1.saturation * 0.8 + (1 - abs(p1.luminance - 0.5)) * 0.2
-            let score2 = p2.saturation * 0.8 + (1 - abs(p2.luminance - 0.5)) * 0.2
-            return score1 > score2
-        }
-
-        let primary = sortedByVibrancy.first ?? RGBA(r: 0.5, g: 0.5, b: 0.5, a: 1)
-
-        var secondary = primary
-        for pixel in sortedByVibrancy {
-            let distance = abs(pixel.r - primary.r) + abs(pixel.g - primary.g) + abs(pixel.b - primary.b)
-            if distance > 0.4 {
-                secondary = pixel
-                break
-            }
-        }
-
-        if secondary.r == primary.r && secondary.g == primary.g && secondary.b == primary.b {
-            secondary = RGBA(r: max(0, primary.r - 0.2), g: max(0, primary.g - 0.2), b: max(0, primary.b - 0.2), a: 1)
-        }
-
-        return [
-            Color(red: primary.r, green: primary.g, blue: primary.b),
-            Color(red: secondary.r, green: secondary.g, blue: secondary.b)
-        ]
+        return [primary.color, secondary?.color ?? Color(red: primary.r * 0.65,
+                                                          green: primary.g * 0.65,
+                                                          blue: primary.b * 0.65)]
     }
 
     func centerCroppedSquare() -> UIImage {
