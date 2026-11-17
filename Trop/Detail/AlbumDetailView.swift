@@ -17,8 +17,6 @@ final class AlbumDetailViewModel {
     let browseId: String
     var album: AlbumDetailInfo?
     var isLoading = true
-    /// Higher-quality cover from Apple/Deezer when found.
-    var enrichedArtworkURL: String?
     var error: Error?
     var isSaved = false
 
@@ -47,7 +45,7 @@ final class AlbumDetailViewModel {
             if let artist = parsed.artists.first?.name,
                let metadata = await MetadataResolver.enrich(title: parsed.title, artist: artist),
                let artwork = metadata.artworkURL {
-                enrichedArtworkURL = artwork.absoluteString
+                album?.enrichedArtworkURL = artwork.absoluteString
             }
         } catch {
             Log.albumDetailViewModel.error("Failed: \(error)")
@@ -508,7 +506,7 @@ struct AlbumDetailView: View {
     private func albumCard(_ album: AlbumItem) -> some View {
         NavigationLink(value: DetailRoute.album(browseId: album.browseId)) {
             VStack(alignment: .leading, spacing: 6) {
-                AsyncImageView(url: enrichedArtworkURL ?? album.thumbnailUrl)
+                AsyncImageView(url: album.enrichedArtworkURL ?? album.thumbnailUrl)
                     .frame(width: 150, height: 150)
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 Text(album.title)
@@ -574,7 +572,7 @@ struct AlbumDetailView: View {
         VStack(spacing: 12) {
             // Album artwork
             HeroArtworkView(
-                url: enrichedArtworkURL ?? album.thumbnailUrl,
+                url: album.enrichedArtworkURL ?? album.thumbnailUrl,
                 onImageLoaded: { image in
                     guard backdropColors.isEmpty else { return }
                     withAnimation(.easeInOut(duration: 0.4)) {

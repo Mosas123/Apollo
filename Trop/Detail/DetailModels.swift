@@ -22,6 +22,8 @@ struct AlbumDetailInfo {
     var relatedAlbums: [AlbumItem] = []
     var videos: [SongItem] = []
     var featuredPlaylists: [PlaylistItem] = []
+    /// Canonical, higher-resolution cover (Apple/Deezer), when resolved.
+    var enrichedArtworkURL: String? = nil
 }
 
 /// Parsed detail data for an artist page.
@@ -38,6 +40,8 @@ struct ArtistDetailInfo {
     var videos: [SongItem] = []
     var playlists: [PlaylistItem] = []
     var relatedArtists: [ArtistItem] = []
+    /// Higher-quality profile photo (Apple/Deezer/Wikimedia), when resolved.
+    var heroImageURL: String? = nil
 }
 
 /// Parsed detail data for a playlist page.

@@ -19,9 +19,6 @@ final class ArtistDetailViewModel {
     var artist: ArtistDetailInfo?
     var isLoading = true
     var error: Error?
-    /// Higher-quality artist photo resolved from Deezer/Wikimedia; falls back to
-    /// the YouTube Music thumbnail.
-    var heroImageURL: String?
 
     private let innerTube = InnerTubeClient.tropShared
 
@@ -40,11 +37,12 @@ final class ArtistDetailViewModel {
             Self.preloadHeroArtwork(for: parsed.thumbnailUrl)
             artist = parsed
             isLoading = false
-            // Prefer a better profile photo (Deezer 1000px / Wikimedia) and fall
-            // back to the YouTube Music thumbnail.
+            // Prefer a better profile photo (Apple 1800px → Deezer → Wikimedia)
+            // and fall back to the YouTube Music thumbnail.
             let ytURL = ArtworkURLs.sized(parsed.thumbnailUrl, width: 1200, height: 1200)
+                .flatMap { URL(string: $0) }
             if let resolved = await ArtistImageResolver.preferredImageURL(name: parsed.name, youTubeURL: ytURL) {
-                heroImageURL = resolved.absoluteString
+                artist?.heroImageURL = resolved.absoluteString
             }
         } catch {
             self.error = error
@@ -521,7 +519,7 @@ struct ArtistDetailView: View {
 
                 AnimatedDistortion(size: size, isPlaying: NowPlaying.shared.isPlaying && scrollOffset < size.height, amplitude: 6) {
                     AsyncImageView(
-                        url: ArtworkURLs.sized(heroImageURL ?? artist.thumbnailUrl, width: 1200, height: 1200),
+                        url: ArtworkURLs.sized(artist.heroImageURL ?? artist.thumbnailUrl, width: 1200, height: 1200),
                         contentMode: .fill,
                         onImageLoaded: { image in
                             guard backdropColors.isEmpty else { return }
@@ -639,7 +637,7 @@ struct ArtistDetailView: View {
                 ZStack(alignment: .bottomLeading) {
                     ZStack {
                         AsyncImageView(
-                            url: ArtworkURLs.sized(heroImageURL ?? artist.thumbnailUrl, width: 1200, height: 1200),
+                            url: ArtworkURLs.sized(artist.heroImageURL ?? artist.thumbnailUrl, width: 1200, height: 1200),
                             contentMode: .fill
                         )
                         .frame(height: UIScreen.main.bounds.height * 0.52)

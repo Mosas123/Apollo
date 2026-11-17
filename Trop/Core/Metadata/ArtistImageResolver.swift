@@ -8,40 +8,43 @@ import Foundation
 /// (`picture_xl`, 1000px) → Wikipedia/Wikimedia (`pageimages.original`) → the
 /// YouTube thumbnail we already have.
 enum ArtistImageResolver {
-    private static let lock = NSLock()
-    nonisolated(unsafe) private static var hits: [String: URL] = [:]
-    nonisolated(unsafe) private static var misses: Set<String> = []
+    private actor Cache {
+        static let shared = Cache()
+        private var hits: [String: URL] = [:]
+        private var misses: Set<String> = []
+
+        func hit(_ key: String) -> URL? { hits[key] }
+        func isMiss(_ key: String) -> Bool { misses.contains(key) }
+
+        func store(_ key: String, _ url: URL) {
+            if hits.count >= 300 { hits.removeAll(keepingCapacity: true) }
+            hits[key] = url
+        }
+
+        func markMiss(_ key: String) { misses.insert(key) }
+    }
 
     static func preferredImageURL(name: String, youTubeURL: URL?) async -> URL? {
         let key = normalize(name)
         guard !key.isEmpty else { return youTubeURL }
 
-        lock.lock()
-        if let cached = hits[key] { lock.unlock(); return cached }
-        if misses.contains(key) { lock.unlock(); return youTubeURL }
-        lock.unlock()
+        if let cached = await Cache.shared.hit(key) { return cached }
+        if await Cache.shared.isMiss(key) { return youTubeURL }
 
         if let apple = await appleMusicImage(name: name) {
-            store(key, apple)
+            await Cache.shared.store(key, apple)
             return apple
         }
         if let deezer = await deezerImage(name: name) {
-            store(key, deezer)
+            await Cache.shared.store(key, deezer)
             return deezer
         }
         if let wiki = await wikipediaImage(name: name) {
-            store(key, wiki)
+            await Cache.shared.store(key, wiki)
             return wiki
         }
-        lock.lock(); misses.insert(key); lock.unlock()
+        await Cache.shared.markMiss(key)
         return youTubeURL
-    }
-
-    private static func store(_ key: String, _ url: URL) {
-        lock.lock()
-        if hits.count >= 300 { hits.removeAll(keepingCapacity: true) }
-        hits[key] = url
-        lock.unlock()
     }
 
     // MARK: - Apple Music (web page, keyless)
