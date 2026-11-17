@@ -14,13 +14,25 @@ struct SearchView: View {
     @FocusState private var fieldFocused: Bool
 
     @State private var pendingRoute: DetailRoute?
+    @State private var headerHidden = false
+    private let accountState = AccountSheetState.shared
 
     var body: some View {
         NavigationStack(path: $router.searchPath) {
             VStack(spacing: 0) {
-                searchTopBar
-
+                TabHeaderView(
+                    title: "Search",
+                    accountIsLoggedIn: accountState.isLoggedIn,
+                    accountImageUrl: accountState.accountImageUrl,
+                    onAccount: { router.searchPath.append(DetailRoute.settings) },
+                    accountInitial: accountState.accountName.first.map(String.init)
+                )
+                .collapsibleTabHeader(isHidden: headerHidden)
                 content
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        searchTopBar
+                            .background(.ultraThinMaterial)
+                    }
             }
             .frame(maxHeight: .infinity, alignment: .top)
             .toolbar(.hidden, for: .navigationBar)
@@ -194,6 +206,7 @@ struct SearchView: View {
             }
         }
         .scrollIndicators(.automatic)
+        .tabHeaderTracksScroll(isHidden: $headerHidden)
         .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
     }
 
@@ -244,6 +257,7 @@ struct SearchView: View {
             .padding(.bottom, 16)
         }
         .scrollIndicators(.automatic)
+        .tabHeaderTracksScroll(isHidden: $headerHidden)
         .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
     }
 

@@ -532,36 +532,50 @@ struct ArtistDetailView: View {
 
     private func headerBanner(for artist: ArtistDetailInfo, size: CGSize) -> some View {
         ZStack(alignment: .bottom) {
-            Color(.systemGray5)
+            ZStack {
+                Color(.systemGray5)
 
-            AnimatedDistortion(size: size, isPlaying: NowPlaying.shared.isPlaying, amplitude: 6) {
-                AsyncImageView(
-                    url: ArtworkURLs.sized(artist.thumbnailUrl, width: 1200, height: 1200),
-                    contentMode: .fill,
-                    onImageLoaded: { image in
-                        guard backdropColors.isEmpty else { return }
-                        withAnimation(.easeInOut(duration: 0.4)) {
-                            backdropColors = image.extractDominantColors()
+                AnimatedDistortion(size: size, isPlaying: NowPlaying.shared.isPlaying, amplitude: 6) {
+                    AsyncImageView(
+                        url: ArtworkURLs.sized(artist.thumbnailUrl, width: 1200, height: 1200),
+                        contentMode: .fill,
+                        onImageLoaded: { image in
+                            guard backdropColors.isEmpty else { return }
+                            withAnimation(.easeInOut(duration: 0.4)) {
+                                backdropColors = image.extractDominantColors()
+                            }
                         }
-                    }
+                    )
+                    .frame(width: size.width, height: size.height)
+                    .blur(radius: min(max(scrollOffset, 0) / 20, 12))
+                    .clipped()
+                }
+
+                // Fades the photo into the artist's dominant color so the page reads
+                // as one surface (Apple Music artist page).
+                LinearGradient(
+                    colors: [.clear, backdropColor.opacity(0.35), backdropColor.opacity(0.45)],
+                    startPoint: .center,
+                    endPoint: .bottom
                 )
-                .frame(width: size.width, height: size.height)
-                .clipped()
+
+                LinearGradient(
+                    colors: [.clear, .black.opacity(0.25), .black.opacity(0.45)],
+                    startPoint: .center,
+                    endPoint: .bottom
+                )
             }
-
-            // Fades the photo into the artist's dominant color so the page reads
-            // as one surface (Apple Music artist page).
-            LinearGradient(
-                colors: [.clear, backdropColor.opacity(0.35), backdropColor.opacity(0.45)],
-                startPoint: .center,
-                endPoint: .bottom
-            )
-
-            LinearGradient(
-                colors: [.clear, .black.opacity(0.25), .black.opacity(0.45)],
-                startPoint: .center,
-                endPoint: .bottom
-            )
+            .mask {
+                LinearGradient(
+                    stops: [
+                        .init(color: .black, location: 0),
+                        .init(color: .black, location: 0.90),
+                        .init(color: .clear, location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
 
             VStack(spacing: 16) {
                 Text(artist.name)

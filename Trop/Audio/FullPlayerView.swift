@@ -361,7 +361,7 @@ struct FullPlayerView: View {
             .onChanged { value in
                 guard value.translation.height > 0,
                       value.translation.height > abs(value.translation.width) else { return }
-                // Track the finger 1:1; the tab content behind scales in step.
+                // Track the finger 1:1 while the content behind stays in place.
                 sheet.dragOffset = value.translation.height
             }
             .onEnded { value in

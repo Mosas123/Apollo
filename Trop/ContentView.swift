@@ -23,15 +23,6 @@ struct ContentView: View {
             backgroundLayer
 
             tabContent
-                .scaleEffect(1 - 0.08 * backgroundProgress, anchor: .center)
-                .overlay {
-                    if backgroundProgress > 0 {
-                        Color.black
-                            .opacity(0.22 * backgroundProgress)
-                            .ignoresSafeArea(.container)
-                            .allowsHitTesting(false)
-                    }
-                }
 
             if sheet.isExpanded {
                 FullPlayerView(onCollapse: collapsePlayer)
@@ -119,13 +110,6 @@ struct ContentView: View {
         .background {
             backgroundLayer
         }
-    }
-
-    /// 0 when the player is fully expanded, 1 after dragging it a full screen.
-    private var backgroundProgress: CGFloat {
-        guard sheet.isExpanded else { return 0 }
-        let height = max(UIScreen.main.bounds.height, 1)
-        return min(1, max(0, sheet.dragOffset / height))
     }
 
     private func collapsePlayer() {
