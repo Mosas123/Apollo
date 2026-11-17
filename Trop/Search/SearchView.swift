@@ -33,10 +33,9 @@ struct SearchView: View {
             }
             .onAppear {
                 viewModel.loadSearchHistory()
-                focusIfSearchTab()
             }
-            .onChange(of: router.selectedTabIndex) { _, _ in
-                focusIfSearchTab()
+            .onChange(of: router.selectedTabIndex) { _, selectedTab in
+                if selectedTab != 3 { fieldFocused = false }
             }
             .task(id: viewModel.results.count) {
                 let urls = viewModel.results
@@ -106,14 +105,6 @@ struct SearchView: View {
                 .background(Circle().fill(Color(.systemGray5).opacity(0.6)))
         }
         .accessibilityLabel("Sort results")
-    }
-
-    /// Focuses the field (raising the keyboard) whenever the Search tab
-    /// becomes active.
-    private func focusIfSearchTab() {
-        if AppRouter.shared.selectedTabIndex == 3 {
-            fieldFocused = true
-        }
     }
 
     // MARK: - Content
