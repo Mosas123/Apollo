@@ -183,11 +183,16 @@ actor PlaybackManager {
         }
     }
 
-    private static func isLossless(_ result: PlaybackResult) -> Bool {
-        result.mimeType.caseInsensitiveCompare("audio/flac") == .orderedSame
-            || result.audioQuality == "qobuz-cd"
-            || result.audioQuality == "pencari-flac"
-            || result.audioQuality.lowercased().contains("lossless")
+    private static func losslessLabel(_ result: PlaybackResult) -> String? {
+        let mime = result.mimeType.lowercased()
+        let quality = result.audioQuality.lowercased()
+        if mime == "audio/flac" || quality == "pencari-flac" { return "FLAC" }
+        if quality == "qobuz-cd" { return "FLAC · CD" }
+        if quality.contains("hi-res") || quality.contains("hires") || quality.contains("24") {
+            return "FLAC · Hi-Res"
+        }
+        if quality.contains("lossless") { return "FLAC" }
+        return nil
     }
 
     private static func normalizedMatchKey(_ value: String) -> String {
@@ -237,7 +242,7 @@ actor PlaybackManager {
                 duration: song.map { TimeInterval($0.duration) },
                 artists: song?.artists ?? [],
                 thumbnailUrl: song?.thumbnailUrl,
-                isLossless: Self.isLossless(result)
+                losslessLabel: Self.losslessLabel(result)
             )
             return result
         }
@@ -253,7 +258,7 @@ actor PlaybackManager {
                 duration: song.map { TimeInterval($0.duration) },
                 artists: artists,
                 thumbnailUrl: song?.thumbnailUrl,
-                isLossless: localPath.pathExtension.lowercased() == "flac"
+                losslessLabel: localPath.pathExtension.lowercased() == "flac" ? "FLAC" : nil
             )
             await MainActor.run {
                 NowPlaying.shared.updateVideoAvailability()
@@ -288,7 +293,7 @@ actor PlaybackManager {
                 artists: queueSong?.artists ?? [],
                 loudnessDb: cached.loudnessDb,
                 thumbnailUrl: queueSong?.thumbnailUrl,
-                isLossless: Self.isLossless(cached)
+                losslessLabel: Self.losslessLabel(cached)
             )
             await publishVideoAvailability(result: cached, videoId: videoId, rowType: queueSong?.musicVideoType)
             return cached
@@ -342,7 +347,7 @@ actor PlaybackManager {
             artists: queueSong?.artists ?? [],
             loudnessDb: result.loudnessDb,
             thumbnailUrl: queueSong?.thumbnailUrl,
-            isLossless: Self.isLossless(result)
+            losslessLabel: Self.losslessLabel(result)
         )
         await publishVideoAvailability(result: result, videoId: videoId, rowType: queueSong?.musicVideoType)
     }

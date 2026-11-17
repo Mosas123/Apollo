@@ -47,6 +47,8 @@ final class NowPlaying {
     /// True while the current stream is lossless (FLAC / Qobuz CD). Drives the
     /// player's "Lossless" badge.
     var isLosslessStream = false
+    /// Codec/quality label for the badge, e.g. "FLAC" or "FLAC · CD".
+    var losslessFormatLabel: String?
     var currentTime: TimeInterval = 0
     var duration: TimeInterval = 0
     var progress: Float {

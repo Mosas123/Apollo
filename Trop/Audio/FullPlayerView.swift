@@ -704,7 +704,7 @@ struct FullPlayerView: View {
                 if np.isLosslessStream {
                     HStack(spacing: 4) {
                         Image(systemName: "waveform")
-                        Text("Lossless")
+                        Text(np.losslessFormatLabel ?? "Lossless")
                     }
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.white.opacity(0.8))
