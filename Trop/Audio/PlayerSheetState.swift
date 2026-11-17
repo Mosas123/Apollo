@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Shared state for the player card presentation. The full player publishes the
-/// downward drag distance so the tab content behind it can scale and round like
-/// a system sheet; ContentView owns the expanded flag.
+/// downward drag distance so the mini player can coordinate its appearance;
+/// ContentView owns the expanded flag.
 @MainActor
 @Observable
 final class PlayerSheetState {

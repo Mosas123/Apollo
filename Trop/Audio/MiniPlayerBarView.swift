@@ -21,6 +21,7 @@ struct MiniPlayerBarView: View {
 
     private let player = PlayerController.shared
     @Bindable private var np = NowPlaying.shared
+    @State private var sheet = PlayerSheetState.shared
 
     @State private var dragOffset: CGFloat = 0
     @State private var dragAxis: DragAxis?
@@ -73,6 +74,9 @@ struct MiniPlayerBarView: View {
         .frame(maxWidth: .infinity)
         .overlay(alignment: .bottom) { progressLine }
         .clipShape(Capsule())
+        .opacity(miniPlayerVisibility)
+        .allowsHitTesting(!sheet.isExpanded)
+        .accessibilityHidden(sheet.isExpanded)
         .onChange(of: np.videoId) { _, _ in
             dragOffset = 0
             preloadLyrics()
@@ -86,6 +90,13 @@ struct MiniPlayerBarView: View {
             np.preloadNeighborArtwork()
         }
         .task { np.preloadNeighborArtwork() }
+    }
+
+    /// Reveal the accessory contents as the full player moves toward them.
+    private var miniPlayerVisibility: Double {
+        guard sheet.isExpanded else { return 1 }
+        let revealDistance = max(UIScreen.main.bounds.height * 0.65, 1)
+        return Double(min(max(sheet.dragOffset / revealDistance, 0), 1))
     }
 
     private func preloadLyrics() {

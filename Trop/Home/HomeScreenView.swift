@@ -14,6 +14,8 @@ struct HomeScreenView: View {
     private let accountState = AccountSheetState.shared
 
     @State private var pendingRoute: DetailRoute?
+    @State private var headerHidden = false
+    @State private var headerHeight: CGFloat = 60
     @State private var speedDialEntries: [SpeedDialEntry] = []
     @State private var selectedCategory: ContentCategory = .all
     @State private var forYouSongs: [SongItem] = []
@@ -22,7 +24,16 @@ struct HomeScreenView: View {
 
     var body: some View {
         NavigationStack(path: $router.homePath) {
-            VStack(spacing: 0) {
+            ZStack(alignment: .top) {
+                Group {
+                    if viewModel.isLoading {
+                        ShimmerLoadingView()
+                    } else if let error = viewModel.error {
+                        errorView(error)
+                    } else {
+                        homescreenContent
+                    }
+                }
                 TabHeaderView(
                     title: "Home",
                     accountIsLoggedIn: accountState.isLoggedIn,
@@ -30,16 +41,7 @@ struct HomeScreenView: View {
                     onAccount: { router.homePath.append(DetailRoute.settings) },
                     accountInitial: accountState.accountName.first.map(String.init)
                 )
-
-                if viewModel.isLoading {
-                    Spacer()
-                    ShimmerLoadingView()
-                    Spacer()
-                } else if let error = viewModel.error {
-                    errorView(error)
-                } else {
-                    homescreenContent
-                }
+                .floatingTabHeader(hidden: headerHidden, height: $headerHeight)
             }
             .frame(maxHeight: .infinity, alignment: .top)
             .toolbar(.hidden, for: .navigationBar)
@@ -77,6 +79,7 @@ struct HomeScreenView: View {
     private var homescreenContent: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
+                Color.clear.frame(height: headerHeight)
                 categoryChips
                 surpriseCard
 
@@ -109,7 +112,7 @@ struct HomeScreenView: View {
             }
         }
         .scrollIndicators(.automatic)
-        .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
+        .miniPlayerTracksScroll(headerHidden: $headerHidden).scrollEdgeEffectHidden(true, for: .bottom)
         .task(id: selectedCategory) {
             await viewModel.loadCategoryFeed(selectedCategory)
         }

@@ -16,6 +16,8 @@ struct LibraryView: View {
     @State private var podcasts: [PodcastEntity] = []
     @State private var likedSongCount = 0
     @State private var isLoading = true
+    @State private var headerHidden = false
+    @State private var headerHeight: CGFloat = 60
     @State private var selectedFilter: LibraryFilter?
     @State private var showCreateDialog = false
     @State private var playlistToDelete: PlaylistEntity?
@@ -56,15 +58,7 @@ struct LibraryView: View {
 
     var body: some View {
         NavigationStack(path: $router.libraryPath) {
-            VStack(spacing: 0) {
-                TabHeaderView(
-                    title: "Library",
-                    accountIsLoggedIn: accountState.isLoggedIn,
-                    accountImageUrl: accountState.accountImageUrl,
-                    onAccount: { router.libraryPath.append(DetailRoute.settings) },
-                    accountInitial: accountState.accountName.first.map(String.init)
-                )
-
+            ZStack(alignment: .top) {
                 Group {
                     if isLoading {
                         librarySkeleton
@@ -72,6 +66,14 @@ struct LibraryView: View {
                         feedContent
                     }
                 }
+                TabHeaderView(
+                    title: "Library",
+                    accountIsLoggedIn: accountState.isLoggedIn,
+                    accountImageUrl: accountState.accountImageUrl,
+                    onAccount: { router.libraryPath.append(DetailRoute.settings) },
+                    accountInitial: accountState.accountName.first.map(String.init)
+                )
+                .floatingTabHeader(hidden: headerHidden, height: $headerHeight)
             }
             .frame(maxHeight: .infinity, alignment: .top)
             .toolbar(.hidden, for: .navigationBar)
@@ -141,13 +143,14 @@ struct LibraryView: View {
     private var feedContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                Color.clear.frame(height: headerHeight)
                 libraryRowList
                 recentlyAddedSection
             }
             .padding(.bottom, 28)
         }
         .scrollIndicators(.automatic)
-        .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
+        .miniPlayerTracksScroll(headerHidden: $headerHidden).scrollEdgeEffectHidden(true, for: .bottom)
     }
 
     /// Simple grouped list of library destinations, Apple Music style.

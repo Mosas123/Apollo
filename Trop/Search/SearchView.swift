@@ -7,6 +7,11 @@
 
 import SwiftUI
 
+private struct SearchBarHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 struct SearchView: View {
     @Environment(SettingsStore.self) private var settings
     @State private var viewModel = SearchViewModel()
@@ -14,23 +19,44 @@ struct SearchView: View {
     @FocusState private var fieldFocused: Bool
 
     @State private var pendingRoute: DetailRoute?
+    @State private var headerHidden = false
+    @State private var headerHeight: CGFloat = 60
+    @State private var searchBarHeight: CGFloat = 60
     private let accountState = AccountSheetState.shared
 
     var body: some View {
         NavigationStack(path: $router.searchPath) {
-            VStack(spacing: 0) {
-                TabHeaderView(
-                    title: "Search",
-                    accountIsLoggedIn: accountState.isLoggedIn,
-                    accountImageUrl: accountState.accountImageUrl,
-                    onAccount: { router.searchPath.append(DetailRoute.settings) },
-                    accountInitial: accountState.accountName.first.map(String.init)
-                )
+            ZStack(alignment: .top) {
                 content
                     .safeAreaInset(edge: .top, spacing: 0) {
-                        searchTopBar
-                            .background(.ultraThinMaterial)
+                        Color.clear.frame(height: searchBarHeight + (isSearchActive ? 0 : headerHeight))
                     }
+
+                VStack(spacing: 0) {
+                    if !isSearchActive {
+                        TabHeaderView(
+                            title: "Search",
+                            accountIsLoggedIn: accountState.isLoggedIn,
+                            accountImageUrl: accountState.accountImageUrl,
+                            onAccount: { router.searchPath.append(DetailRoute.settings) },
+                            accountInitial: accountState.accountName.first.map(String.init)
+                        )
+                        .background {
+                            GeometryReader { geometry in
+                                Color.clear.preference(key: TabHeaderMeasurementKey.self, value: geometry.size.height)
+                            }
+                        }
+                        .onPreferenceChange(TabHeaderMeasurementKey.self) { if $0 > 0 { headerHeight = $0 } }
+                    }
+                    searchTopBar
+                        .background {
+                            GeometryReader { geometry in
+                                Color.clear.preference(key: SearchBarHeightKey.self, value: geometry.size.height)
+                            }
+                        }
+                        .onPreferenceChange(SearchBarHeightKey.self) { if $0 > 0 { searchBarHeight = $0 } }
+                }
+                .offset(y: !isSearchActive && headerHidden ? -headerHeight : 0)
             }
             .frame(maxHeight: .infinity, alignment: .top)
             .toolbar(.hidden, for: .navigationBar)
@@ -59,7 +85,11 @@ struct SearchView: View {
 
     // MARK: - Top bar
 
-    /// Search field + sort menu pinned above the filter chips.
+    private var isSearchActive: Bool {
+        fieldFocused || !viewModel.fieldText.isEmpty || viewModel.phase != .idle
+    }
+
+    /// Search field and cancel control pinned above the filter chips.
     private var searchTopBar: some View {
         HStack(spacing: 10) {
             HStack(spacing: 8) {
@@ -83,12 +113,22 @@ struct SearchView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(
-                Capsule()
-                    .fill(Color(.systemGray5).opacity(0.6))
-            )
+            .glassEffect(.regular, in: Capsule())
 
-            sortMenu
+            if isSearchActive {
+                Button {
+                    fieldFocused = false
+                    viewModel.closeSearch()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 44, height: 44)
+                        .glassEffect(.regular.interactive(), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close search")
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -204,14 +244,17 @@ struct SearchView: View {
             }
         }
         .scrollIndicators(.automatic)
-        .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
+        .miniPlayerTracksScroll(headerHidden: $headerHidden).scrollEdgeEffectHidden(true, for: .bottom)
     }
 
     private var searchResultsList: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 if !viewModel.availableFilters.isEmpty {
-                    filterChips
+                    HStack(spacing: 4) {
+                        filterChips
+                        sortMenu.padding(.trailing, 16)
+                    }
                 }
 
                 if let hero = viewModel.heroArtist {
@@ -254,7 +297,7 @@ struct SearchView: View {
             .padding(.bottom, 16)
         }
         .scrollIndicators(.automatic)
-        .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
+        .miniPlayerTracksScroll(headerHidden: $headerHidden).scrollEdgeEffectHidden(true, for: .bottom)
     }
 
     /// Play external-catalogue tracks using the provider-scoped queue adapter.

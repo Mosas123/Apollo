@@ -342,22 +342,20 @@ struct AlbumDetailView: View {
         .detailRouteSheet(item: $pendingRoute)
     }
 
-    /// Apple Music-style tint pulled from the album artwork, fading into the
-    /// system background.
+    /// Keep the artwork tint behind the album content, including the song list.
     private var albumBackdrop: some View {
         ZStack {
+            Color(.systemBackground)
             if let primary = backdropColors.first {
                 LinearGradient(
                     colors: [
-                        primary.opacity(0.6),
-                        primary.opacity(0.18),
-                        Color(.systemBackground)
+                        primary.opacity(0.72),
+                        primary.opacity(0.66),
+                        primary.opacity(0.58)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
-            } else {
-                Color(.systemBackground)
             }
         }
         .ignoresSafeArea(.container)
@@ -496,7 +494,7 @@ struct AlbumDetailView: View {
                 onImageLoaded: { image in
                     guard backdropColors.isEmpty else { return }
                     withAnimation(.easeInOut(duration: 0.4)) {
-                        backdropColors = image.extractDominantColors()
+                        backdropColors = [image.extractAlbumBackdropColor()]
                     }
                 }
             )

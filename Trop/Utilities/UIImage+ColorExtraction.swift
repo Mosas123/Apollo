@@ -9,6 +9,51 @@ import UIKit
 import SwiftUI
 
 extension UIImage {
+    /// Chooses a representative album tint by grouping similarly coloured
+    /// pixels, so a small saturated detail cannot dominate the whole page.
+    func extractAlbumBackdropColor() -> Color {
+        guard let image = cgImage else { return extractDominantColors()[0] }
+        let side = 32
+        var data = [UInt8](repeating: 0, count: side * side * 4)
+        guard let context = CGContext(
+            data: &data, width: side, height: side, bitsPerComponent: 8,
+            bytesPerRow: side * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return extractDominantColors()[0] }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
+
+        struct Bucket {
+            var red = 0.0
+            var green = 0.0
+            var blue = 0.0
+            var weight = 0.0
+        }
+        var buckets: [Int: Bucket] = [:]
+        for offset in stride(from: 0, to: data.count, by: 4) {
+            guard data[offset + 3] > 204 else { continue }
+            let red = Double(data[offset]) / 255
+            let green = Double(data[offset + 1]) / 255
+            let blue = Double(data[offset + 2]) / 255
+            let brightness = max(red, green, blue)
+            let minimum = min(red, green, blue)
+            // Near-black and near-white pixels are poor tint candidates.
+            guard brightness > 0.12, minimum < 0.88 else { continue }
+            let saturation = brightness > 0 ? (brightness - minimum) / brightness : 0
+            let weight = 0.4 + 0.6 * saturation
+            let key = Int(red * 4) * 25 + Int(green * 4) * 5 + Int(blue * 4)
+            var bucket = buckets[key, default: Bucket()]
+            bucket.red += red * weight
+            bucket.green += green * weight
+            bucket.blue += blue * weight
+            bucket.weight += weight
+            buckets[key] = bucket
+        }
+        guard let best = buckets.values.max(by: { $0.weight < $1.weight }), best.weight > 0 else {
+            return extractDominantColors()[0]
+        }
+        return Color(red: best.red / best.weight, green: best.green / best.weight, blue: best.blue / best.weight)
+    }
+
     /// Extracts a list of dominant vibrant colors from the image.
     /// Returns a fallback set if extraction fails.
     func extractDominantColors() -> [Color] {

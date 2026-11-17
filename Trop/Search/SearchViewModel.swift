@@ -374,6 +374,12 @@ final class SearchViewModel {
 
     // MARK: - Field changes
 
+    /// Cancel the current search and return to recent searches.
+    func closeSearch() {
+        fieldText = ""
+        resetToIdle()
+    }
+
     private func handleFieldTextChange() {
         // While fetching, the field is owned by the submission flow.
         // Otherwise any edit returns to recent searches — results only

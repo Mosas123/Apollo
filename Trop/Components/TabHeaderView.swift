@@ -35,3 +35,24 @@ struct TabHeaderView: View {
         .padding(.vertical, 8)
     }
 }
+
+struct TabHeaderMeasurementKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+extension View {
+    func floatingTabHeader(hidden: Bool, height: Binding<CGFloat>) -> some View {
+        background {
+            GeometryReader { geometry in
+                Color.clear.preference(key: TabHeaderMeasurementKey.self, value: geometry.size.height)
+            }
+        }
+        .onPreferenceChange(TabHeaderMeasurementKey.self) { if $0 > 0 { height.wrappedValue = $0 } }
+        .background(.ultraThinMaterial)
+        .offset(y: hidden ? -height.wrappedValue - 60 : 0)
+        .opacity(hidden ? 0 : 1)
+        .allowsHitTesting(!hidden)
+        .accessibilityHidden(hidden)
+    }
+}

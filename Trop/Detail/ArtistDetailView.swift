@@ -491,10 +491,6 @@ struct ArtistDetailView: View {
                 relatedArtistsSection(artists: artist.relatedArtists)
             }
 
-            if let description = artist.descriptionText, !description.isEmpty {
-                aboutSection(description: description)
-            }
-
             if artist.songs.isEmpty && artist.albums.isEmpty && artist.singles.isEmpty
                 && artist.videos.isEmpty && artist.playlists.isEmpty && artist.relatedArtists.isEmpty {
                 VStack(spacing: 8) {
@@ -566,15 +562,7 @@ struct ArtistDetailView: View {
                 )
             }
             .mask {
-                LinearGradient(
-                    stops: [
-                        .init(color: .black, location: 0),
-                        .init(color: .black, location: 0.90),
-                        .init(color: .clear, location: 1)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+                artistImageFade
             }
 
             VStack(spacing: 16) {
@@ -628,6 +616,18 @@ struct ArtistDetailView: View {
         backdropColors.first ?? Color(.systemBackground)
     }
 
+    private var artistImageFade: some View {
+        LinearGradient(
+            stops: [
+                .init(color: .black, location: 0),
+                .init(color: .black, location: 0.90),
+                .init(color: .clear, location: 1)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
     private var artistBackdrop: some View {
         LinearGradient(
             stops: [
@@ -646,24 +646,27 @@ struct ArtistDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .bottomLeading) {
-                    AsyncImageView(
-                        url: ArtworkURLs.sized(artist.thumbnailUrl, width: 1200, height: 1200),
-                        contentMode: .fill
-                    )
-                    .frame(height: UIScreen.main.bounds.height * 0.52)
-                    .clipped()
+                    ZStack {
+                        AsyncImageView(
+                            url: ArtworkURLs.sized(artist.thumbnailUrl, width: 1200, height: 1200),
+                            contentMode: .fill
+                        )
+                        .frame(height: UIScreen.main.bounds.height * 0.52)
+                        .clipped()
 
-                    LinearGradient(
-                        colors: [.clear, backdropColor.opacity(0.45), backdropColor.opacity(0.45)],
-                        startPoint: .center,
-                        endPoint: .bottom
-                    )
+                        LinearGradient(
+                            colors: [.clear, backdropColor.opacity(0.45), backdropColor.opacity(0.45)],
+                            startPoint: .center,
+                            endPoint: .bottom
+                        )
 
-                    LinearGradient(
-                        colors: [.clear, .black.opacity(0.3), .black.opacity(0.5)],
-                        startPoint: .center,
-                        endPoint: .bottom
-                    )
+                        LinearGradient(
+                            colors: [.clear, .black.opacity(0.3), .black.opacity(0.5)],
+                            startPoint: .center,
+                            endPoint: .bottom
+                        )
+                    }
+                    .mask { artistImageFade }
 
                     Text(artist.name)
                         .font(.system(size: 34, weight: .bold))
@@ -747,23 +750,6 @@ struct ArtistDetailView: View {
             return count
         }
         return String(format: NSLocalizedString("%@ subscribers", comment: "Artist subscribers count"), count)
-    }
-
-    @ViewBuilder
-    private func aboutSection(description: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(LocalizedStringKey("About"))
-                .font(.title3)
-                .fontWeight(.bold)
-                .padding(.horizontal, 16)
-
-            Text(description)
-                .font(.body)
-                .foregroundColor(.primary)
-                .lineLimit(5)
-                .padding(.horizontal, 16)
-        }
-        .padding(.vertical, 16)
     }
 
     private func featuredAlbumCard(_ album: AlbumItem) -> some View {

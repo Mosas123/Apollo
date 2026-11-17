@@ -21,8 +21,14 @@ final class MiniPlayerScrollState {
 /// user scrolls down and restoring the moment they scroll back up.
 struct MiniPlayerInlineOnScrollModifier: ViewModifier {
     @Environment(MiniPlayerScrollState.self) private var scrollState
+    var headerHidden: Binding<Bool>? = nil
+    @State private var directionAnchor: CGFloat?
 
     private let compactThreshold: CGFloat = 1
+
+    init(headerHidden: Binding<Bool>? = nil) {
+        self.headerHidden = headerHidden
+    }
 
     func body(content: Content) -> some View {
         content
@@ -30,6 +36,21 @@ struct MiniPlayerInlineOnScrollModifier: ViewModifier {
                 for: CGFloat.self,
                 of: { $0.contentOffset.y },
                 action: { oldOffset, newOffset in
+                    if let headerHidden {
+                        let anchor = directionAnchor ?? oldOffset
+                        if newOffset <= 20 {
+                            directionAnchor = newOffset
+                            if headerHidden.wrappedValue {
+                                withAnimation(.easeInOut(duration: 0.2)) { headerHidden.wrappedValue = false }
+                            }
+                        } else if abs(newOffset - anchor) >= 20 {
+                            let hide = newOffset > anchor
+                            directionAnchor = newOffset
+                            if hide != headerHidden.wrappedValue {
+                                withAnimation(.easeInOut(duration: 0.2)) { headerHidden.wrappedValue = hide }
+                            }
+                        }
+                    }
                     if newOffset > oldOffset, newOffset > compactThreshold {
                         guard !scrollState.isInline else { return }
                         scrollState.isInline = true
