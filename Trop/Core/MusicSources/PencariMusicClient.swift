@@ -88,7 +88,7 @@ struct PencariMusicClient: Sendable {
         ]
         guard let url = components.url else { throw PencariMusicError.invalidQuery }
 
-        let (data, response) = try await transport(URLRequest(url: url, timeoutInterval: 20))
+        let (data, response) = try await transport(URLRequest(url: url, timeoutInterval: 8))
         try Self.validate(response)
         let decoded = try JSONDecoder().decode(SearchResponse.self, from: data)
         let tracks = decoded.tracks ?? []
@@ -113,7 +113,7 @@ struct PencariMusicClient: Sendable {
         for attempt in 0..<3 {
             let url = endpoint("music", "stream", rawId)
             do {
-                let (data, response) = try await transport(URLRequest(url: url, timeoutInterval: 45))
+                let (data, response) = try await transport(URLRequest(url: url, timeoutInterval: 20))
                 if let http = response as? HTTPURLResponse, http.statusCode == 503 {
                     lastError = PencariMusicError.originBusy
                     let retry = http.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init) ?? 3
@@ -151,7 +151,7 @@ struct PencariMusicClient: Sendable {
     /// back to YouTube.
     func resolveStreamURLFast(for rawId: String) async throws -> URL {
         let url = endpoint("music", "stream", rawId)
-        let (data, response) = try await transport(URLRequest(url: url, timeoutInterval: 12))
+        let (data, response) = try await transport(URLRequest(url: url, timeoutInterval: 8))
         if let http = response as? HTTPURLResponse, http.statusCode == 503 {
             throw PencariMusicError.originBusy
         }

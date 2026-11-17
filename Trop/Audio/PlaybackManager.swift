@@ -129,8 +129,46 @@ actor PlaybackManager {
 
     // MARK: - Automatic lossless upgrade
 
-    private var pencariCooldownUntil: Date?
+    private let pencariCooldownKey = "pencari.cooldownUntil"
     private var pencariMatchCache: [String: String] = [:]
+
+    /// Hard budget for the lossless attempt on the playback path. If FLAC
+    /// isn't ready in this window we play YouTube immediately — never stall.
+    private let losslessBudget: Duration = .milliseconds(1500)
+
+    /// Persisted so a down origin doesn't cost every relaunch a fresh timeout.
+    private var isPencariCoolingDown: Bool {
+        let until = UserDefaults.standard.double(forKey: pencariCooldownKey)
+        return until > Date().timeIntervalSince1970
+    }
+
+    private func markPencariCooldown(_ seconds: TimeInterval = 300) {
+        UserDefaults.standard.set(
+            Date().addingTimeInterval(seconds).timeIntervalSince1970,
+            forKey: pencariCooldownKey
+        )
+    }
+
+    /// Runs the lossless upgrade against a hard deadline. On timeout it marks a
+    /// cooldown so the next play goes straight to YouTube.
+    private func losslessWithinBudget(videoId: String) async -> PlaybackResult? {
+        guard SettingsStore.shared.preferLosslessAudio else { return nil }
+        guard !MusicPlaybackIdentity.isExternal(videoId) else { return nil }
+        guard !isPencariCoolingDown else { return nil }
+        let budget = losslessBudget
+        let result = await withTaskGroup(of: PlaybackResult?.self) { group -> PlaybackResult? in
+            group.addTask { await self.resolveLosslessUpgrade(videoId: videoId) }
+            group.addTask {
+                try? await Task.sleep(for: budget)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+        if result == nil { markPencariCooldown() }
+        return result
+    }
 
     /// When the user prefers lossless, tries to find the same track on the
     /// bundled PencariMusic addon and resolve a FLAC stream. Returns nil on any
@@ -139,7 +177,7 @@ actor PlaybackManager {
     private func resolveLosslessUpgrade(videoId: String) async -> PlaybackResult? {
         guard SettingsStore.shared.preferLosslessAudio else { return nil }
         guard !MusicPlaybackIdentity.isExternal(videoId) else { return nil }
-        if let until = pencariCooldownUntil, until > Date() { return nil }
+        if isPencariCoolingDown { return nil }
         guard let song = await queueSong(for: videoId) else { return nil }
         let title = song.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return nil }
@@ -178,7 +216,7 @@ actor PlaybackManager {
                 loudnessDb: nil
             )
         } catch {
-            pencariCooldownUntil = Date().addingTimeInterval(300)
+            markPencariCooldown()
             return nil
         }
     }
@@ -317,7 +355,7 @@ actor PlaybackManager {
     private func resolveAndPlayFromNetwork(videoId: String) async throws -> PlaybackResult {
         // Lossless-first: a match on the bundled addon plays FLAC; otherwise we
         // silently continue to the YouTube resolver below.
-        if let lossless = await resolveLosslessUpgrade(videoId: videoId) {
+        if let lossless = await losslessWithinBudget(videoId: videoId) {
             await playNetworkResult(lossless, videoId: videoId)
             return lossless
         }
