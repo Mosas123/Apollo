@@ -287,7 +287,7 @@ struct FullPlayerView: View {
                 .disabled(currentSong?.artists.contains { $0.id != nil } != true)
                 .opacity(currentSong?.artists.contains { $0.id != nil } != true ? 0.4 : 1)
             }
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .glassEffect(.regular, in: .rect(cornerRadius: 18))
             .padding(.horizontal, 28)
         }
     }

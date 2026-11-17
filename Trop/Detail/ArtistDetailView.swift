@@ -695,7 +695,7 @@ struct ArtistDetailView: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(.primary)
                     .frame(width: 36, height: 36)
-                    .background(Circle().fill(.ultraThinMaterial))
+                    .glassEffect(.regular.interactive(), in: Circle())
             }
             .buttonStyle(.plain)
             .padding(.top, 14)
