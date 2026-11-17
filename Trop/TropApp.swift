@@ -21,7 +21,9 @@ struct TropApp: App {
             object: nil,
             queue: .main
         ) { _ in
-            ImageCache.shared.removeAll()
+            // Clear the cache actually installed on the pipeline (see
+            // configureNuke); `ImageCache.shared` is a different instance.
+            ImagePipeline.shared.configuration.imageCache?.removeAll()
             AsyncImageView.clearArtworkCache()
         }
         Log.wireSwiftyTube()

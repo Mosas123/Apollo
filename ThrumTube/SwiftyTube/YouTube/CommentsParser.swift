@@ -9,6 +9,10 @@
 import Foundation
 
 public enum CommentsParser {
+    private static let compactNumberRegex = try? NSRegularExpression(
+        pattern: #"^([\d.,\s\u00a0]+)\s*([kKmM])?"#
+    )
+
     // MARK: - Token discovery
 
     /// Pulls the first comments-section continuation from a WEB `/next` watch response.
@@ -469,8 +473,7 @@ public enum CommentsParser {
     private static func parseCompactNumber(_ value: Any?) -> Int {
         let raw = stringValue(value)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !raw.isEmpty else { return 0 }
-        let pattern = #"^([\d.,\s\u00a0]+)\s*([kKmM])?"#
-        guard let regex = try? NSRegularExpression(pattern: pattern),
+        guard let regex = Self.compactNumberRegex,
               let match = regex.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)) else {
             return Int(raw.filter(\.isNumber)) ?? 0
         }

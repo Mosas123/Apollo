@@ -105,13 +105,31 @@ enum ForYouService {
             return cachedArtists?.artists ?? []
         }
 
+        // Resolve in small concurrent batches instead of one network round-trip
+        // per name.
         var resolved: [ArtistItem] = []
         var seen = Set<String>()
-        for name in names where !known.contains(name.lowercased()) {
-            if let artist = await resolveArtist(name), seen.insert(artist.name.lowercased()).inserted {
-                resolved.append(artist)
+        let pending = names.filter { !known.contains($0.lowercased()) }
+        let batchSize = 4
+        var start = 0
+        while start < pending.count, resolved.count < 10 {
+            let end = min(start + batchSize, pending.count)
+            let batch = pending[start..<end]
+            let results = await withTaskGroup(of: ArtistItem?.self) { group -> [ArtistItem] in
+                for name in batch {
+                    group.addTask { await resolveArtist(name) }
+                }
+                var out: [ArtistItem] = []
+                for await artist in group { if let artist { out.append(artist) } }
+                return out
             }
-            if resolved.count >= 10 { break }
+            for artist in results {
+                if seen.insert(artist.name.lowercased()).inserted {
+                    resolved.append(artist)
+                    if resolved.count >= 10 { break }
+                }
+            }
+            start = end
         }
 
         if !resolved.isEmpty {
@@ -147,21 +165,30 @@ enum ForYouService {
             return cachedPodcasts?.items ?? []
         }
 
+        // Resolve in small concurrent batches instead of one search per name
+        // serially.
         var items: [YTItem] = []
         var seen = Set<String>()
-        for name in names {
-            guard let raw = try? await SearchService.shared.search(query: name) else { continue }
-            let episode = SearchParser.parseSearchResults(from: raw)
-                .flatMap(\.items)
-                .compactMap { item -> EpisodeItem? in
-                    if case .episode(let episode) = item { return episode }
-                    return nil
+        let batchSize = 4
+        var start = 0
+        while start < names.count, items.count < 8 {
+            let end = min(start + batchSize, names.count)
+            let batch = names[start..<end]
+            let results = await withTaskGroup(of: EpisodeItem?.self) { group -> [EpisodeItem] in
+                for name in batch {
+                    group.addTask { await resolvePodcastEpisode(name) }
                 }
-                .first
-            if let episode, seen.insert(episode.videoId).inserted {
-                items.append(.episode(episode))
+                var out: [EpisodeItem] = []
+                for await episode in group { if let episode { out.append(episode) } }
+                return out
             }
-            if items.count >= 8 { break }
+            for episode in results {
+                if seen.insert(episode.videoId).inserted {
+                    items.append(.episode(episode))
+                    if items.count >= 8 { break }
+                }
+            }
+            start = end
         }
 
         if !items.isEmpty {
@@ -172,6 +199,17 @@ enum ForYouService {
     }
 
     // MARK: - Helpers
+
+    private static func resolvePodcastEpisode(_ name: String) async -> EpisodeItem? {
+        guard !name.isEmpty, let raw = try? await SearchService.shared.search(query: name) else { return nil }
+        return SearchParser.parseSearchResults(from: raw)
+            .flatMap(\.items)
+            .compactMap { item -> EpisodeItem? in
+                if case .episode(let episode) = item { return episode }
+                return nil
+            }
+            .first
+    }
 
     private static func resolveArtist(_ name: String) async -> ArtistItem? {
         guard !name.isEmpty, let raw = try? await SearchService.shared.search(query: name) else { return nil }

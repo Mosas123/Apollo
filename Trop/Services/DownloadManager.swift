@@ -31,7 +31,7 @@ final class DownloadManager: ObservableObject {
         case failed(String)
     }
 
-    private static let minimumAudioBytes = 8_192
+    nonisolated private static let minimumAudioBytes = 8_192
 
     private let fileManager = FileManager.default
     private let pathMonitor = NWPathMonitor()
@@ -154,7 +154,7 @@ final class DownloadManager: ObservableObject {
         defer { isReloading = false }
 
         ensureDirectories()
-        let scanned = scanDownloadedFiles()
+        let scanned = await Self.scanDownloads(downloadsDir)
 
         var rebuilt: [String: DownloadedTrackEntity] = [:]
         let databaseTracks = await fetchAllFromDatabase()
@@ -204,10 +204,16 @@ final class DownloadManager: ObservableObject {
         if persistedDownloadCount != newTracks.count { persistedDownloadCount = newTracks.count }
     }
 
-    private func scanDownloadedFiles() -> [String: URL] {
+    /// Directory scan is disk-heavy; run it off the main actor.
+    nonisolated private static func scanDownloads(_ dir: URL) async -> [String: URL] {
+        await Task.detached(priority: .utility) { scanDownloadsSync(dir) }.value
+    }
+
+    nonisolated private static func scanDownloadsSync(_ dir: URL) -> [String: URL] {
+        let fm = FileManager.default
         let keys: [URLResourceKey] = [.fileSizeKey, .contentModificationDateKey]
-        guard let urls = try? fileManager.contentsOfDirectory(
-            at: downloadsDir,
+        guard let urls = try? fm.contentsOfDirectory(
+            at: dir,
             includingPropertiesForKeys: keys,
             options: [.skipsHiddenFiles]
         ) else { return [:] }
@@ -217,7 +223,7 @@ final class DownloadManager: ObservableObject {
 
         for url in urls where url.pathExtension.lowercased() == "m4a" {
             let values = try? url.resourceValues(forKeys: Set(keys))
-            guard (values?.fileSize ?? 0) >= Self.minimumAudioBytes else { continue }
+            guard (values?.fileSize ?? 0) >= minimumAudioBytes else { continue }
             guard let videoId = Self.videoId(from: url.lastPathComponent) else { continue }
             let modified = values?.contentModificationDate ?? .distantPast
             if let existingDate = dates[videoId], existingDate >= modified { continue }
@@ -684,7 +690,8 @@ extension DownloadManager {
             _ = try? await DatabaseService.shared.delete(entity)
         }
         // Also remove any orphaned file matching this id.
-        if let scanned = scanDownloadedFiles()[videoId] {
+        let scannedFiles = await Self.scanDownloads(downloadsDir)
+        if let scanned = scannedFiles[videoId] {
             try? fileManager.removeItem(at: scanned)
         }
 
@@ -694,13 +701,16 @@ extension DownloadManager {
     func deleteAll() async {
         cancelAllActiveDownloads()
 
-        // Remove files directly so orphaned downloads are cleaned too.
-        for url in scanDownloadedFiles().values {
-            try? fileManager.removeItem(at: url)
-        }
-        let tracks = await fetchAllFromDatabase()
-        for track in tracks {
-            _ = try? await DatabaseService.shared.delete(track)
+        // Remove files directly (off-main) so orphaned downloads are cleaned too.
+        let scanned = await Self.scanDownloads(downloadsDir)
+        let urls = Array(scanned.values)
+        await Task.detached(priority: .utility) {
+            let fm = FileManager.default
+            for url in urls { try? fm.removeItem(at: url) }
+        }.value
+        // One DELETE instead of a round-trip per downloaded row.
+        try? await DatabaseService.shared.write { db in
+            try db.execute(sql: "DELETE FROM downloaded_track")
         }
 
         tracksById.removeAll()
@@ -780,13 +790,20 @@ extension DownloadManager {
     }
 
     func totalStorageBytes() async -> Int64 {
-        var total: Int64 = 0
-        for track in tracksById.values {
-            guard let url = resolvedURL(for: track) else { continue }
-            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-            total += Int64(size)
-        }
-        return total
+        let dir = downloadsDir
+        let tracks = Array(tracksById.values)
+        return await Task.detached(priority: .utility) {
+            let fm = FileManager.default
+            var total: Int64 = 0
+            for track in tracks {
+                let url = track.localPath.hasPrefix("/")
+                    ? URL(fileURLWithPath: track.localPath)
+                    : dir.appendingPathComponent(track.localPath)
+                guard fm.fileExists(atPath: url.path) else { continue }
+                total += Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+            }
+            return total
+        }.value
     }
 
     func state(for videoId: String) -> DownloadState {

@@ -148,7 +148,9 @@ struct SearchView: View {
             }
         case .loading:
             liveSearchStatus {
-                ProgressView().padding()
+                if viewModel.isFetching {
+                    ProgressView().padding()
+                }
             }
         case .results:
             searchResultsList
