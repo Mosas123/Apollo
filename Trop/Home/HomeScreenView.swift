@@ -19,33 +19,29 @@ struct HomeScreenView: View {
     @State private var forYouSongs: [SongItem] = []
     @State private var discoverArtists: [ArtistItem] = []
     @State private var podcastSuggestions: [YTItem] = []
-    @State private var headerHeight: CGFloat = 76
 
     var body: some View {
         NavigationStack(path: $router.homePath) {
-            ZStack(alignment: .top) {
-                Group {
-                    if viewModel.isLoading {
-                        VStack {
-                            Spacer()
-                            ShimmerLoadingView()
-                            Spacer()
-                        }
-                    } else if let error = viewModel.error {
-                        errorView(error)
-                    } else {
-                        homescreenContent
-                    }
-                }
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    Color.clear.frame(height: headerHeight)
-                }
+            VStack(spacing: 0) {
+                TabHeaderView(
+                    title: "Home",
+                    accountIsLoggedIn: accountState.isLoggedIn,
+                    accountImageUrl: accountState.accountImageUrl,
+                    onAccount: { router.homePath.append(DetailRoute.settings) },
+                    accountInitial: accountState.accountName.first.map(String.init)
+                )
 
-                ProgressiveBlurUnderlay(height: headerHeight)
-                progressiveHeader
+                if viewModel.isLoading {
+                    Spacer()
+                    ShimmerLoadingView()
+                    Spacer()
+                } else if let error = viewModel.error {
+                    errorView(error)
+                } else {
+                    homescreenContent
+                }
             }
             .frame(maxHeight: .infinity, alignment: .top)
-            .onPreferenceChange(TabHeaderHeightKey.self) { headerHeight = $0 }
             .toolbar(.hidden, for: .navigationBar)
             .detailRouteDestinations()
             .onChange(of: pendingRoute) { _, route in
@@ -74,21 +70,6 @@ struct HomeScreenView: View {
                     .compactMap(\.thumbnailUrl)
                     .compactMap(URL.init)
                 await ImagePreloader.shared.preload(urls)
-            }
-        }
-    }
-
-    private var progressiveHeader: some View {
-        TabHeaderView(
-            title: "Home",
-            accountIsLoggedIn: accountState.isLoggedIn,
-            accountImageUrl: accountState.accountImageUrl,
-            onAccount: { router.homePath.append(DetailRoute.settings) },
-            accountInitial: accountState.accountName.first.map(String.init)
-        )
-        .background {
-            GeometryReader { geo in
-                Color.clear.preference(key: TabHeaderHeightKey.self, value: geo.size.height)
             }
         }
     }
@@ -129,7 +110,6 @@ struct HomeScreenView: View {
         }
         .scrollIndicators(.automatic)
         .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
-        .scrollEdgeEffectHidden(true, for: .top)
         .task(id: selectedCategory) {
             await viewModel.loadCategoryFeed(selectedCategory)
         }

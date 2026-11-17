@@ -20,7 +20,6 @@ struct LibraryView: View {
     @State private var showCreateDialog = false
     @State private var playlistToDelete: PlaylistEntity?
     @State private var playlistSongCounts: [String: Int] = [:]
-    @State private var headerHeight: CGFloat = 76
 
     @ObservedObject private var router = AppRouter.shared
     @ObservedObject private var downloadManager = DownloadManager.shared
@@ -55,24 +54,17 @@ struct LibraryView: View {
         case podcasts = "Podcasts"
     }
 
-    private var libraryHeader: some View {
-        TabHeaderView(
-            title: "Library",
-            accountIsLoggedIn: accountState.isLoggedIn,
-            accountImageUrl: accountState.accountImageUrl,
-            onAccount: { router.libraryPath.append(DetailRoute.settings) },
-            accountInitial: accountState.accountName.first.map(String.init)
-        )
-        .background {
-            GeometryReader { geo in
-                Color.clear.preference(key: TabHeaderHeightKey.self, value: geo.size.height)
-            }
-        }
-    }
-
     var body: some View {
         NavigationStack(path: $router.libraryPath) {
-            ZStack(alignment: .top) {
+            VStack(spacing: 0) {
+                TabHeaderView(
+                    title: "Library",
+                    accountIsLoggedIn: accountState.isLoggedIn,
+                    accountImageUrl: accountState.accountImageUrl,
+                    onAccount: { router.libraryPath.append(DetailRoute.settings) },
+                    accountInitial: accountState.accountName.first.map(String.init)
+                )
+
                 Group {
                     if isLoading {
                         librarySkeleton
@@ -80,15 +72,8 @@ struct LibraryView: View {
                         feedContent
                     }
                 }
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    Color.clear.frame(height: headerHeight)
-                }
-
-                ProgressiveBlurUnderlay(height: headerHeight)
-                libraryHeader
             }
             .frame(maxHeight: .infinity, alignment: .top)
-            .onPreferenceChange(TabHeaderHeightKey.self) { headerHeight = $0 }
             .toolbar(.hidden, for: .navigationBar)
             .detailRouteDestinations()
             .overlay {
@@ -163,7 +148,6 @@ struct LibraryView: View {
         }
         .scrollIndicators(.automatic)
         .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
-        .scrollEdgeEffectHidden(true, for: .top)
     }
 
     /// Simple grouped list of library destinations, Apple Music style.
