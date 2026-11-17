@@ -330,16 +330,71 @@ struct AlbumDetailView: View {
             }
         }
         .scrollDisabled(viewModel.isLoading || viewModel.error != nil || viewModel.album == nil)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            Color.clear.frame(height: 52)
+        }
         .background(albumBackdrop)
         .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
-        .navigationTitle(viewModel.album?.title ?? "")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .navigationBar)
+        .overlay(alignment: .top) {
+            GeometryReader { geometry in
+                VariableBlurView(maxBlurRadius: 8, direction: .blurredTopClearBottom)
+                    .frame(height: geometry.safeAreaInsets.top + 12)
+                    .offset(y: -geometry.safeAreaInsets.top)
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+        .overlay(alignment: .top) { albumTopBar }
         .task {
             guard viewModel.isLoading else { return }
             await viewModel.load()
         }
         .detailRouteSheet(item: $pendingRoute)
+        .sheet(isPresented: $showMoreSheet) {
+            if let album = viewModel.album {
+                AlbumMoreSheet(
+                    album: album,
+                    isSaved: viewModel.isSaved,
+                    onToggleSave: { Task { await viewModel.toggleSave() } }
+                )
+            }
+        }
+    }
+
+    private var albumTopBar: some View {
+        HStack {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 40, height: 40)
+                    .glassEffect(.regular.interactive(), in: Circle())
+            }
+            .accessibilityLabel("Back")
+
+            Spacer()
+
+            if let album = viewModel.album,
+               let url = URL(string: "https://music.youtube.com/browse/\(album.browseId)") {
+                HStack(spacing: 0) {
+                    ShareLink(item: url) {
+                        Image(systemName: "square.and.arrow.up")
+                            .frame(width: 40, height: 40)
+                    }
+                    .accessibilityLabel("Share album")
+                    Button { showMoreSheet = true } label: {
+                        Image(systemName: "ellipsis")
+                            .frame(width: 40, height: 40)
+                    }
+                    .accessibilityLabel("Album options")
+                }
+                .glassEffect(.regular, in: Capsule())
+            }
+        }
+        .foregroundStyle(.primary)
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
     }
 
     /// Keep the artwork tint behind the album content, including the song list.
@@ -566,15 +621,6 @@ struct AlbumDetailView: View {
             }
         }
         .padding(.vertical, 16)
-        .sheet(isPresented: $showMoreSheet) {
-            if let album = viewModel.album {
-                AlbumMoreSheet(
-                    album: album,
-                    isSaved: viewModel.isSaved,
-                    onToggleSave: { Task { await viewModel.toggleSave() } }
-                )
-            }
-        }
     }
 
     @ViewBuilder

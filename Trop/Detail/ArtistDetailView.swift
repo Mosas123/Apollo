@@ -298,13 +298,6 @@ struct ArtistDetailView: View {
     @State private var backdropColors: [Color] = []
     @State private var linkResetTask: Task<Void, Never>?
 
-    private static let barFadeStart: CGFloat = 80
-    private static let barFadeDistance: CGFloat = 120
-
-    private var barProgress: CGFloat {
-        min(max((scrollOffset - Self.barFadeStart) / Self.barFadeDistance, 0), 1)
-    }
-
     init(browseId: String) {
         self.browseId = browseId
         _viewModel = State(initialValue: ArtistDetailViewModel(browseId: browseId))
@@ -358,25 +351,25 @@ struct ArtistDetailView: View {
         HStack(spacing: 8) {
             topBarBackButton
 
-            if let artist = viewModel.artist {
-                Text(artist.name)
-                    .font(.headline)
-                    .lineLimit(1)
-                    .opacity(barProgress)
-            }
-
             Spacer(minLength: 0)
 
-            topBarMenuButton
+            if let artist = viewModel.artist,
+               let url = URL(string: "https://music.youtube.com/channel/\(artist.browseId)") {
+                HStack(spacing: 0) {
+                    ShareLink(item: url) {
+                        Image(systemName: "square.and.arrow.up")
+                            .frame(width: 40, height: 40)
+                    }
+                    .accessibilityLabel("Share artist")
+                    topBarMenuButton
+                }
+                .glassEffect(.regular, in: Capsule())
+            }
         }
-        .padding(.horizontal, 8)
+        .foregroundStyle(.primary)
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
         .padding(.vertical, 6)
-        .background {
-            // Progressive blur that fades in as the hero scrolls under the
-            // top bar (Apple Music artist page), instead of a solid fill.
-            ProgressiveBlurUnderlay(height: 56)
-                .opacity(barProgress)
-        }
     }
 
     private var topBarBackButton: some View {
@@ -400,46 +393,25 @@ struct ArtistDetailView: View {
                       systemImage: linkCopied ? "checkmark" : "link")
             }
         } label: {
-            ZStack {
-                Image(systemName: "ellipsis")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
-                    .opacity(1 - barProgress)
-                Image(systemName: "ellipsis")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .opacity(barProgress)
-            }
-            .frame(width: 40, height: 40)
-            .contentShape(Rectangle())
+            Image(systemName: "ellipsis")
+                .font(.body.weight(.semibold))
+                .frame(width: 40, height: 40)
+                .contentShape(Rectangle())
         }
         .disabled(viewModel.artist == nil)
         .accessibilityLabel("Artist options")
     }
 
-    /// Round top-bar button matching the back chevron: white with shadow over
-    /// the banner artwork, crossfading to `fadedColor` as the bar fills in.
     private func topBarCircleButton(
         systemName: String,
-        fadedColor: Color = .primary,
         accessibilityLabel: String,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action, label: {
-            ZStack {
-                Image(systemName: systemName)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
-                    .opacity(1 - barProgress)
-                Image(systemName: systemName)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(fadedColor)
-                    .opacity(barProgress)
-            }
-            .frame(width: 40, height: 40)
-            .contentShape(Rectangle())
+            Image(systemName: systemName)
+                .font(.body.weight(.semibold))
+                .frame(width: 40, height: 40)
+                .glassEffect(.regular.interactive(), in: Circle())
         })
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
