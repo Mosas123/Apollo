@@ -334,6 +334,7 @@ struct AlbumDetailView: View {
         .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
         .navigationTitle(viewModel.album?.title ?? "")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .task {
             guard viewModel.isLoading else { return }
             await viewModel.load()

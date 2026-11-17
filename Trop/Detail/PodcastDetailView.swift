@@ -442,6 +442,7 @@ struct PodcastDetailView: View {
         .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
         .navigationTitle(viewModel.podcast?.title ?? "")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .task {
             guard viewModel.isLoading else { return }
             await viewModel.load()

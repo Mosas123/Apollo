@@ -412,6 +412,7 @@ struct PlaylistDetailView: View {
         .miniPlayerTracksScroll().scrollEdgeEffectStyle(.hard, for: .all)
         .navigationTitle(viewModel.playlist?.title ?? "")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
             if isEditable {
                 ToolbarItem(placement: .primaryAction) {
