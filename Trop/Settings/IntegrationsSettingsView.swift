@@ -6,7 +6,10 @@
 import SwiftUI
 
 struct IntegrationsSettingsView: View {
+    @Environment(SettingsStore.self) private var settings
+
     var body: some View {
+        @Bindable var settings = settings
         List {
             Section {
                 SettingsNavigationRow("Music Addons", icon: "puzzlepiece.extension") {
@@ -26,6 +29,14 @@ struct IntegrationsSettingsView: View {
                 }
             } footer: {
                 Text("Connect external services to enhance your experience.")
+            }
+
+            Section {
+                Toggle("Apple Music artwork (experimental)", isOn: $settings.experimentalAppleArtwork)
+            } header: {
+                Text("Experimental")
+            } footer: {
+                Text("Uses Apple Music's catalogue and artist photos for high-resolution covers. If anything misbehaves, turn it off to return to YouTube-only artwork.")
             }
         }
         .navigationTitle("Integrations")

@@ -39,10 +39,12 @@ final class ArtistDetailViewModel {
             isLoading = false
             // Prefer a better profile photo (Apple 1800px → Deezer → Wikimedia)
             // and fall back to the YouTube Music thumbnail.
-            let ytURL = ArtworkURLs.sized(parsed.thumbnailUrl, width: 1200, height: 1200)
-                .flatMap { URL(string: $0) }
-            if let resolved = await ArtistImageResolver.preferredImageURL(name: parsed.name, youTubeURL: ytURL) {
-                artist?.heroImageURL = resolved.absoluteString
+            if SettingsStore.shared.experimentalAppleArtwork {
+                let ytURL = ArtworkURLs.sized(parsed.thumbnailUrl, width: 1200, height: 1200)
+                    .flatMap { URL(string: $0) }
+                if let resolved = await ArtistImageResolver.preferredImageURL(name: parsed.name, youTubeURL: ytURL) {
+                    artist?.heroImageURL = resolved.absoluteString
+                }
             }
             // Unblock the hero either way (falls back to the YouTube thumbnail).
             artist?.heroImageResolved = true
