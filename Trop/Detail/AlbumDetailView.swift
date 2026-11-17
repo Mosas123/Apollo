@@ -456,7 +456,7 @@ struct AlbumDetailView: View {
 
             if !album.videos.isEmpty {
                 carousel(title: "Music Videos") {
-                    ForEach(Array(album.videos.prefix(12).enumerated()), id: \.offset) { _, video in
+                    ForEach(album.videos.prefix(12), id: \.videoId) { video in
                         videoCard(video)
                     }
                 }
@@ -464,7 +464,7 @@ struct AlbumDetailView: View {
 
             if !album.featuredPlaylists.isEmpty {
                 carousel(title: "Featured On") {
-                    ForEach(Array(album.featuredPlaylists.prefix(12).enumerated()), id: \.offset) { _, playlist in
+                    ForEach(album.featuredPlaylists.prefix(12), id: \.id) { playlist in
                         playlistCard(playlist)
                     }
                 }
@@ -472,7 +472,7 @@ struct AlbumDetailView: View {
 
             if !album.relatedAlbums.isEmpty {
                 carousel(title: "You Might Also Like") {
-                    ForEach(Array(album.relatedAlbums.prefix(12).enumerated()), id: \.offset) { _, related in
+                    ForEach(album.relatedAlbums.prefix(12), id: \.browseId) { related in
                         albumCard(related)
                     }
                 }
@@ -584,7 +584,7 @@ struct AlbumDetailView: View {
             // Clickable artist names
             if !album.artists.isEmpty {
                 HStack(spacing: 4) {
-                    ForEach(Array(album.artists.enumerated()), id: \.offset) { i, artist in
+                    ForEach(Array(album.artists.enumerated()), id: \.element) { i, artist in
                         if i > 0 {
                             Text(", ")
                                 .foregroundColor(.secondary)
@@ -647,19 +647,20 @@ struct AlbumDetailView: View {
 
     @ViewBuilder
     private func songList(for album: AlbumDetailInfo) -> some View {
-        VStack(spacing: 0) {
-            ForEach(Array(album.songs.enumerated()), id: \.offset) { index, song in
-                SongRowView(
-                    song: song,
-                    onTap: { playSong(song, in: album) },
-                    onNavigate: { pendingRoute = $0 },
-                    index: index + 1
-                )
+        // Rows are direct children of the outer LazyVStack so they build
+        // lazily; a wrapping VStack forces the whole list eagerly.
+        ForEach(Array(album.songs.enumerated()), id: \.element.videoId) { index, song in
+            SongRowView(
+                song: song,
+                onTap: { playSong(song, in: album) },
+                onNavigate: { pendingRoute = $0 },
+                index: index + 1
+            )
+            .id(song.videoId)
 
-                if index < album.songs.count - 1 {
-                    Divider()
-                        .padding(.leading, 42)
-                }
+            if index < album.songs.count - 1 {
+                Divider()
+                    .padding(.leading, 42)
             }
         }
     }

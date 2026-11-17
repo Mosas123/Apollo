@@ -550,18 +550,18 @@ struct PodcastDetailView: View {
 
     @ViewBuilder
     private func episodeList(for podcast: PodcastDetailInfo) -> some View {
-        VStack(spacing: 0) {
-            ForEach(Array(podcast.episodes.enumerated()), id: \.offset) { index, episode in
-                EpisodeRowView(
-                    episode: episode,
-                    onTap: { playEpisode(episode, in: podcast) },
-                    onNavigate: { pendingRoute = $0 }
-                )
+        // Direct LazyVStack children → rows build lazily.
+        ForEach(Array(podcast.episodes.enumerated()), id: \.element.videoId) { index, episode in
+            EpisodeRowView(
+                episode: episode,
+                onTap: { playEpisode(episode, in: podcast) },
+                onNavigate: { pendingRoute = $0 }
+            )
+            .id(episode.videoId)
 
-                if index < podcast.episodes.count - 1 {
-                    Divider()
-                        .padding(.leading, 100)
-                }
+            if index < podcast.episodes.count - 1 {
+                Divider()
+                    .padding(.leading, 100)
             }
         }
     }

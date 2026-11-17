@@ -109,21 +109,22 @@ struct DownloadsView: View {
         .padding(.bottom, 16)
     }
 
+    @ViewBuilder
     private var songList: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(songs.enumerated()), id: \.offset) { index, song in
-                SongRowView(
-                    song: song,
-                    artSize: 48,
-                    artRadius: 8,
-                    onTap: { playSong(song) },
-                    onNavigate: { pendingRoute = $0 }
-                )
+        // Direct LazyVStack children → rows build lazily.
+        ForEach(Array(songs.enumerated()), id: \.element.videoId) { index, song in
+            SongRowView(
+                song: song,
+                artSize: 48,
+                artRadius: 8,
+                onTap: { playSong(song) },
+                onNavigate: { pendingRoute = $0 }
+            )
+            .id(song.videoId)
 
-                if index < songs.count - 1 {
-                    Divider()
-                        .padding(.leading, 76)
-                }
+            if index < songs.count - 1 {
+                Divider()
+                    .padding(.leading, 76)
             }
         }
     }

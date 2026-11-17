@@ -19,11 +19,18 @@ extension TropLibraryStore {
         let remoteIds = Set(items.map(\.browseId))
         try await db.write { db in
             for item in items {
-                try db.execute(sql: """
-                    INSERT OR REPLACE INTO artist (id, name, thumbnail_url, bookmarked_at, is_podcast_channel, channel_id)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """, arguments: [item.browseId, item.name, item.thumbnailUrl,
-                                     Date(), false, item.channelId])
+                // Preserve bookmark date and podcast flag across syncs.
+                // INSERT OR REPLACE would delete+reinsert and reset these.
+                let existing = try ArtistEntity.fetchOne(db, key: item.browseId)
+                let entity = ArtistEntity(
+                    id: item.browseId,
+                    name: item.name,
+                    thumbnailUrl: item.thumbnailUrl ?? existing?.thumbnailUrl,
+                    bookmarkedAt: existing?.bookmarkedAt ?? Date(),
+                    isPodcastChannel: existing?.isPodcastChannel ?? false,
+                    channelId: item.channelId ?? existing?.channelId
+                )
+                try entity.save(db)
             }
             if !remoteIds.isEmpty {
                 let placeholders = DatabaseService.placeholders(count: remoteIds.count)

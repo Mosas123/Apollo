@@ -14,7 +14,14 @@ actor PlaybackManager {
     private var inflightResolutions: [String: Task<PlaybackResult, Error>] = [:]
 
     private func resolutionKey(videoId: String, forDownload: Bool) -> String {
-        forDownload ? "\(videoId):download" : videoId
+        forDownload ? "\(videoId):download" : "\(videoId):resolve"
+    }
+
+    /// Playback resolution must never share an in-flight entry with a bare
+    /// `resolve(...)` (preload/Top-100 warmup), because that task never calls
+    /// `play()` — awaiting it would return a result without starting audio.
+    private func playKey(videoId: String) -> String {
+        "\(videoId):play"
     }
 
     private init() {}
@@ -162,15 +169,16 @@ actor PlaybackManager {
             return cached
         }
 
-        if let existing = inflightResolutions[videoId] {
+        let key = playKey(videoId: videoId)
+        if let existing = inflightResolutions[key] {
             return try await existing.value
         }
 
         let task = Task { [self] in
             try await resolveAndPlayFromNetwork(videoId: videoId)
         }
-        inflightResolutions[videoId] = task
-        defer { clearInflight(key: videoId) }
+        inflightResolutions[key] = task
+        defer { clearInflight(key: key) }
         return try await task.value
     }
 
