@@ -15,6 +15,18 @@ struct HomeScreenView: View {
 
     @State private var pendingRoute: DetailRoute?
     @State private var headerOffset: CGFloat = 0
+
+    /// Coalesces scroll-offset writes into ~8pt steps so the whole feed isn't
+    /// re-evaluated on every scroll frame (0→1→2…). The header/mini-player
+    /// animation resolves the small steps.
+    private var quantizedHeaderOffset: Binding<CGFloat> {
+        Binding(
+            get: { headerOffset },
+            set: { newValue in
+                if abs(newValue - headerOffset) >= 8 { headerOffset = newValue }
+            }
+        )
+    }
     @State private var headerHeight: CGFloat = 60
     @State private var speedDialEntries: [SpeedDialEntry] = []
     @State private var selectedCategory: ContentCategory = .all
@@ -112,7 +124,7 @@ struct HomeScreenView: View {
             }
         }
         .scrollIndicators(.automatic)
-        .miniPlayerTracksScroll(headerOffset: $headerOffset).scrollEdgeEffectHidden(true, for: .bottom)
+        .miniPlayerTracksScroll(headerOffset: quantizedHeaderOffset).scrollEdgeEffectHidden(true, for: .bottom)
         .task(id: selectedCategory) {
             await viewModel.loadCategoryFeed(selectedCategory)
         }

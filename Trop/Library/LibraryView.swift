@@ -153,7 +153,18 @@ struct LibraryView: View {
             .padding(.bottom, 28)
         }
         .scrollIndicators(.automatic)
-        .miniPlayerTracksScroll(headerOffset: $headerOffset).scrollEdgeEffectHidden(true, for: .bottom)
+        .miniPlayerTracksScroll(headerOffset: quantizedHeaderOffset).scrollEdgeEffectHidden(true, for: .bottom)
+    }
+
+    /// Coalesces scroll-offset writes into ~8pt steps so the list isn't
+    /// re-evaluated every scroll frame.
+    private var quantizedHeaderOffset: Binding<CGFloat> {
+        Binding(
+            get: { headerOffset },
+            set: { newValue in
+                if abs(newValue - headerOffset) >= 8 { headerOffset = newValue }
+            }
+        )
     }
 
     /// Simple grouped list of library destinations, Apple Music style.
