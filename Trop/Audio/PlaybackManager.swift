@@ -127,6 +127,88 @@ actor PlaybackManager {
         )
     }
 
+    // MARK: - Automatic lossless upgrade
+
+    private var pencariCooldownUntil: Date?
+    private var pencariMatchCache: [String: String] = [:]
+
+    /// When the user prefers lossless, tries to find the same track on the
+    /// bundled PencariMusic addon and resolve a FLAC stream. Returns nil on any
+    /// miss/failure so the caller falls back to YouTube. A short cooldown after
+    /// a failure avoids slowing every subsequent play while the origin is down.
+    private func resolveLosslessUpgrade(videoId: String) async -> PlaybackResult? {
+        guard SettingsStore.shared.preferLosslessAudio else { return nil }
+        guard !MusicPlaybackIdentity.isExternal(videoId) else { return nil }
+        if let until = pencariCooldownUntil, until > Date() { return nil }
+        guard let song = await queueSong(for: videoId) else { return nil }
+        let title = song.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return nil }
+        let artist = song.artists.first?.name ?? ""
+        guard let client = await PencariMusicClient.configured() else { return nil }
+
+        let pencariId: String
+        if let cached = pencariMatchCache[videoId] {
+            pencariId = cached
+        } else {
+            let query = artist.isEmpty ? title : "\(artist) \(title)"
+            let tracks = (try? await client.searchTracks(query: query, limit: 8)) ?? []
+            guard let best = Self.bestPencariMatch(tracks, title: title, artist: artist) else { return nil }
+            pencariId = best.id.rawValue
+            if pencariMatchCache.count >= 500 { pencariMatchCache.removeAll(keepingCapacity: true) }
+            pencariMatchCache[videoId] = pencariId
+        }
+
+        do {
+            let url = try await client.resolveStreamURLFast(for: pencariId)
+            return PlaybackResult(
+                streamUrl: url.absoluteString,
+                itag: 0,
+                mimeType: "audio/flac",
+                bitrate: 0,
+                audioQuality: "pencari-flac",
+                videoId: videoId,
+                title: song.title,
+                author: song.artistNamesDisplay,
+                duration: song.duration,
+                expiresInSeconds: 0,
+                clientName: "pencari",
+                musicVideoType: nil,
+                hasVideoContent: false,
+                muxedStreamUrl: nil,
+                loudnessDb: nil
+            )
+        } catch {
+            pencariCooldownUntil = Date().addingTimeInterval(300)
+            return nil
+        }
+    }
+
+    private static func normalizedMatchKey(_ value: String) -> String {
+        value
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .replacingOccurrences(of: "\\s*[\\[(][^\\])]*[\\])]", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "[^a-z0-9 ]", with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    private static func bestPencariMatch(
+        _ tracks: [MusicCatalogTrack],
+        title: String,
+        artist: String
+    ) -> MusicCatalogTrack? {
+        let key = normalizedMatchKey(title)
+        guard !key.isEmpty else { return nil }
+        let artistKey = normalizedMatchKey(artist)
+        for track in tracks {
+            guard normalizedMatchKey(track.title) == key else { continue }
+            if artistKey.isEmpty { return track }
+            let trackArtist = normalizedMatchKey(track.artist)
+            if trackArtist.contains(artistKey) || artistKey.contains(trackArtist) { return track }
+        }
+        // Exact title is required to avoid upgrading to the wrong song.
+        return tracks.first { normalizedMatchKey($0.title) == key }
+    }
+
     /// Resolve a video and start playback. Returns the result used, or throws.
     @discardableResult
     func resolveAndPlay(videoId: String) async throws -> PlaybackResult {
@@ -218,6 +300,12 @@ actor PlaybackManager {
     /// Runs the client fallback chain for playback. Only called once per
     /// videoId by `resolveAndPlay`, which owns the in-flight dedup entry.
     private func resolveAndPlayFromNetwork(videoId: String) async throws -> PlaybackResult {
+        // Lossless-first: a match on the bundled addon plays FLAC; otherwise we
+        // silently continue to the YouTube resolver below.
+        if let lossless = await resolveLosslessUpgrade(videoId: videoId) {
+            await playNetworkResult(lossless, videoId: videoId)
+            return lossless
+        }
         var request = StreamResolveRequest.playback(videoId: videoId)
         request.options.audioQuality = SettingsStore.shared.audioQuality
         let result = try await StreamFallback.resolveFirstValid(

@@ -148,7 +148,7 @@ final class SearchViewModel {
         filters.append(contentsOf: Self.displayOrder.filter { titles.contains($0) })
         if !audiusTracks.isEmpty { filters.append("Audius") }
         if !qobuzTracks.isEmpty { filters.append("Qobuz") }
-        if !pencariTracks.isEmpty { filters.append("PencariMusic") }
+        if !pencariTracks.isEmpty { filters.append("Lossless") }
         return filters
     }
 
@@ -172,7 +172,7 @@ final class SearchViewModel {
     }
 
     var showsPencariResults: Bool {
-        !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "PencariMusic")
+        !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "Lossless")
     }
 
     var filteredResults: [SearchSection] {

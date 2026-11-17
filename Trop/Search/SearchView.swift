@@ -299,7 +299,7 @@ struct SearchView: View {
                 }
 
                 if viewModel.showsPencariResults && !viewModel.pencariTracks.isEmpty {
-                    sectionHeader("PencariMusic")
+                    sectionHeader("Lossless")
                     ForEach(viewModel.pencariTracks, id: \.id) { track in
                         externalTrackRow(track, from: viewModel.pencariTracks)
                     }

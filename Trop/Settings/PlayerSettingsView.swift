@@ -26,10 +26,13 @@ struct PlayerSettingsView: View {
 
             Section {
                 SettingsPickerRow("Audio Quality", icon: "waveform", selection: $settings.audioQuality)
+                SettingsToggleRow("Prefer Lossless (FLAC)", icon: "opticaldisc", isOn: $settings.preferLosslessAudio)
                 SettingsToggleRow("Audio Normalization", icon: "speaker.wave.2", isOn: $settings.audioNormalization)
                 SettingsToggleRow("Gapless Playback", icon: "arrow.right.arrow.left", isOn: $settings.gaplessPlayback)
             } header: {
                 Text("Audio")
+            } footer: {
+                Text("When enabled, the app tries a lossless FLAC stream first and falls back to YouTube if none is available.")
             }
 
             Section {

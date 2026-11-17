@@ -33,6 +33,10 @@ enum PencariMusicError: Error, Equatable, LocalizedError {
 struct PencariMusicClient: Sendable {
     typealias Transport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
 
+    /// Bundled addon base so the source works with no setup. Overridable from
+    /// settings for advanced users.
+    static let defaultBase = "https://stream.pencarimovie.com/66ff097863dedb7ccd8401d5ffe616f3"
+
     let baseURL: URL
     private let transport: Transport
 
@@ -140,6 +144,27 @@ struct PencariMusicClient: Sendable {
             }
         }
         throw lastError
+    }
+
+    /// Single, short attempt with no retry/backoff — used on the automatic
+    /// "prefer lossless" path where latency matters and failure just falls
+    /// back to YouTube.
+    func resolveStreamURLFast(for rawId: String) async throws -> URL {
+        let url = endpoint("music", "stream", rawId)
+        let (data, response) = try await transport(URLRequest(url: url, timeoutInterval: 12))
+        if let http = response as? HTTPURLResponse, http.statusCode == 503 {
+            throw PencariMusicError.originBusy
+        }
+        try Self.validate(response)
+        let decoded = try JSONDecoder().decode(StreamResponse.self, from: data)
+        if let absolute = URL(string: decoded.url), absolute.scheme != nil {
+            return absolute
+        }
+        let baseDir = baseURL.appendingPathComponent("")
+        guard let streamURL = URL(string: decoded.url, relativeTo: baseDir)?.absoluteURL else {
+            throw PencariMusicError.unavailableTrack
+        }
+        return streamURL
     }
 
     private static func validate(_ response: URLResponse) throws {
