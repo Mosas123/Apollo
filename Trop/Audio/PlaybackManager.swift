@@ -306,6 +306,18 @@ actor PlaybackManager {
         }
     }
 
+    /// Boundary-only upgrade: warm this track (for replays) and the next one
+    /// so it *starts* in the better source. Never swaps mid-track.
+    private func scheduleUpgradePrefetch(videoId: String) {
+        Task {
+            if SettingsStore.shared.musicQualityMode != .auto,
+               self.upgradeResultCache[videoId] == nil {
+                _ = await self.resolvePreferredUpgrade(videoId: videoId)
+            }
+            await self.prefetchNextUpgrade(after: videoId)
+        }
+    }
+
     /// Warms the FLAC for the next queue track while the current one plays, so
     /// lossless is ready with zero delay when it comes up. Runs off the play
     /// path and respects the origin cooldown.
@@ -449,6 +461,13 @@ actor PlaybackManager {
         }
 
         if let cached = await StreamCache.shared.get(videoId: videoId) {
+            // A prefetched upgrade can still be better than the cached stream.
+            if let upgrade = prefetchedUpgrade(videoId: videoId),
+               Self.shouldPreferUpgrade(upgrade, over: cached) {
+                await playNetworkResult(upgrade, videoId: videoId)
+                scheduleUpgradePrefetch(videoId: videoId)
+                return upgrade
+            }
             let queueSong = await queueSong(for: videoId)
             await PlayerController.shared.play(
                 url: cached.streamUrl,
@@ -463,6 +482,7 @@ actor PlaybackManager {
                 qualityLabel: Self.qualityLabel(cached)
             )
             await publishVideoAvailability(result: cached, videoId: videoId, rowType: queueSong?.musicVideoType)
+            scheduleUpgradePrefetch(videoId: videoId)
             return cached
         }
 
@@ -500,16 +520,7 @@ actor PlaybackManager {
         await playNetworkResult(result, videoId: videoId)
         // Warm this track (for replays) and the next one while it plays. Off the
         // play path: never delays audio.
-        Task {
-            // Boundary-only upgrade: warm this track (for replays) and the next
-            // one so it *starts* in FLAC. No mid-track swap, so nothing is
-            // audible to the user.
-            if SettingsStore.shared.musicQualityMode != .auto,
-               self.upgradeResultCache[videoId] == nil {
-                _ = await self.resolvePreferredUpgrade(videoId: videoId)
-            }
-            await self.prefetchNextUpgrade(after: videoId)
-        }
+        scheduleUpgradePrefetch(videoId: videoId)
         return result
     }
 
