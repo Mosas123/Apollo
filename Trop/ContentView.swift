@@ -123,6 +123,7 @@ struct ContentView: View {
 
     /// 0 when the player is fully expanded, 1 after dragging it a full screen.
     private var backgroundProgress: CGFloat {
+        guard sheet.isExpanded else { return 0 }
         let height = max(UIScreen.main.bounds.height, 1)
         return min(1, max(0, sheet.dragOffset / height))
     }
@@ -131,10 +132,10 @@ struct ContentView: View {
         withAnimation(.smooth(duration: 0.3)) {
             sheet.isExpanded = false
         }
-        // Let the card finish sliding out before the background relaxes.
+        // Keep the drag offset until the player has finished sliding out.
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(320))
-            withAnimation(.easeOut(duration: 0.2)) {
+            if !sheet.isExpanded {
                 sheet.dragOffset = 0
             }
         }
