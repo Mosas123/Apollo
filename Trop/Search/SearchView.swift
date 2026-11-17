@@ -297,6 +297,13 @@ struct SearchView: View {
                         externalTrackRow(track, from: viewModel.qobuzTracks)
                     }
                 }
+
+                if viewModel.showsPencariResults && !viewModel.pencariTracks.isEmpty {
+                    sectionHeader("PencariMusic")
+                    ForEach(viewModel.pencariTracks, id: \.id) { track in
+                        externalTrackRow(track, from: viewModel.pencariTracks)
+                    }
+                }
             }
             .padding(.bottom, 16)
         }

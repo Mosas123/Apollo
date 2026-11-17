@@ -69,6 +69,7 @@ final class SearchViewModel {
     /// Source-specific results never enter YouTube's YTItem parser.
     private(set) var audiusTracks: [MusicCatalogTrack] = []
     private(set) var qobuzTracks: [MusicCatalogTrack] = []
+    private(set) var pencariTracks: [MusicCatalogTrack] = []
 
     // MARK: - Local matches (populated per submission, for Library filter)
 
@@ -147,6 +148,7 @@ final class SearchViewModel {
         filters.append(contentsOf: Self.displayOrder.filter { titles.contains($0) })
         if !audiusTracks.isEmpty { filters.append("Audius") }
         if !qobuzTracks.isEmpty { filters.append("Qobuz") }
+        if !pencariTracks.isEmpty { filters.append("PencariMusic") }
         return filters
     }
 
@@ -167,6 +169,10 @@ final class SearchViewModel {
 
     var showsQobuzResults: Bool {
         !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "Qobuz")
+    }
+
+    var showsPencariResults: Bool {
+        !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "PencariMusic")
     }
 
     var filteredResults: [SearchSection] {
@@ -306,6 +312,7 @@ final class SearchViewModel {
         isShowingLibrary = false
         audiusTracks = []
         qobuzTracks = []
+        pencariTracks = []
         localSongs = []
         localArtists = []
         localAlbums = []
@@ -358,15 +365,23 @@ final class SearchViewModel {
         guard includeProviders else { return }
         async let audius = try? AudiusClient().searchTracks(query: query, limit: 25)
         async let qobuz = QobuzCatalogService.shared.searchIfConfigured(query: query, limit: 25)
-        let (remoteAudius, remoteQobuz) = await (audius, qobuz)
+        async let pencari = fetchPencariTracks(query: query)
+        let (remoteAudius, remoteQobuz, remotePencari) = await (audius, qobuz, pencari)
         guard !Task.isCancelled, query == submittedQuery else { return }
         audiusTracks = remoteAudius ?? []
         qobuzTracks = remoteQobuz
+        pencariTracks = remotePencari
         updateResultPhase()
     }
 
+    /// PencariMusic requires a configured addon base; returns [] otherwise.
+    private func fetchPencariTracks(query: String) async -> [MusicCatalogTrack] {
+        guard let client = PencariMusicClient.configured() else { return [] }
+        return (try? await client.searchTracks(query: query, limit: 25)) ?? []
+    }
+
     private func updateResultPhase() {
-        if results.isEmpty && heroArtist == nil && audiusTracks.isEmpty && qobuzTracks.isEmpty {
+        if results.isEmpty && heroArtist == nil && audiusTracks.isEmpty && qobuzTracks.isEmpty && pencariTracks.isEmpty {
             phase = error == nil ? .noResults : .failed
         } else {
             phase = .results
@@ -455,6 +470,7 @@ final class SearchViewModel {
         results = []
         audiusTracks = []
         qobuzTracks = []
+        pencariTracks = []
         localSongs = []
         localArtists = []
         localAlbums = []

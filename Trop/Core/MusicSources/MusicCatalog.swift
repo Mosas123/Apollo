@@ -7,6 +7,7 @@ enum MusicCatalogSource: String, Codable, Hashable, Sendable {
     case audius
     case jamendo
     case qobuz
+    case pencari
 }
 
 struct MusicCatalogID: Codable, Hashable, Sendable {
@@ -69,8 +70,12 @@ enum MusicPlaybackIdentity {
         playbackID?.hasPrefix("qobuz:") == true
     }
 
+    static func isPencari(_ playbackID: String?) -> Bool {
+        playbackID?.hasPrefix("pencari:") == true
+    }
+
     static func isExternal(_ playbackID: String?) -> Bool {
-        isAudius(playbackID) || isQobuz(playbackID)
+        isAudius(playbackID) || isQobuz(playbackID) || isPencari(playbackID)
     }
 
     static func isYouTube(_ playbackID: String?) -> Bool {

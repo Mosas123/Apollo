@@ -15,6 +15,9 @@ struct IntegrationsSettingsView: View {
                 SettingsNavigationRow("Qobuz", icon: "waveform") {
                     QobuzSettingsView()
                 }
+                SettingsNavigationRow("PencariMusic", icon: "dot.radiowaves.left.and.right") {
+                    PencariMusicSettingsView()
+                }
                 SettingsNavigationRow("Last.fm", icon: "music.note") {
                     LastFMSettingsView()
                 }

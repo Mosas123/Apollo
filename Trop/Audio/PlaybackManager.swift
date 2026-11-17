@@ -96,6 +96,37 @@ actor PlaybackManager {
         )
     }
 
+    /// PencariMusic streams resolve server-side to a short-lived FLAC URL; the
+    /// short code must never reach the YouTube resolver.
+    private func resolvePencari(videoId: String) async throws -> PlaybackResult {
+        guard let identifier = MusicCatalogID(storageKey: videoId),
+              identifier.source == .pencari,
+              let song = await queueSong(for: videoId) else {
+            throw MusicCatalogError.unavailableTrack
+        }
+        guard let client = await PencariMusicClient.configured() else {
+            throw PencariMusicError.notConfigured
+        }
+        let streamURL = try await client.resolveStreamURL(for: identifier.rawValue)
+        return PlaybackResult(
+            streamUrl: streamURL.absoluteString,
+            itag: 0,
+            mimeType: "audio/flac",
+            bitrate: 0,
+            audioQuality: "pencari-flac",
+            videoId: videoId,
+            title: song.title,
+            author: song.artistNamesDisplay,
+            duration: song.duration,
+            expiresInSeconds: 0,
+            clientName: "pencari",
+            musicVideoType: nil,
+            hasVideoContent: false,
+            muxedStreamUrl: nil,
+            loudnessDb: nil
+        )
+    }
+
     /// Resolve a video and start playback. Returns the result used, or throws.
     @discardableResult
     func resolveAndPlay(videoId: String) async throws -> PlaybackResult {
@@ -103,6 +134,8 @@ actor PlaybackManager {
             let result: PlaybackResult
             if MusicPlaybackIdentity.isQobuz(videoId) {
                 result = try await resolveQobuz(videoId: videoId)
+            } else if MusicPlaybackIdentity.isPencari(videoId) {
+                result = try await resolvePencari(videoId: videoId)
             } else {
                 result = try await resolveAudius(videoId: videoId)
             }
@@ -315,6 +348,9 @@ actor PlaybackManager {
             guard !forDownload else { throw MusicCatalogError.unavailableTrack }
             if MusicPlaybackIdentity.isQobuz(videoId) {
                 return try await resolveQobuz(videoId: videoId)
+            }
+            if MusicPlaybackIdentity.isPencari(videoId) {
+                return try await resolvePencari(videoId: videoId)
             }
             return try await resolveAudius(videoId: videoId)
         }

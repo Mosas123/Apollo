@@ -225,6 +225,15 @@ final class SettingsStore: @unchecked Sendable {
         didSet { Self.defaults.set(podcastIndexSecret, forKey: Keys.podcastIndexSecret) }
     }
 
+    // MARK: - PencariMusic (Stremio/Eclipse music addon)
+
+    /// Tokenized addon base, e.g.
+    /// `https://stream.pencarimovie.com/<token>`. Empty disables the source.
+    /// Search lives at `/music/search`, streams at `/music/stream/<id>`.
+    var pencariMusicBaseURL: String {
+        didSet { Self.defaults.set(pencariMusicBaseURL, forKey: Keys.pencariMusicBaseURL) }
+    }
+
     // MARK: - Liquid Glass
 
     /// Translucency of the player's floating glass chips (iOS 27 style control).
@@ -422,6 +431,7 @@ final class SettingsStore: @unchecked Sendable {
         static let showExploreTab = "settings.showExploreTab"
         static let glassStyle = "settings.glassStyle"
         static let podcastIndexKey = "settings.podcastIndexKey"
+        static let pencariMusicBaseURL = "settings.pencariMusicBaseURL"
         static let aiProvider = "settings.aiProvider"
         static let aiKey = "settings.aiKey"
         static let aiModel = "settings.aiModel"
@@ -500,6 +510,7 @@ final class SettingsStore: @unchecked Sendable {
         showExploreTab = Self.load(Keys.showExploreTab, default: false)
         glassStyle = Self.loadEnum(Keys.glassStyle, default: .regular)
         podcastIndexKey = Self.loadString(Keys.podcastIndexKey, default: "")
+        pencariMusicBaseURL = Self.loadString(Keys.pencariMusicBaseURL, default: "")
         aiProvider = Self.loadString(Keys.aiProvider, default: AIProvider.off.rawValue)
         aiKey = Self.loadString(Keys.aiKey, default: "")
         aiModel = Self.loadString(Keys.aiModel, default: "")
