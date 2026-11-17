@@ -366,14 +366,10 @@ struct ArtistDetailView: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
-        .background(
-            Color(.systemBackground)
-                .opacity(barProgress)
-                .ignoresSafeArea(.container, edges: .top)
-                .allowsHitTesting(false)
-        )
-        .overlay(alignment: .bottom) {
-            Divider()
+        .background {
+            // Progressive blur that fades in as the hero scrolls under the
+            // top bar (Apple Music artist page), instead of a solid fill.
+            ProgressiveBlurUnderlay(height: 56)
                 .opacity(barProgress)
         }
     }
