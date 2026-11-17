@@ -1,12 +1,9 @@
 import Foundation
 
-/// Resolves artist profile photos from keyless sources, since the YouTube
-/// Music catalogue is currently the only one feeding them.
+/// Resolves artist profile photos from keyless sources.
 ///
-/// Order: Apple Music artist page (`AMBArtistImages`, up to 2400px, keyless —
-/// the public web page exposes the image in `og:image`) → Deezer
-/// (`picture_xl`, 1000px) → Wikipedia/Wikimedia (`pageimages.original`) → the
-/// YouTube thumbnail we already have.
+/// Order: Deezer (`picture_xl`, 1000px) → Wikipedia/Wikimedia
+/// (`pageimages.original`) → the YouTube Music thumbnail we already have.
 enum ArtistImageResolver {
     private actor Cache {
         static let shared = Cache()
@@ -31,10 +28,6 @@ enum ArtistImageResolver {
         if let cached = await Cache.shared.hit(key) { return cached }
         if await Cache.shared.isMiss(key) { return youTubeURL }
 
-        if let apple = await appleMusicImage(name: name) {
-            await Cache.shared.store(key, apple)
-            return apple
-        }
         if let deezer = await deezerImage(name: name) {
             await Cache.shared.store(key, deezer)
             return deezer
@@ -47,9 +40,8 @@ enum ArtistImageResolver {
         return youTubeURL
     }
 
-    /// Lightweight avatar resolution for lists (no Apple page fetch): Deezer
-    /// 1000px → Wikimedia → YouTube. The hero uses `preferredImageURL` (Apple
-    /// 1800 first). Same artist photo, different sizes.
+    /// Lightweight avatar resolution for lists: Deezer 1000px → Wikimedia →
+    /// YouTube. Same artist photo as the hero, smaller sizes.
     static func avatarImageURL(name: String, youTubeURL: URL?) async -> URL? {
         let base = TextMatch.normalizeArtist(name)
         guard !base.isEmpty else { return youTubeURL }
@@ -66,97 +58,6 @@ enum ArtistImageResolver {
         }
         await Cache.shared.markMiss(key)
         return youTubeURL
-    }
-
-    // MARK: - Apple Music (web page, keyless)
-
-    private struct ITunesArtists: Decodable {
-        struct Artist: Decodable {
-            let artistName: String?
-            let artistId: Int?
-        }
-        let results: [Artist]?
-    }
-
-    /// Finds the artist on iTunes, opens their public Apple Music page, and
-    /// rewrites the `AMBArtistImages` URL to a large square crop. No developer
-    /// token is involved — this is the same image the website shows.
-    private static func appleMusicImage(name: String) async -> URL? {
-        var search = URLComponents(string: "https://itunes.apple.com/search")
-        search?.queryItems = [
-            URLQueryItem(name: "term", value: TextMatch.queryArtist(name)),
-            URLQueryItem(name: "entity", value: "musicArtist"),
-            URLQueryItem(name: "limit", value: "5")
-        ]
-        guard let searchURL = search?.url,
-              let artists: ITunesArtists = try? await decode(searchURL) else { return nil }
-        let match = artists.results?.first { TextMatch.artistsMatch($0.artistName ?? "", name) }
-        guard let artistId = match?.artistId else { return nil }
-
-        var pageRequest = URLRequest(url: URL(string: "https://music.apple.com/us/artist/\(artistId)")!)
-        pageRequest.timeoutInterval = 15
-        pageRequest.setValue(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            forHTTPHeaderField: "User-Agent"
-        )
-        guard let (data, response) = try? await URLSession.shared.data(for: pageRequest),
-              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-              let html = String(data: data, encoding: .utf8),
-              let imageURL = appleImageURL(fromHTML: html) else { return nil }
-        // Only return it if the large crop actually exists, otherwise fall
-        // through to Deezer/Wikimedia.
-        return await reachable(imageURL) ? imageURL : nil
-    }
-
-    private static func reachable(_ url: URL) async -> Bool {
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 8
-        request.setValue("bytes=0-0", forHTTPHeaderField: "Range")
-        guard let (_, response) = try? await URLSession.shared.data(for: request),
-              let http = response as? HTTPURLResponse else { return false }
-        return (200..<300).contains(http.statusCode)
-    }
-
-    static func appleImageURL(fromHTML rawHTML: String) -> URL? {
-        // Apple may escape slashes inside embedded JSON.
-        let html = rawHTML.replacingOccurrences(of: "\\/", with: "/")
-        let original = firstMatch(
-            in: html,
-            pattern: #"<meta[^>]+property="og:image"[^>]+content="(https://[^"]+mzstatic\.com/[^"]+)""#
-        ) ?? firstMatch(
-            in: html,
-            pattern: #"https://is\d+-ssl\.mzstatic\.com/image/thumb/AMCArtistImages[^"']+\.(?:png|jpg|jpeg|webp)"#
-        ) ?? firstMatch(
-            in: html,
-            pattern: #"https://is\d+-ssl\.mzstatic\.com/image/thumb/[^"']+Artist[^"']+\.(?:png|jpg|jpeg|webp)"#
-        )
-        guard let original else { return nil }
-        // Replace the trailing /WxHcc… suffix with a large square crop. Some
-        // URLs carry no transform; those are returned as-is.
-        let rewrite = #"/\d+x\d+[a-zA-Z-]*(?:-\d+)?\.(?:webp|jpg|jpeg|png)$"#
-        guard let sizeRegex = try? NSRegularExpression(pattern: rewrite, options: .caseInsensitive) else {
-            return URL(string: original)
-        }
-        let full = NSRange(original.startIndex..., in: original)
-        let sized = sizeRegex.stringByReplacingMatches(
-            in: original, range: full, withTemplate: "/1800x1800cc-100.jpg"
-        )
-        return URL(string: sized)
-    }
-
-    private static func firstMatch(in text: String, pattern: String, group: Int = 1) -> String? {
-        guard let regex = try? NSRegularExpression(pattern: pattern),
-              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) else {
-            return nil
-        }
-        let range = match.range(at: group)
-        guard range.location != NSNotFound, let swiftRange = Range(range, in: text) else {
-            // Patterns without a capture group fall back to the whole match.
-            let whole = match.range
-            guard let wholeRange = Range(whole, in: text) else { return nil }
-            return String(text[wholeRange])
-        }
-        return String(text[swiftRange])
     }
 
     // MARK: - Deezer
@@ -224,5 +125,4 @@ enum ArtistImageResolver {
         }
         return try JSONDecoder().decode(T.self, from: data)
     }
-
 }
