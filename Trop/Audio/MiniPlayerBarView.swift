@@ -17,7 +17,6 @@ import Nuke
 struct MiniPlayerBarView: View {
     let onExpand: () -> Void
 
-    @Environment(MiniPlayerScrollState.self) private var scrollState
     @Environment(\.colorScheme) private var colorScheme
 
     private let player = PlayerController.shared
@@ -30,10 +29,6 @@ struct MiniPlayerBarView: View {
     private enum DragAxis {
         case horizontal
         case vertical
-    }
-
-    private var isInline: Bool {
-        scrollState.isInline
     }
 
     private var barHeight: CGFloat {
@@ -132,20 +127,12 @@ struct MiniPlayerBarView: View {
             barArtwork(for: song.videoId)
 
             VStack(alignment: .leading, spacing: 0) {
-                if isInline {
-                    Text(song.title)
-                        .font(.system(size: 13, weight: .semibold))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .foregroundStyle(titleColor)
-                } else {
-                    MarqueeText(
-                        text: song.title,
-                        font: .system(size: 13, weight: .semibold),
-                        frameHeight: 16,
-                        textColor: titleColor
-                    )
-                }
+                MarqueeText(
+                    text: song.title,
+                    font: .system(size: 13, weight: .semibold),
+                    frameHeight: 16,
+                    textColor: titleColor
+                )
 
                 Text(artistLine(for: song))
                     .font(.system(size: 12, weight: .regular))
