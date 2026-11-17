@@ -24,7 +24,6 @@ struct ContentView: View {
 
             tabContent
                 .scaleEffect(1 - 0.08 * backgroundProgress, anchor: .center)
-                .clipShape(RoundedRectangle(cornerRadius: 38 * backgroundProgress, style: .continuous))
                 .overlay {
                     if backgroundProgress > 0 {
                         Color.black
