@@ -25,7 +25,7 @@ enum ArtistImageResolver {
     }
 
     static func preferredImageURL(name: String, youTubeURL: URL?) async -> URL? {
-        let key = normalize(name)
+        let key = TextMatch.normalizeArtist(name)
         guard !key.isEmpty else { return youTubeURL }
 
         if let cached = await Cache.shared.hit(key) { return cached }
@@ -63,18 +63,13 @@ enum ArtistImageResolver {
     private static func appleMusicImage(name: String) async -> URL? {
         var search = URLComponents(string: "https://itunes.apple.com/search")
         search?.queryItems = [
-            URLQueryItem(name: "term", value: name),
+            URLQueryItem(name: "term", value: TextMatch.queryArtist(name)),
             URLQueryItem(name: "entity", value: "musicArtist"),
             URLQueryItem(name: "limit", value: "5")
         ]
         guard let searchURL = search?.url,
               let artists: ITunesArtists = try? await decode(searchURL) else { return nil }
-        let target = normalize(name)
-        let match = artists.results?.first { normalize($0.artistName ?? "") == target }
-            ?? artists.results?.first { artist in
-                let other = normalize(artist.artistName ?? "")
-                return !other.isEmpty && (other.contains(target) || target.contains(other))
-            }
+        let match = artists.results?.first { TextMatch.artistsMatch($0.artistName ?? "", name) }
         guard let artistId = match?.artistId else { return nil }
 
         var pageRequest = URLRequest(url: URL(string: "https://music.apple.com/us/artist/\(artistId)")!)
@@ -85,19 +80,38 @@ enum ArtistImageResolver {
         )
         guard let (data, response) = try? await URLSession.shared.data(for: pageRequest),
               let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-              let html = String(data: data, encoding: .utf8) else { return nil }
-        return appleImageURL(fromHTML: html)
+              let html = String(data: data, encoding: .utf8),
+              let imageURL = appleImageURL(fromHTML: html) else { return nil }
+        // Only return it if the large crop actually exists, otherwise fall
+        // through to Deezer/Wikimedia.
+        return await reachable(imageURL) ? imageURL : nil
     }
 
-    static func appleImageURL(fromHTML html: String) -> URL? {
-        // Greedy so it captures the full URL including the trailing
-        // `/1200x630cw.png` transform segment, not the base filename.
-        let pattern = #"https://is\d+-ssl\.mzstatic\.com/image/thumb/AMCArtistImages[^"']+\.(?:png|jpg|jpeg|webp)"#
-        guard let regex = try? NSRegularExpression(pattern: pattern),
-              let match = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
-              let range = Range(match.range, in: html) else { return nil }
-        let original = String(html[range])
-        // Replace the trailing /WxHcc… suffix with a large square crop.
+    private static func reachable(_ url: URL) async -> Bool {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
+        request.setValue("bytes=0-0", forHTTPHeaderField: "Range")
+        guard let (_, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse else { return false }
+        return (200..<300).contains(http.statusCode)
+    }
+
+    static func appleImageURL(fromHTML rawHTML: String) -> URL? {
+        // Apple may escape slashes inside embedded JSON.
+        let html = rawHTML.replacingOccurrences(of: "\\/", with: "/")
+        let original = firstMatch(
+            in: html,
+            pattern: #"<meta[^>]+property="og:image"[^>]+content="(https://[^"]+mzstatic\.com/[^"]+)""#
+        ) ?? firstMatch(
+            in: html,
+            pattern: #"https://is\d+-ssl\.mzstatic\.com/image/thumb/AMCArtistImages[^"']+\.(?:png|jpg|jpeg|webp)"#
+        ) ?? firstMatch(
+            in: html,
+            pattern: #"https://is\d+-ssl\.mzstatic\.com/image/thumb/[^"']+Artist[^"']+\.(?:png|jpg|jpeg|webp)"#
+        )
+        guard let original else { return nil }
+        // Replace the trailing /WxHcc… suffix with a large square crop. Some
+        // URLs carry no transform; those are returned as-is.
         let rewrite = #"/\d+x\d+[a-zA-Z-]*(?:-\d+)?\.(?:webp|jpg|jpeg|png)$"#
         guard let sizeRegex = try? NSRegularExpression(pattern: rewrite, options: .caseInsensitive) else {
             return URL(string: original)
@@ -107,6 +121,21 @@ enum ArtistImageResolver {
             in: original, range: full, withTemplate: "/1800x1800cc-100.jpg"
         )
         return URL(string: sized)
+    }
+
+    private static func firstMatch(in text: String, pattern: String, group: Int = 1) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) else {
+            return nil
+        }
+        let range = match.range(at: group)
+        guard range.location != NSNotFound, let swiftRange = Range(range, in: text) else {
+            // Patterns without a capture group fall back to the whole match.
+            let whole = match.range
+            guard let wholeRange = Range(whole, in: text) else { return nil }
+            return String(text[wholeRange])
+        }
+        return String(text[swiftRange])
     }
 
     // MARK: - Deezer
@@ -122,13 +151,12 @@ enum ArtistImageResolver {
     private static func deezerImage(name: String) async -> URL? {
         var comps = URLComponents(string: "https://api.deezer.com/search/artist")
         comps?.queryItems = [
-            URLQueryItem(name: "q", value: name),
+            URLQueryItem(name: "q", value: TextMatch.queryArtist(name)),
             URLQueryItem(name: "limit", value: "5")
         ]
         guard let url = comps?.url,
               let decoded: DeezerArtists = try? await decode(url) else { return nil }
-        let target = normalize(name)
-        let best = decoded.data?.first { normalize($0.name ?? "") == target } ?? decoded.data?.first
+        let best = decoded.data?.first { TextMatch.artistsMatch($0.name ?? "", name) }
         return best?.picture_xl.flatMap(URL.init(string:))
     }
 
@@ -147,7 +175,7 @@ enum ArtistImageResolver {
         comps?.queryItems = [
             URLQueryItem(name: "action", value: "query"),
             URLQueryItem(name: "generator", value: "search"),
-            URLQueryItem(name: "gsrsearch", value: "\(name) musician"),
+            URLQueryItem(name: "gsrsearch", value: "\(TextMatch.queryArtist(name)) musician"),
             URLQueryItem(name: "gsrlimit", value: "1"),
             URLQueryItem(name: "prop", value: "pageimages"),
             URLQueryItem(name: "piprop", value: "original"),
@@ -176,11 +204,4 @@ enum ArtistImageResolver {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    private static func normalize(_ value: String) -> String {
-        value
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-            .replacingOccurrences(of: "[^a-z0-9 ]", with: "", options: .regularExpression)
-            .trimmingCharacters(in: .whitespaces)
-            .lowercased()
-    }
 }

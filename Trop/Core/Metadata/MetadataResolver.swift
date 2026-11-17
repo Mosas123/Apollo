@@ -39,7 +39,7 @@ enum MetadataResolver {
     }
 
     private static func cacheKey(title: String, artist: String) -> String {
-        "\(normalize(title))|\(normalize(artist))"
+        "\(TextMatch.normalizeTitle(title))|\(TextMatch.normalizeArtist(artist))"
     }
 
     // MARK: - iTunes Search
@@ -58,7 +58,7 @@ enum MetadataResolver {
     private static func iTunes(title: String, artist: String, album: String?) async -> ResolvedMetadata? {
         var components = URLComponents(string: "https://itunes.apple.com/search")
         components?.queryItems = [
-            URLQueryItem(name: "term", value: "\(artist) \(title)"),
+            URLQueryItem(name: "term", value: "\(TextMatch.queryArtist(artist)) \(title)"),
             URLQueryItem(name: "entity", value: "song"),
             URLQueryItem(name: "limit", value: "5")
         ]
@@ -67,15 +67,9 @@ enum MetadataResolver {
             return nil
         }
 
-        let targetTitle = normalize(title)
-        let targetArtist = normalize(artist)
         let best = response.results.first { result in
             guard let track = result.trackName, let name = result.artistName else { return false }
-            let titleMatches = normalize(track).contains(targetTitle) || targetTitle.contains(normalize(track))
-            let artistMatches = targetArtist.isEmpty
-                || normalize(name).contains(targetArtist)
-                || targetArtist.contains(normalize(name))
-            return titleMatches && artistMatches
+            return TextMatch.titlesMatch(track, title) && TextMatch.artistsMatch(name, artist)
         }
         guard let best else { return nil }
 
@@ -114,7 +108,7 @@ enum MetadataResolver {
     private static func musicBrainz(title: String, artist: String) async -> ResolvedMetadata? {
         var components = URLComponents(string: "https://musicbrainz.org/ws/2/recording/")
         components?.queryItems = [
-            URLQueryItem(name: "query", value: "recording:\"\(title)\" AND artist:\"\(artist)\""),
+            URLQueryItem(name: "query", value: "recording:\"\(title)\" AND artist:\"\(TextMatch.queryArtist(artist))\""),
             URLQueryItem(name: "fmt", value: "json"),
             URLQueryItem(name: "limit", value: "1")
         ]
@@ -160,7 +154,7 @@ enum MetadataResolver {
 
     private static func deezer(title: String, artist: String) async -> ResolvedMetadata? {
         var components = URLComponents(string: "https://api.deezer.com/search")
-        let query = artist.isEmpty ? title : "\(artist) \(title)"
+        let query = artist.isEmpty ? title : "\(TextMatch.queryArtist(artist)) \(title)"
         components?.queryItems = [
             URLQueryItem(name: "q", value: query),
             URLQueryItem(name: "limit", value: "5")
@@ -169,16 +163,10 @@ enum MetadataResolver {
               let response: DeezerResponse = try? await decode(url, headers: [:]) else {
             return nil
         }
-        let targetTitle = normalize(title)
-        let targetArtist = normalize(artist)
         let best = response.data.first { track in
             guard let trackTitle = track.title else { return false }
-            let titleMatches = normalize(trackTitle).contains(targetTitle) || targetTitle.contains(normalize(trackTitle))
-            let name = track.artist?.name ?? ""
-            let artistMatches = targetArtist.isEmpty
-                || normalize(name).contains(targetArtist)
-                || targetArtist.contains(normalize(name))
-            return titleMatches && artistMatches
+            return TextMatch.titlesMatch(trackTitle, title)
+                && TextMatch.artistsMatch(track.artist?.name ?? "", artist)
         }
         guard let best else { return nil }
         return ResolvedMetadata(
@@ -207,12 +195,6 @@ enum MetadataResolver {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    private static func normalize(_ value: String) -> String {
-        value
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-            .replacingOccurrences(of: "  ", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
 }
 
 /// Small in-memory cache (positive and negative) so repeated tracks don't refetch.

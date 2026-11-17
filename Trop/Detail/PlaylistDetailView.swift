@@ -135,8 +135,8 @@ final class PlaylistDetailViewModel {
             ).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !artist.isEmpty, !title.isEmpty,
                   let metadata = await MetadataResolver.enrich(title: title, artist: artist, album: song.album),
-                  Self.metadataIdentity(metadata.title) == Self.metadataIdentity(title),
-                  Self.metadataIdentity(metadata.artist) == Self.metadataIdentity(artist) else { continue }
+                  TextMatch.titlesMatch(metadata.title, title),
+                  TextMatch.artistsMatch(metadata.artist, artist) else { continue }
             guard !Task.isCancelled, generation == loadGeneration else { return }
             // Apply into the local copy; publish once at the end so the
             // @Observable array isn't invalidated per row.
@@ -151,10 +151,6 @@ final class PlaylistDetailViewModel {
         playlist?.songs = songs
     }
 
-    private static func metadataIdentity(_ value: String) -> String {
-        value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-            .components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
-    }
 
     private func loadLocalPlaylist(entity: PlaylistEntity) async {
         do {

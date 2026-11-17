@@ -640,11 +640,9 @@ final class NowPlaying {
                 if let album = resolved.album, !album.isEmpty { self.albumTitle = album }
             } else {
                 // Only rewrite when the catalogue clearly means this same track.
-                guard Self.metadataIdentity(resolved.title) == Self.metadataIdentity(title) else { return }
+                guard TextMatch.titlesMatch(resolved.title, title) else { return }
                 if !artist.isEmpty {
-                    let mine = Self.metadataIdentity(artist)
-                    let theirs = Self.metadataIdentity(resolved.artist)
-                    guard mine.contains(theirs) || theirs.contains(mine) else { return }
+                    guard TextMatch.artistsMatch(resolved.artist, artist) else { return }
                 }
                 if !resolved.title.isEmpty { self.title = resolved.title }
                 if !resolved.artist.isEmpty { self.artist = resolved.artist }
@@ -662,13 +660,6 @@ final class NowPlaying {
         }
     }
 
-    private static func metadataIdentity(_ value: String) -> String {
-        value
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-            .replacingOccurrences(of: "\\s*[\\[(][^\\])]*[\\])]", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "[^a-z0-9 ]", with: "", options: .regularExpression)
-            .trimmingCharacters(in: .whitespaces)
-    }
 
     private func loadArtworkFromLocalFile(_ fileURL: URL, videoId: String) {
         Task {
