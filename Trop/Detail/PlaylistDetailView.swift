@@ -115,8 +115,9 @@ final class PlaylistDetailViewModel {
     /// Correct video fallbacks after the playlist is visible. Sequential lookups
     /// bound catalogue traffic; MetadataResolver caches successes and misses.
     private func enrichVideoMetadata(generation: UUID) async {
-        let candidates = playlist?.songs ?? []
-        for song in candidates {
+        guard var songs = playlist?.songs else { return }
+        var didChange = false
+        for song in songs {
             guard !Task.isCancelled, generation == loadGeneration else { return }
             guard !MusicPlaybackIdentity.isExternal(song.videoId),
                   song.contentKind == nil || song.contentKind == .music,
@@ -137,14 +138,17 @@ final class PlaylistDetailViewModel {
                   Self.metadataIdentity(metadata.title) == Self.metadataIdentity(title),
                   Self.metadataIdentity(metadata.artist) == Self.metadataIdentity(artist) else { continue }
             guard !Task.isCancelled, generation == loadGeneration else { return }
-            // Update every occurrence without changing playback IDs or artist links.
-            guard let indices = playlist?.songs.indices else { continue }
-            for index in indices where playlist?.songs[index].videoId == song.videoId {
-                playlist?.songs[index].title = metadata.title
-                if let url = metadata.artworkURL { playlist?.songs[index].thumbnailUrl = url.absoluteString }
-                if playlist?.songs[index].album == nil { playlist?.songs[index].album = metadata.album }
+            // Apply into the local copy; publish once at the end so the
+            // @Observable array isn't invalidated per row.
+            for index in songs.indices where songs[index].videoId == song.videoId {
+                songs[index].title = metadata.title
+                if let url = metadata.artworkURL { songs[index].thumbnailUrl = url.absoluteString }
+                if songs[index].album == nil { songs[index].album = metadata.album }
+                didChange = true
             }
         }
+        guard didChange, generation == loadGeneration else { return }
+        playlist?.songs = songs
     }
 
     private static func metadataIdentity(_ value: String) -> String {

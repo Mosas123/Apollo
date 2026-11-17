@@ -7,6 +7,7 @@
 
 @preconcurrency import SwiftyTube
 import Foundation
+import GRDB
 
 enum HistorySource: String, CaseIterable, Sendable {
     case local = "Local"
@@ -90,8 +91,19 @@ final class HistoryView {
     }()
 
     func deleteEvents(_ events: [Event]) async {
-        for event in events {
-            _ = try? await db.delete(event)
+        // One DELETE … IN per chunk instead of a round-trip per row.
+        let ids = events.compactMap(\.id)
+        if !ids.isEmpty {
+            try? await db.write { db in
+                for start in stride(from: 0, to: ids.count, by: 500) {
+                    let chunk = Array(ids[start..<min(start + 500, ids.count)])
+                    let placeholders = DatabaseService.placeholders(count: chunk.count)
+                    try db.execute(
+                        sql: "DELETE FROM event WHERE id IN (\(placeholders))",
+                        arguments: StatementArguments(chunk)
+                    )
+                }
+            }
         }
         await loadLocal()
     }
