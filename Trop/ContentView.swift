@@ -18,13 +18,13 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            // Full-bleed system background on every edge.
-            Color(.systemBackground).ignoresSafeArea()
-
+            // Full-bleed app background behind everything (covers the status
+            // bar / Dynamic Island and the home indicator area).
             backgroundLayer
 
             tabContent
                 .scaleEffect(1 - 0.08 * backgroundProgress, anchor: .center)
+                .clipShape(RoundedRectangle(cornerRadius: 38 * backgroundProgress, style: .continuous))
                 .overlay {
                     if backgroundProgress > 0 {
                         Color.black
