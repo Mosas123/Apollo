@@ -425,6 +425,8 @@ struct PlaylistDetailView: View {
     @State private var playlistEntity: PlaylistEntity?
     @State private var showAddSongs = false
     @State private var showMoreSheet = false
+    @State private var artworkSeed: Color?
+    @Environment(\.colorScheme) private var colorScheme
     @State private var pendingRoute: DetailRoute?
 
     @Environment(\.dismiss) private var dismiss
@@ -453,9 +455,11 @@ struct PlaylistDetailView: View {
                 emptyIcon: "music.note.list"
             ) { playlist in
                 playlistContent(for: playlist)
+                    .environment(\.colorScheme, artworkSeed == nil ? colorScheme : .dark)
             }
         }
         .scrollDisabled(viewModel.isLoading || viewModel.error != nil || viewModel.playlist == nil)
+        .background(DetailArtworkBackground(seed: artworkSeed, isDark: colorScheme == .dark))
         .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
         .navigationTitle(viewModel.playlist?.title ?? "")
         .navigationBarTitleDisplayMode(.inline)
@@ -515,13 +519,13 @@ struct PlaylistDetailView: View {
         VStack(spacing: 12) {
             // Playlist artwork
             if let thumbnailUrl = playlist.thumbnailUrl {
-                HeroArtworkView(url: thumbnailUrl)
+                HeroArtworkView(url: thumbnailUrl, onImageLoaded: { artworkSeed = $0.extractDetailBackdropColor() })
             } else {
                 let songArtwork = playlist.songs.compactMap(\.thumbnailUrl)
                 if songArtwork.count >= 4 {
-                    ArtworkMosaicView(urls: songArtwork)
+                    ArtworkMosaicView(urls: songArtwork, onImageLoaded: { artworkSeed = $0.extractDetailBackdropColor() })
                 } else if let firstArtwork = songArtwork.first {
-                    HeroArtworkView(url: firstArtwork)
+                    HeroArtworkView(url: firstArtwork, onImageLoaded: { artworkSeed = $0.extractDetailBackdropColor() })
                 } else {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))

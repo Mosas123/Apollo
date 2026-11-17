@@ -338,7 +338,7 @@ extension DownloadManager {
                 try? fileManager.removeItem(at: fileURL)
             }
 
-            async let artworkData = prefetchArtwork(from: song.thumbnailUrl)
+            async let artworkData = prefetchArtwork(for: song)
 
             setProgress(0.05, for: videoId)
             let resolveStart = CFAbsoluteTimeGetCurrent()
@@ -599,8 +599,29 @@ extension DownloadManager {
         progressBox(for: videoId).fraction = clamped
     }
 
+    private func prefetchArtwork(for song: SongItem) async -> Data? {
+        if !MusicPlaybackIdentity.isExternal(song.videoId),
+           song.contentKind == nil || song.contentKind == .music {
+            let artist = cleanArtistDisplay(song.artists.first?.name ?? "")
+            if !artist.isEmpty,
+               let metadata = await MetadataResolver.enrich(title: song.title, artist: artist, album: song.album) {
+                func identity(_ text: String) -> String {
+                    text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+                        .components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
+                }
+                if identity(metadata.title) == identity(song.title),
+                   identity(metadata.artist) == identity(artist),
+                   let artwork = await prefetchArtwork(from: metadata.artworkURL?.absoluteString) {
+                    return artwork
+                }
+            }
+        }
+        return await prefetchArtwork(from: song.thumbnailUrl)
+    }
+
     private func prefetchArtwork(from thumbnailUrl: String?) async -> Data? {
-        guard let thumbUrl = thumbnailUrl, let url = URL(string: thumbUrl) else { return nil }
+        guard let thumbUrl = ArtworkURLs.highRes(thumbnailUrl),
+              let url = URL(string: thumbUrl) else { return nil }
         guard let image = try? await ArtworkLoader.image(for: url) else { return nil }
         return image.jpegData(compressionQuality: 0.9)
     }

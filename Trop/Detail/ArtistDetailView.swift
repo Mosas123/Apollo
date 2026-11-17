@@ -229,7 +229,7 @@ extension ArtistDetailViewModel {
     /// Warms Nuke's cache before the artist screen appears, avoiding a second
     /// visible loading state for the immersive header artwork.
     private static func preloadHeroArtwork(for thumbnailUrl: String?) {
-        guard let artworkURL = ArtworkURLs.sized(thumbnailUrl, width: 1200, height: 1200),
+        guard let artworkURL = ArtworkURLs.highRes(thumbnailUrl),
               let url = URL(string: artworkURL) else {
             return
         }
@@ -305,6 +305,7 @@ struct ArtistDetailView: View {
     @State private var infoGenre: String?
     @State private var infoBio: ArtistBioResolver.Bio?
     @State private var backdropColors: [Color] = []
+    @Environment(\.colorScheme) private var colorScheme
     @State private var linkResetTask: Task<Void, Never>?
 
     init(browseId: String) {
@@ -324,6 +325,8 @@ struct ArtistDetailView: View {
                     emptyIcon: "music.mic"
                 ) { artist in
                     artistContent(for: artist)
+                        .environment(\.colorScheme, .dark)
+                        .foregroundStyle(.white)
                 }
             }
             .scrollDisabled(viewModel.isLoading || viewModel.error != nil || viewModel.artist == nil)
@@ -523,7 +526,7 @@ struct ArtistDetailView: View {
                     Group {
                         if artist.heroImageResolved {
                             AsyncImageView(
-                                url: ArtworkURLs.sized(artist.heroImageURL ?? artist.thumbnailUrl, width: 1200, height: 1200),
+                                url: ArtworkURLs.highRes(artist.heroImageURL ?? artist.thumbnailUrl),
                                 contentMode: .fill,
                                 onImageLoaded: { image in
                                     guard backdropColors.isEmpty else { return }
@@ -549,7 +552,7 @@ struct ArtistDetailView: View {
                 // Fades the photo into the artist's dominant color so the page reads
                 // as one surface (Apple Music artist page).
                 LinearGradient(
-                    colors: [.clear, backdropColor.opacity(0.35), backdropColor.opacity(0.45)],
+                    colors: [.clear, artworkPalette.top.opacity(0.35), artworkPalette.top],
                     startPoint: .center,
                     endPoint: .bottom
                 )
@@ -614,9 +617,11 @@ struct ArtistDetailView: View {
         }
     }
 
-    private var backdropColor: Color {
-        backdropColors.first ?? Color(.systemBackground)
+    private var artworkPalette: DetailArtworkPalette {
+        DetailArtworkPalette(seed: backdropColors.first ?? .gray, isDark: colorScheme == .dark, surface: .artist)
     }
+
+    private var backdropColor: Color { artworkPalette.top }
 
     private var artistImageFade: some View {
         LinearGradient(
@@ -633,12 +638,11 @@ struct ArtistDetailView: View {
     private var artistBackdrop: some View {
         LinearGradient(
             stops: [
-                .init(color: backdropColor.opacity(0.45), location: 0),
-                .init(color: backdropColor.opacity(0.45), location: 0.55),
-                .init(color: Color(.systemBackground), location: 1)
+                .init(color: artworkPalette.top, location: 0),
+                .init(color: artworkPalette.bottom, location: 0.75),
+                .init(color: artworkPalette.bottom, location: 1)
             ],
-            startPoint: .top,
-            endPoint: .bottom
+            startPoint: .top, endPoint: .bottom
         )
         .ignoresSafeArea(.container)
     }
@@ -652,7 +656,7 @@ struct ArtistDetailView: View {
                         Group {
                             if artist.heroImageResolved {
                                 AsyncImageView(
-                                    url: ArtworkURLs.sized(artist.heroImageURL ?? artist.thumbnailUrl, width: 1200, height: 1200),
+                                    url: ArtworkURLs.highRes(artist.heroImageURL ?? artist.thumbnailUrl),
                                     contentMode: .fill
                                 )
                             } else {

@@ -56,7 +56,18 @@ enum ArtworkURLs {
 
     /// Convenience: artwork at the player rung.
     static func highRes(_ url: String?) -> String? {
-        SwiftyTube.ArtworkURLs.highRes(url)
+        guard let upgraded = SwiftyTube.ArtworkURLs.highRes(url) else { return nil }
+        guard let parsed = URL(string: upgraded),
+              let host = parsed.host,
+              host == "mzstatic.com" || host.hasSuffix(".mzstatic.com") else { return upgraded }
+        // iTunes artwork encodes dimensions in the last path component,
+        // unlike YouTube Music's w<N>-h<N> URLs. Preserve crop/format suffixes.
+        var components = URLComponents(url: parsed, resolvingAgainstBaseURL: false)
+        components?.path = parsed.path.replacingOccurrences(
+            of: #"(?<=/)\d+x\d+(?=[^/]*\.[^/]+$)"#,
+            with: "1200x1200", options: .regularExpression
+        )
+        return components?.url?.absoluteString ?? upgraded
     }
 
     /// 1280px variant of a ytimg thumbnail URL.

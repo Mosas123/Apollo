@@ -11,6 +11,7 @@ import UIKit
 
 struct ContentView: View {
     @Environment(SettingsStore.self) private var settings
+    @Environment(\.colorScheme) private var colorScheme
     @State private var nowPlaying = NowPlaying.shared
     @State private var selectedTab = SettingsStore.shared.defaultTab
     @State private var sheet = PlayerSheetState.shared
@@ -26,7 +27,7 @@ struct ContentView: View {
             tabContent
 
             if sheet.isExpanded {
-                FullPlayerView(artworkNamespace: playerArtworkNamespace, onCollapse: collapsePlayer)
+                FullPlayerView(artworkNamespace: playerArtworkNamespace, usesDarkArtwork: colorScheme == .dark, onCollapse: collapsePlayer)
                     .ignoresSafeArea(.container, edges: .all)
                     .transition(.move(edge: .bottom))
             }

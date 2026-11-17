@@ -9,6 +9,7 @@ import SwiftUI
 
 struct FullPlayerView: View {
     let artworkNamespace: Namespace.ID
+    let usesDarkArtwork: Bool
     let onCollapse: () -> Void
 
     @Environment(SettingsStore.self) private var settings
@@ -34,7 +35,9 @@ struct FullPlayerView: View {
     @State private var showGoToMenu = false
 
     private var playerBackgroundColors: [Color] {
-        canvasDominantColors ?? np.dominantColors
+        let seed = (canvasDominantColors ?? np.dominantColors).first ?? .gray
+        let palette = PlayerArtworkPalette(seed: seed, isDark: usesDarkArtwork)
+        return [palette.top, palette.bottom]
     }
 
     /// 0 while full-screen, 1 once the card has been pulled far enough to show
@@ -81,26 +84,6 @@ struct FullPlayerView: View {
                     )
                     .ignoresSafeArea(.container)
                     .animation(.easeInOut(duration: 0.8), value: playerBackgroundColors)
-                    .overlay {
-                        PlayerBackgroundShader(image: np.thumbnailUIImage, isPlaying: np.isPlaying)
-                            .opacity(0.45)
-                    }
-                    .overlay(alignment: .top) {
-                        Circle()
-                            .fill(playerBackgroundColors.first ?? .blue)
-                            .frame(width: 400, height: 400)
-                            .blur(radius: 120)
-                            .opacity(0.2)
-                            .offset(y: -150)
-                            .allowsHitTesting(false)
-                    }
-                    .overlay {
-                        // Keep white text legible even over light/desaturated art.
-                        Color.black
-                            .opacity(0.30)
-                            .ignoresSafeArea(.container)
-                            .allowsHitTesting(false)
-                    }
                 }
 
                 VStack(spacing: 0) {
@@ -125,9 +108,11 @@ struct FullPlayerView: View {
                             progressSlider: { progressSlider(horizontalPadding: horizontalPadding) }
                         )
                         .padding(.bottom, bottomInset)
+                        .transition(.opacity)
                     } else if np.isVideoMode && np.hasVideo {
                         musicVideoContent
                             .padding(.bottom, bottomInset)
+                        .transition(.opacity)
                     } else if showQueue {
                         QueueView(
                             showQueue: $showQueue,
@@ -139,6 +124,7 @@ struct FullPlayerView: View {
                             progressSlider: { progressSlider(horizontalPadding: horizontalPadding) }
                         )
                         .padding(.bottom, bottomInset)
+                        .transition(.opacity)
                     } else {
                         // The cover occupies the space left by the controls.
                         // Sharing this VStack prevents artwork/title collisions.
@@ -153,6 +139,7 @@ struct FullPlayerView: View {
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
                         .padding(.bottom, isCompact ? 16 : 24)
+                        .transition(.opacity)
 
                         titleAndActionsRow
                             .padding(.horizontal, horizontalPadding)

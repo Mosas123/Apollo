@@ -22,10 +22,6 @@ struct AlbumDetailInfo {
     var relatedAlbums: [AlbumItem] = []
     var videos: [SongItem] = []
     var featuredPlaylists: [PlaylistItem] = []
-    /// Canonical, higher-resolution cover (Apple/Deezer), when resolved.
-    var enrichedArtworkURL: String? = nil
-    /// False while we're still resolving the canonical cover (shows placeholder).
-    var artworkResolved: Bool = false
 }
 
 /// Parsed detail data for an artist page.

@@ -40,14 +40,11 @@ final class AlbumDetailViewModel {
             Log.albumDetailViewModel.debug("Parsed album: \(parsed.title), \(parsed.songs.count) songs")
             isLoading = false
             await refreshSavedState()
-
-            // Prefer a canonical, higher-resolution cover (Apple → Deezer → CAA).
-            if let artist = parsed.artists.first?.name,
-               let metadata = await MetadataResolver.enrich(title: parsed.title, artist: artist),
-               let artwork = metadata.artworkURL {
-                album?.enrichedArtworkURL = artwork.absoluteString
+            if let name = parsed.artists.first?.name,
+               let artwork = await MetadataResolver.albumArtwork(title: parsed.title, artist: name),
+               !Task.isCancelled, album?.browseId == parsed.browseId {
+                album?.thumbnailUrl = artwork.absoluteString
             }
-            album?.artworkResolved = true
         } catch {
             Log.albumDetailViewModel.error("Failed: \(error)")
             self.error = error
@@ -319,12 +316,13 @@ struct AlbumDetailView: View {
     @State private var descriptionExpanded = false
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
 
     init(browseId: String) {
         self.browseId = browseId
         _viewModel = State(initialValue: AlbumDetailViewModel(browseId: browseId))
     }
+
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -337,6 +335,8 @@ struct AlbumDetailView: View {
                     emptyIcon: "music.note"
                 ) { album in
                     albumContent(for: album)
+                        .environment(\.colorScheme, .dark)
+                        .foregroundStyle(.white)
                 }
             }
             .scrollDisabled(viewModel.isLoading || viewModel.error != nil || viewModel.album == nil)
@@ -412,38 +412,23 @@ struct AlbumDetailView: View {
         .padding(.vertical, 6)
     }
 
-    /// Keep the artwork tint behind the album content, including the song list.
+    private var artworkPalette: DetailArtworkPalette {
+        DetailArtworkPalette(seed: backdropColors.first ?? .gray, isDark: colorScheme == .dark, surface: .album)
+    }
+
     private var albumBackdrop: some View {
-        ZStack {
-            Color(.systemBackground)
-            if let primary = backdropColors.first {
-                LinearGradient(
-                    colors: [
-                        primary.opacity(colorScheme == .dark ? 0.72 : 0.16),
-                        primary.opacity(colorScheme == .dark ? 0.66 : 0.14),
-                        primary.opacity(colorScheme == .dark ? 0.58 : 0.12)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-        }
+        LinearGradient(
+            stops: [
+                .init(color: artworkPalette.top, location: 0),
+                .init(color: artworkPalette.bottom, location: 0.75),
+                .init(color: artworkPalette.bottom, location: 1)
+            ],
+            startPoint: .top, endPoint: .bottom
+        )
         .ignoresSafeArea(.container)
     }
 
-    /// A darker version of the artwork tint keeps the play label legible on white.
-    private var albumPlayColor: Color {
-        guard let color = backdropColors.first else { return .black }
-        var hue: CGFloat = 0
-        var saturation: CGFloat = 0
-        var brightness: CGFloat = 0
-        var alpha: CGFloat = 0
-        guard UIColor(color).getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) else {
-            return .black
-        }
-        return Color(uiColor: UIColor(hue: hue, saturation: saturation, brightness: min(brightness, 0.32), alpha: 1))
-    }
-
+    private var albumPlayColor: Color { artworkPalette.playInk }
 
     @ViewBuilder
     private func albumContent(for album: AlbumDetailInfo) -> some View {
@@ -572,23 +557,12 @@ struct AlbumDetailView: View {
     private func header(for album: AlbumDetailInfo) -> some View {
         VStack(spacing: 12) {
             // Album artwork
-            Group {
-                if album.artworkResolved {
-                    HeroArtworkView(
-                        url: album.enrichedArtworkURL ?? album.thumbnailUrl,
-                        onImageLoaded: { image in
-                            guard backdropColors.isEmpty else { return }
-                            withAnimation(.easeInOut(duration: 0.4)) {
-                                backdropColors = [image.extractAlbumBackdropColor()]
-                            }
-                        }
-                    )
-                } else {
-                    AsyncImageView(url: album.thumbnailUrl)
-                        .blur(radius: 24)
-                        .opacity(0.5)
-                        .aspectRatio(1, contentMode: .fit)
-                        .padding(.horizontal, 40)
+            HeroArtworkView(
+                url: album.thumbnailUrl,
+                onImageLoaded: { image in
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        backdropColors = [image.extractAlbumBackdropColor()]
+                    }
                 }
             }
 
