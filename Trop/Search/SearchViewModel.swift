@@ -70,6 +70,7 @@ final class SearchViewModel {
     private(set) var audiusTracks: [MusicCatalogTrack] = []
     private(set) var qobuzTracks: [MusicCatalogTrack] = []
     private(set) var pencariTracks: [MusicCatalogTrack] = []
+    private(set) var jiosaavnTracks: [MusicCatalogTrack] = []
 
     // MARK: - Local matches (populated per submission, for Library filter)
 
@@ -149,6 +150,7 @@ final class SearchViewModel {
         if !audiusTracks.isEmpty { filters.append("Audius") }
         if !qobuzTracks.isEmpty { filters.append("Qobuz") }
         if !pencariTracks.isEmpty { filters.append("Lossless") }
+        if !jiosaavnTracks.isEmpty { filters.append("JioSaavn") }
         return filters
     }
 
@@ -173,6 +175,10 @@ final class SearchViewModel {
 
     var showsPencariResults: Bool {
         !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "Lossless")
+    }
+
+    var showsJioSaavnResults: Bool {
+        !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "JioSaavn")
     }
 
     var filteredResults: [SearchSection] {
@@ -313,6 +319,7 @@ final class SearchViewModel {
         audiusTracks = []
         qobuzTracks = []
         pencariTracks = []
+        jiosaavnTracks = []
         localSongs = []
         localArtists = []
         localAlbums = []
@@ -366,11 +373,13 @@ final class SearchViewModel {
         async let audius = try? AudiusClient().searchTracks(query: query, limit: 25)
         async let qobuz = QobuzCatalogService.shared.searchIfConfigured(query: query, limit: 25)
         async let pencari = fetchPencariTracks(query: query)
-        let (remoteAudius, remoteQobuz, remotePencari) = await (audius, qobuz, pencari)
+        async let jiosaavn = try? JioSaavnClient().search(query: query, limit: 25)
+        let (remoteAudius, remoteQobuz, remotePencari, remoteJioSaavn) = await (audius, qobuz, pencari, jiosaavn)
         guard !Task.isCancelled, query == submittedQuery else { return }
         audiusTracks = remoteAudius ?? []
         qobuzTracks = remoteQobuz
         pencariTracks = remotePencari
+        jiosaavnTracks = remoteJioSaavn ?? []
         updateResultPhase()
     }
 
@@ -381,7 +390,7 @@ final class SearchViewModel {
     }
 
     private func updateResultPhase() {
-        if results.isEmpty && heroArtist == nil && audiusTracks.isEmpty && qobuzTracks.isEmpty && pencariTracks.isEmpty {
+        if results.isEmpty && heroArtist == nil && audiusTracks.isEmpty && qobuzTracks.isEmpty && pencariTracks.isEmpty && jiosaavnTracks.isEmpty {
             phase = error == nil ? .noResults : .failed
         } else {
             phase = .results
@@ -471,6 +480,7 @@ final class SearchViewModel {
         audiusTracks = []
         qobuzTracks = []
         pencariTracks = []
+        jiosaavnTracks = []
         localSongs = []
         localArtists = []
         localAlbums = []

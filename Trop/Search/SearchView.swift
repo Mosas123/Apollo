@@ -304,6 +304,13 @@ struct SearchView: View {
                         externalTrackRow(track, from: viewModel.pencariTracks)
                     }
                 }
+
+                if viewModel.showsJioSaavnResults && !viewModel.jiosaavnTracks.isEmpty {
+                    sectionHeader("JioSaavn")
+                    ForEach(viewModel.jiosaavnTracks, id: \.id) { track in
+                        externalTrackRow(track, from: viewModel.jiosaavnTracks)
+                    }
+                }
             }
             .padding(.bottom, 16)
         }
