@@ -104,9 +104,8 @@ struct PlaylistMoreSheet: View {
     }
 
     private func downloadAll() {
-        for song in playlist.songs {
-            Task { await DownloadManager.shared.download(song: song) }
-        }
+        let songs = playlist.songs
+        Task { await DownloadManager.shared.downloadAll(songs) }
     }
 
     private func share() {

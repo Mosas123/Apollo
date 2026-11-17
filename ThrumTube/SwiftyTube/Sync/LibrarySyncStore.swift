@@ -63,6 +63,12 @@ public protocol LibrarySyncStore: Sendable {
     func insertSongIgnoringConflicts(_ song: SyncSong) async throws
     func fetchOrphanSongIds() async throws -> [String]
 
+    // MARK: - Batched playlist hydration
+
+    func fetchSongs(ids: [String]) async throws -> [String: SyncSong]
+    func saveSongs(_ songs: [SyncSong]) async throws
+    func insertMapsIgnoringConflicts(_ entries: [SyncPlaylistEntry]) async throws
+
     // MARK: - Artists / albums / podcasts
 
     func fetchArtist(id: String) async throws -> SyncArtist?
@@ -71,4 +77,25 @@ public protocol LibrarySyncStore: Sendable {
     func saveAlbum(_ album: SyncAlbum) async throws
     func fetchPodcast(id: String) async throws -> SyncPodcast?
     func savePodcast(_ podcast: SyncPodcast) async throws
+}
+
+public extension LibrarySyncStore {
+    /// Default batching = sequential per-item calls. Stores with a real batch
+    /// implementation (single DB transaction) override these.
+    func fetchSongs(ids: [String]) async throws -> [String: SyncSong] {
+        var result: [String: SyncSong] = [:]
+        result.reserveCapacity(ids.count)
+        for id in ids {
+            if let song = try await fetchSong(id: id) { result[id] = song }
+        }
+        return result
+    }
+
+    func saveSongs(_ songs: [SyncSong]) async throws {
+        for song in songs { try await saveSong(song) }
+    }
+
+    func insertMapsIgnoringConflicts(_ entries: [SyncPlaylistEntry]) async throws {
+        for entry in entries { try await insertMapIgnoringConflicts(entry) }
+    }
 }

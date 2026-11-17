@@ -261,4 +261,25 @@ enum DatabaseMigrations {
             }
         }
     }
+
+    static let v9: @Sendable (Database) throws -> Void = logged("v9") { db in
+        // Secondary indexes for hot reads: liked/library filters, play-time and
+        // date ordering, event recency lookups, playlist membership, and
+        // bookmark ordering. Full-table scans dominated these otherwise.
+        let statements = [
+            "CREATE INDEX IF NOT EXISTS idx_song_liked ON song(liked)",
+            "CREATE INDEX IF NOT EXISTS idx_song_total_play_time ON song(total_play_time)",
+            "CREATE INDEX IF NOT EXISTS idx_song_create_date ON song(create_date)",
+            "CREATE INDEX IF NOT EXISTS idx_event_song_id ON event(song_id)",
+            "CREATE INDEX IF NOT EXISTS idx_event_timestamp ON event(timestamp)",
+            "CREATE INDEX IF NOT EXISTS idx_playlist_song_map_playlist ON playlist_song_map(playlist_id)",
+            "CREATE INDEX IF NOT EXISTS idx_playlist_song_map_song ON playlist_song_map(song_id)",
+            "CREATE INDEX IF NOT EXISTS idx_artist_bookmarked_at ON artist(bookmarked_at)",
+            "CREATE INDEX IF NOT EXISTS idx_album_bookmarked_at ON album(bookmarked_at)",
+            "CREATE INDEX IF NOT EXISTS idx_playlist_bookmarked_at ON playlist(bookmarked_at)"
+        ]
+        for sql in statements {
+            try db.execute(sql: sql)
+        }
+    }
 }

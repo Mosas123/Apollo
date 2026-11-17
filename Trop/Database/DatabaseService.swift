@@ -74,6 +74,7 @@ actor DatabaseService {
         migrator.registerMigration("v6", migrate: DatabaseMigrations.v6)
         migrator.registerMigration("v7", migrate: DatabaseMigrations.v7)
         migrator.registerMigration("v8", migrate: DatabaseMigrations.v8)
+        migrator.registerMigration("v9", migrate: DatabaseMigrations.v9)
     }
 }
 
@@ -238,15 +239,17 @@ extension DatabaseService {
     func fetchRecentSongs(days: Int = 30, limit: Int = 20) async throws -> [SongEntity] {
         try await dbPool.read { db in
             let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
-            let recentIds = try Event
-                .filter(Column("timestamp") > cutoff)
-                .filter(sql: "song_id NOT LIKE 'radio:%'")
-                .select(Column("song_id"))
-                .distinct()
-                .order(Column("timestamp").desc)
-                .limit(limit)
-                .asRequest(of: String.self)
-                .fetchAll(db)
+            // `SELECT DISTINCT song_id … ORDER BY timestamp` is rejected by
+            // SQLite (ORDER BY term must appear in the DISTINCT result set).
+            // Group by song_id and order by the aggregated timestamp instead.
+            let recentIds = try String.fetchAll(db, sql: """
+                SELECT song_id FROM event
+                WHERE timestamp > ?
+                  AND song_id NOT LIKE 'radio:%'
+                GROUP BY song_id
+                ORDER BY MAX(timestamp) DESC
+                LIMIT ?
+                """, arguments: [cutoff, limit])
             guard !recentIds.isEmpty else { return [] }
             let byId = try Self.fetchSongMapByIds(recentIds, db: db)
             // Preserve recency order from recentIds (distinct order by timestamp desc)

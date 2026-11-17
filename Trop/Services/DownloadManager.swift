@@ -254,6 +254,28 @@ final class DownloadManager: ObservableObject {
 
 extension DownloadManager {
 
+    /// Downloads a whole list with bounded concurrency (default 3) instead of
+    /// spawning one unbounded task per track.
+    func downloadAll(_ songs: [SongItem], maxConcurrent: Int = 3) async {
+        guard !songs.isEmpty else { return }
+        let limit = max(1, maxConcurrent)
+        let manager = DownloadManager.shared
+        await withTaskGroup(of: Void.self) { group in
+            var next = 0
+            while next < songs.count {
+                let batch = min(limit, songs.count - next)
+                for _ in 0..<batch {
+                    let song = songs[next]
+                    next += 1
+                    group.addTask {
+                        await manager.download(song: song)
+                    }
+                }
+                await group.next()
+            }
+        }
+    }
+
     func download(song: SongItem) async {
         let videoId = song.videoId
         if case .downloading = downloads[videoId] {

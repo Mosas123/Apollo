@@ -17,6 +17,10 @@ final class FileLog: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "com.686udjie.Trop.FileLog")
     private let maxBytes = 1_000_000
+    // Persistent handle + running size avoids a stat + open/close per line.
+    // Only touched from `queue`.
+    private var handle: FileHandle?
+    private var currentSize = 0
 
     var fileURL: URL? {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
@@ -31,23 +35,40 @@ final class FileLog: @unchecked Sendable {
             guard let self, let url = self.fileURL else { return }
             let stamp = Self.formatter.string(from: Date())
             let line = "\(stamp) [\(level)][\(category)] \(message)\n"
+            guard let data = line.data(using: .utf8) else { return }
 
-            if let data = line.data(using: .utf8) {
-                if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
-                   let size = attrs[.size] as? Int, size > self.maxBytes {
-                    // Rotate: keep it simple — start a fresh file.
-                    try? data.write(to: url, options: .atomic)
-                } else {
-                    if let handle = try? FileHandle(forWritingTo: url) {
-                        defer { try? handle.close() }
-                        _ = try? handle.seekToEnd()
-                        try? handle.write(contentsOf: data)
-                    } else {
-                        try? data.write(to: url, options: .atomic)
-                    }
-                }
+            if self.handle == nil {
+                self.openHandle(url)
+            }
+
+            if self.currentSize > self.maxBytes {
+                // Rotate: keep it simple — start a fresh file.
+                try? self.handle?.close()
+                self.handle = nil
+                try? data.write(to: url, options: .atomic)
+                self.currentSize = data.count
+                self.openHandle(url)
+                return
+            }
+
+            if let handle = self.handle {
+                _ = try? handle.seekToEnd()
+                try? handle.write(contentsOf: data)
+                self.currentSize += data.count
+            } else {
+                try? data.write(to: url, options: .atomic)
+                self.currentSize = data.count
             }
         }
+    }
+
+    private func openHandle(_ url: URL) {
+        if !FileManager.default.fileExists(atPath: url.path) {
+            FileManager.default.createFile(atPath: url.path, contents: nil)
+        }
+        guard let file = try? FileHandle(forWritingTo: url) else { return }
+        handle = file
+        currentSize = (try? file.seekToEnd()).map { Int($0) } ?? 0
     }
 
     private static let formatter: DateFormatter = {

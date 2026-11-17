@@ -228,8 +228,7 @@ struct HomeScreenView: View {
                                         }
                                 }
 
-                                ForEach(visibleItems.indices, id: \.self) { i in
-                                    let item = visibleItems[i]
+                                ForEach(visibleItems, id: \.id) { item in
                                     if case .song(let s) = item {
                                         quickPickCell(s, queue: combinedQueue)
                                             .frame(width: columnWidth)
@@ -321,8 +320,7 @@ struct HomeScreenView: View {
         let queue = section.items.compactMap { if case .song(let s) = $0 { return s } else { return nil } }
         return HorizontalSection(title: section.displayTitle, vSpacing: 8, contentVerticalPadding: 0) {
             HStack(spacing: 12) {
-                ForEach(section.items.indices, id: \.self) { i in
-                    let item = section.items[i]
+                ForEach(section.items, id: \.id) { item in
                     if case .song(let s) = item, !queue.isEmpty {
                         YouTubeGridItemView(item: item, onTap: { handleSongTap(s, in: queue) })
                     } else {

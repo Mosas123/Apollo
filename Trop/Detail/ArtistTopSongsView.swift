@@ -12,8 +12,9 @@ struct ArtistTopSongsView: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                ForEach(Array(songs.enumerated()), id: \.offset) { index, song in
+                ForEach(Array(songs.enumerated()), id: \.element.videoId) { index, song in
                     row(song)
+                        .id(song.videoId)
                     if index < songs.count - 1 {
                         Divider()
                             .padding(.leading, 72)

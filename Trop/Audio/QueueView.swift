@@ -66,8 +66,9 @@ struct QueueView<ProgressSlider: View>: View {
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                     } else {
-                        ForEach(Array(np.queueSongs.enumerated()), id: \.offset) { index, song in
+                        ForEach(Array(np.queueSongs.enumerated()), id: \.element.videoId) { index, song in
                             queueRow(song: song, index: index)
+                                .id(song.videoId)
                         }
                         .onMove(perform: np.moveQueueSongs)
                     }
@@ -124,8 +125,8 @@ struct QueueView<ProgressSlider: View>: View {
     private var queueHeader: some View {
         HStack(spacing: 12) {
             if let uiImage = np.thumbnailUIImage {
-                let cropped = uiImage.centerCroppedSquare()
-                Image(uiImage: cropped)
+                // Already center-cropped by NowPlaying.
+                Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFill()
                     .frame(width: 64, height: 64)

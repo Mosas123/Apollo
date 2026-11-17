@@ -61,10 +61,13 @@ public struct RetryPolicy: Sendable {
             do {
                 return try await operation()
             } catch {
+                // Never swallow cancellation: retrying a cancelled task keeps
+                // hitting the network long after the caller gave up.
+                if error is CancellationError { throw error }
                 lastError = error
                 guard attempt < maxAttempts - 1, isRetryable(error) else { break }
                 onRetry?(attempt, error)
-                try? await Task.sleep(for: delay(for: attempt))
+                try await Task.sleep(for: delay(for: attempt))
             }
         }
         throw lastError ?? RetryError.exhausted

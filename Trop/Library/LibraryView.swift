@@ -20,6 +20,7 @@ struct LibraryView: View {
     @State private var headerHeight: CGFloat = 60
     @State private var selectedFilter: LibraryFilter?
     @State private var showCreateDialog = false
+    @State private var hasSynced = false
     @State private var playlistToDelete: PlaylistEntity?
     @State private var playlistSongCounts: [String: Int] = [:]
 
@@ -92,10 +93,12 @@ struct LibraryView: View {
                 await loadContent()
                 await accountState.restoreSession()
                 await accountState.fetchAccountInfo()
-                Task {
-                    await SyncBridge.forceFullSync()
-                    await loadContent()
-                }
+                // Full sync once per screen lifetime; re-running it on every
+                // appearance doubled the DB work each time the tab opened.
+                guard !hasSynced else { return }
+                hasSynced = true
+                await SyncBridge.forceFullSync()
+                await loadContent()
             }
             .task(id: isLoading) {
                 guard !isLoading else { return }

@@ -813,12 +813,13 @@ struct ArtistDetailView: View {
             }
             .buttonStyle(.plain)
 
-            ForEach(Array(songs.enumerated()), id: \.offset) { index, song in
+            ForEach(Array(songs.enumerated()), id: \.element.videoId) { index, song in
                 SongRowView(
                     song: song,
                     onTap: { playSong(song) },
                     onNavigate: { AppRouter.shared.open($0) }
                 )
+                .id(song.videoId)
 
                 if index < songs.count - 1 {
                     Divider()
@@ -831,8 +832,7 @@ struct ArtistDetailView: View {
     @ViewBuilder
     private func albumsSection(albums: [AlbumItem]) -> some View {
         carouselSection(title: "Albums") {
-            ForEach(albums.indices, id: \.self) { i in
-                let album = albums[i]
+            ForEach(albums, id: \.browseId) { album in
                 NavigationLink(value: DetailRoute.album(browseId: album.browseId)) {
                     MediaGridCell(
                         thumbnailUrl: album.thumbnailUrl,
@@ -850,8 +850,7 @@ struct ArtistDetailView: View {
     @ViewBuilder
     private func singlesSection(singles: [AlbumItem]) -> some View {
         carouselSection(title: "Singles & EPs") {
-            ForEach(singles.indices, id: \.self) { i in
-                let single = singles[i]
+            ForEach(singles, id: \.browseId) { single in
                 NavigationLink(value: DetailRoute.album(browseId: single.browseId)) {
                     MediaGridCell(
                         thumbnailUrl: single.thumbnailUrl,
@@ -869,8 +868,7 @@ struct ArtistDetailView: View {
     @ViewBuilder
     private func videosSection(videos: [SongItem]) -> some View {
         carouselSection(title: "Videos") {
-            ForEach(videos.indices, id: \.self) { i in
-                let video = videos[i]
+            ForEach(videos, id: \.videoId) { video in
                 Button(action: { playVideo(video) }, label: {
                     VStack(alignment: .leading, spacing: 6) {
                         AsyncImageView(url: video.thumbnailUrl)
@@ -897,8 +895,7 @@ struct ArtistDetailView: View {
     @ViewBuilder
     private func playlistsSection(playlists: [PlaylistItem]) -> some View {
         carouselSection(title: "Playlists") {
-            ForEach(playlists.indices, id: \.self) { i in
-                let playlist = playlists[i]
+            ForEach(playlists, id: \.id) { playlist in
                 NavigationLink(value: DetailRoute.playlist(playlistId: playlist.id)) {
                     MediaGridCell(
                         thumbnailUrl: playlist.thumbnailUrl,
@@ -915,8 +912,7 @@ struct ArtistDetailView: View {
     @ViewBuilder
     private func relatedArtistsSection(artists: [ArtistItem]) -> some View {
         carouselSection(title: "Fans Also Like", spacing: 16) {
-            ForEach(artists.indices, id: \.self) { i in
-                let related = artists[i]
+            ForEach(artists, id: \.browseId) { related in
                 NavigationLink(value: DetailRoute.artist(browseId: related.browseId)) {
                     VStack(spacing: 8) {
                         AsyncImageView(url: related.thumbnailUrl)
