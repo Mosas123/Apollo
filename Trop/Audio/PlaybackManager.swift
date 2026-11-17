@@ -224,6 +224,35 @@ actor PlaybackManager {
         }
     }
 
+    /// Swaps the currently playing YouTube stream for the resolved FLAC at the
+    /// same position — the "Upgrading Quality" behaviour. No-op if the user has
+    /// already moved on.
+    private func applyLosslessUpgradeIfCurrent(
+        _ result: PlaybackResult,
+        videoId: String
+    ) async {
+        let snapshot = await MainActor.run {
+            (
+                NowPlaying.shared.videoId,
+                NowPlaying.shared.currentTime,
+                NowPlaying.shared.isPlaying
+            )
+        }
+        guard snapshot.0 == videoId, snapshot.2 else { return }
+        let song = await queueSong(for: videoId)
+        await PlayerController.shared.play(
+            url: result.streamUrl,
+            title: song?.title,
+            artist: song?.artistNamesDisplay,
+            videoId: videoId,
+            duration: song.map { TimeInterval($0.duration) },
+            artists: song?.artists ?? [],
+            thumbnailUrl: song?.thumbnailUrl,
+            losslessLabel: "FLAC",
+            startAt: snapshot.1
+        )
+    }
+
     /// Warms the FLAC for the next queue track while the current one plays, so
     /// lossless is ready with zero delay when it comes up. Runs off the play
     /// path and respects the origin cooldown.
@@ -389,8 +418,15 @@ actor PlaybackManager {
         // Warm this track (for replays) and the next one while it plays. Off the
         // play path: never delays audio.
         Task {
-            if self.pencariResultCache[videoId] == nil {
-                _ = await self.resolveLosslessUpgrade(videoId: videoId)
+            if SettingsStore.shared.preferLosslessAudio,
+               !self.isPencariCoolingDown,
+               self.pencariResultCache[videoId] == nil {
+                await MainActor.run { NowPlaying.shared.isUpgradingQuality = true }
+                let upgraded = await self.resolveLosslessUpgrade(videoId: videoId)
+                await MainActor.run { NowPlaying.shared.isUpgradingQuality = false }
+                if let upgraded {
+                    await self.applyLosslessUpgradeIfCurrent(upgraded, videoId: videoId)
+                }
             }
             await self.prefetchNextLossless(after: videoId)
         }

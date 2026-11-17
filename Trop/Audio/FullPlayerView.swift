@@ -701,16 +701,19 @@ struct FullPlayerView: View {
                     .contentTransition(.numericText())
             }
             .overlay {
-                if np.isLosslessStream {
+                if np.isUpgradingQuality || np.isLosslessStream {
                     HStack(spacing: 4) {
                         Image(systemName: "waveform")
-                        Text(np.losslessFormatLabel ?? "Lossless")
+                        Text(np.isUpgradingQuality
+                             ? "Upgrading Quality"
+                             : (np.losslessFormatLabel ?? "Lossless"))
                     }
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.white.opacity(0.8))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
                     .background(Capsule().fill(.white.opacity(0.12)))
+                    .transition(.opacity)
                 }
             }
         }

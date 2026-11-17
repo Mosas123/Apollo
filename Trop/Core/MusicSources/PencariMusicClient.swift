@@ -82,9 +82,13 @@ struct PencariMusicClient: Sendable {
             url: endpoint("music", "search"),
             resolvingAgainstBaseURL: false
         ) else { throw PencariMusicError.invalidBase }
+        // Matches the reference client (ObsidianMusic AddonClient): the query
+        // is `q`, quality is lowercase `lossless`, and `atmos=auto` is always
+        // present. Missing atmos/uppercase quality made the addon answer empty.
         components.queryItems = [
             URLQueryItem(name: "q", value: term),
-            URLQueryItem(name: "quality", value: "LOSSLESS")
+            URLQueryItem(name: "quality", value: "lossless"),
+            URLQueryItem(name: "atmos", value: "auto")
         ]
         guard let url = components.url else { throw PencariMusicError.invalidQuery }
 
@@ -105,13 +109,27 @@ struct PencariMusicClient: Sendable {
         }
     }
 
+    /// `{base}/stream/<id>?quality=lossless&atmos=auto`, matching the reference
+    /// client.
+    private func streamEndpoint(_ rawId: String) -> URL? {
+        guard var components = URLComponents(
+            url: endpoint("music", "stream", rawId),
+            resolvingAgainstBaseURL: false
+        ) else { return nil }
+        components.queryItems = [
+            URLQueryItem(name: "quality", value: "lossless"),
+            URLQueryItem(name: "atmos", value: "auto")
+        ]
+        return components.url
+    }
+
     /// Resolves a short code to a playable (FLAC) URL, retrying while the
     /// origin reports it is busy.
     func resolveStreamURL(for rawId: String) async throws -> URL {
         guard baseURL.host != nil else { throw PencariMusicError.invalidBase }
         var lastError: Error = PencariMusicError.unavailableTrack
         for attempt in 0..<3 {
-            let url = endpoint("music", "stream", rawId)
+            guard let url = streamEndpoint(rawId) else { throw PencariMusicError.invalidBase }
             do {
                 let (data, response) = try await transport(URLRequest(url: url, timeoutInterval: 20))
                 if let http = response as? HTTPURLResponse, http.statusCode == 503 {
@@ -150,7 +168,7 @@ struct PencariMusicClient: Sendable {
     /// "prefer lossless" path where latency matters and failure just falls
     /// back to YouTube.
     func resolveStreamURLFast(for rawId: String) async throws -> URL {
-        let url = endpoint("music", "stream", rawId)
+        guard let url = streamEndpoint(rawId) else { throw PencariMusicError.invalidBase }
         let (data, response) = try await transport(URLRequest(url: url, timeoutInterval: 8))
         if let http = response as? HTTPURLResponse, http.statusCode == 503 {
             throw PencariMusicError.originBusy

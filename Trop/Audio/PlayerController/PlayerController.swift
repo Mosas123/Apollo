@@ -221,7 +221,8 @@ extension PlayerController {
         artists: [YTArtist] = [],
         loudnessDb: Double? = nil,
         thumbnailUrl: String? = nil,
-        losslessLabel: String? = nil
+        losslessLabel: String? = nil,
+        startAt: TimeInterval = 0
     ) async {
         currentLoudnessDb = loudnessDb
         NowPlaying.shared.losslessFormatLabel = losslessLabel
@@ -273,7 +274,10 @@ extension PlayerController {
         setVideoCrop(.none)
 
         sharedState.withLock { $0.pendingVideoId = videoId }
-        let loadStart = skipStart > 0 ? Int(skipStart.rounded(.up)) : 0
+        // `startAt` lets an in-place quality upgrade resume at the same
+        // position instead of restarting the track.
+        let playbackStart = startAt > 0 ? startAt : skipStart
+        let loadStart = playbackStart > 0 ? Int(playbackStart.rounded(.up)) : 0
         let loadArguments = loadStart > 0
             ? ["loadfile", url.absoluteString, "replace", "-1", "start=\(loadStart)"]
             : ["loadfile", url.absoluteString, "replace"]
@@ -302,7 +306,7 @@ extension PlayerController {
         if let videoId { await PlaybackStateService.shared.startTracking(videoId: videoId) }
         playState.send(.playing)
         NowPlaying.shared.isPlaying = true
-        NowPlaying.shared.currentTime = 0
+        NowPlaying.shared.currentTime = playbackStart
         NowPlaying.shared.duration = max(0, duration ?? 0)
         setNowPlayingMetadata()
     }
