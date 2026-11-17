@@ -60,6 +60,7 @@ final class WebLoginController: UIViewController {
 
         edgesForExtendedLayout = .all
         extendedLayoutIncludesOpaqueBars = true
+        additionalSafeAreaInsets = .zero
 
         let config = WKWebViewConfiguration()
         let webView = WKWebView(frame: .zero, configuration: config)
