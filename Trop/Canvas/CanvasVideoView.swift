@@ -64,7 +64,7 @@ struct CanvasVideoView: View {
         generator.appliesPreferredTrackTransform = true
         do {
             let (image, _) = try await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600))
-            return UIImage(cgImage: image).extractDominantColors()
+            return [UIImage(cgImage: image).extractDetailBackdropColor()]
         } catch {
             return nil
         }

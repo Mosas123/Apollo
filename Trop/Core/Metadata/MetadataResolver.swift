@@ -33,6 +33,32 @@ enum MetadataResolver {
         return resolved
     }
 
+    /// iTunes' musicArtist endpoint has no portraits. This lookup is only for
+    /// actual album artwork and requires the album and performer to match.
+    static func albumArtwork(title: String, artist: String) async -> URL? {
+        guard !title.isEmpty, !artist.isEmpty else { return nil }
+        let key = "album|" + cacheKey(title: title, artist: artist)
+        if let cached = await MetadataCache.shared.lookup(key) { return cached.value?.artworkURL }
+        var components = URLComponents(string: "https://itunes.apple.com/search")
+        components?.queryItems = [
+            URLQueryItem(name: "term", value: "\(artist) \(title)"),
+            URLQueryItem(name: "entity", value: "album"),
+            URLQueryItem(name: "limit", value: "10")
+        ]
+        guard let url = components?.url,
+              let response: ITunesResponse = try? await decode(url, headers: [:]) else { return nil }
+        let match = response.results.first {
+            normalize($0.collectionName ?? "") == normalize(title)
+                && normalize($0.artistName ?? "") == normalize(artist)
+        }
+        let artwork = ArtworkURLs.highRes(match?.artworkUrl100).flatMap(URL.init(string:))
+        let value = artwork.map {
+            ResolvedMetadata(title: title, artist: artist, album: title, year: nil, artworkURL: $0, source: "iTunes")
+        }
+        await MetadataCache.shared.store(key, value)
+        return artwork
+    }
+
     private static func cacheKey(title: String, artist: String) -> String {
         "\(normalize(title))|\(normalize(artist))"
     }
@@ -74,9 +100,7 @@ enum MetadataResolver {
         }
         guard let best else { return nil }
 
-        let artwork = best.artworkUrl100?
-            .replacingOccurrences(of: "100x100bb", with: "600x600bb")
-            .replacingOccurrences(of: "100x100", with: "600x600")
+        let artwork = ArtworkURLs.highRes(best.artworkUrl100)
         let year = best.releaseDate.flatMap { Int($0.prefix(4)) }
         return ResolvedMetadata(
             title: best.trackName ?? title,
@@ -123,7 +147,7 @@ enum MetadataResolver {
         let year = (release?.date ?? recording.firstReleaseDate).flatMap { Int($0.prefix(4)) }
         var artworkURL: URL?
         if let releaseID = release?.id {
-            artworkURL = URL(string: "https://coverartarchive.org/release/\(releaseID)/front-500")
+            artworkURL = URL(string: "https://coverartarchive.org/release/\(releaseID)/front")
         }
         return ResolvedMetadata(
             title: recording.title ?? title,

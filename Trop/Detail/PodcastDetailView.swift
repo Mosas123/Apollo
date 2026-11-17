@@ -418,6 +418,8 @@ struct PodcastDetailView: View {
     @State private var viewModel: PodcastDetailViewModel
     @State private var pendingRoute: DetailRoute?
     @State private var showMoreSheet = false
+    @State private var artworkSeed: Color?
+    @Environment(\.colorScheme) private var colorScheme
 
     @Environment(\.dismiss) private var dismiss
 
@@ -436,9 +438,11 @@ struct PodcastDetailView: View {
                 emptyIcon: "antenna.radiowaves.left.and.right"
             ) { podcast in
                 podcastContent(for: podcast)
+                    .environment(\.colorScheme, artworkSeed == nil ? colorScheme : .dark)
             }
         }
         .scrollDisabled(viewModel.isLoading || viewModel.error != nil || viewModel.podcast == nil)
+        .background(DetailArtworkBackground(seed: artworkSeed, isDark: colorScheme == .dark))
         .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
         .navigationTitle(viewModel.podcast?.title ?? "")
         .navigationBarTitleDisplayMode(.inline)
@@ -485,7 +489,7 @@ struct PodcastDetailView: View {
         // stacked underneath, then a Subscribe pill + playlist-style ⋮
         // overflow button. No big play button — playback starts per-episode.
         VStack(spacing: 10) {
-            HeroArtworkView(url: podcast.thumbnailUrl)
+            HeroArtworkView(url: podcast.thumbnailUrl, onImageLoaded: { artworkSeed = $0.extractDetailBackdropColor() })
 
             Text(podcast.title)
                 .font(.title2)

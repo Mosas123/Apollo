@@ -12,12 +12,14 @@ import SwiftUI
 struct ArtworkMosaicView: View {
     var urls: [String]
     var size: CGFloat = 200
+    /// The first tile is the representative artwork when no collection cover exists.
+    var onImageLoaded: ((UIImage) -> Void)? = nil
 
     var body: some View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: 3), count: 2)
         return LazyVGrid(columns: columns, spacing: 3) {
-            ForEach(Array(urls.prefix(4).enumerated()), id: \.offset) { _, url in
-                AsyncImageView(url: url)
+            ForEach(Array(urls.prefix(4).enumerated()), id: \.offset) { index, url in
+                AsyncImageView(url: url, onImageLoaded: index == 0 ? onImageLoaded : nil)
                     .aspectRatio(1, contentMode: .fill)
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }

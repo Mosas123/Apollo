@@ -9,6 +9,7 @@ import SwiftUI
 
 struct FullPlayerView: View {
     let artworkNamespace: Namespace.ID
+    let usesDarkArtwork: Bool
     let onCollapse: () -> Void
 
     @Environment(SettingsStore.self) private var settings
@@ -34,7 +35,9 @@ struct FullPlayerView: View {
     @State private var showGoToMenu = false
 
     private var playerBackgroundColors: [Color] {
-        canvasDominantColors ?? np.dominantColors
+        let seed = (canvasDominantColors ?? np.dominantColors).first ?? .gray
+        let palette = PlayerArtworkPalette(seed: seed, isDark: usesDarkArtwork)
+        return [palette.top, palette.bottom]
     }
 
     /// 0 while full-screen, 1 once the card has been pulled far enough to show
@@ -81,26 +84,6 @@ struct FullPlayerView: View {
                     )
                     .ignoresSafeArea(.container)
                     .animation(.easeInOut(duration: 0.8), value: playerBackgroundColors)
-                    .overlay {
-                        PlayerBackgroundShader(image: np.thumbnailImage, isPlaying: np.isPlaying)
-                            .opacity(0.45)
-                    }
-                    .overlay(alignment: .top) {
-                        Circle()
-                            .fill(playerBackgroundColors.first ?? .blue)
-                            .frame(width: 400, height: 400)
-                            .blur(radius: 120)
-                            .opacity(0.2)
-                            .offset(y: -150)
-                            .allowsHitTesting(false)
-                    }
-                    .overlay {
-                        // Keep white text legible even over light/desaturated art.
-                        Color.black
-                            .opacity(0.30)
-                            .ignoresSafeArea(.container)
-                            .allowsHitTesting(false)
-                    }
                 }
 
                 VStack(spacing: 0) {
