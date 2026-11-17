@@ -310,6 +310,7 @@ struct ArtistDetailView: View {
     }
 
     var body: some View {
+        GeometryReader { geo in
         ZStack(alignment: .top) {
             ScrollView {
                 DetailStateContainer(
@@ -340,6 +341,9 @@ struct ArtistDetailView: View {
             }
 
             customTopBar
+                .padding(.top, geo.safeAreaInsets.top)
+        }
+        .ignoresSafeArea(.container, edges: .top)
         }
         .sheet(isPresented: $showInfo) {
             if let artist = viewModel.artist {
