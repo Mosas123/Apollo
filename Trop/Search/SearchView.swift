@@ -389,7 +389,7 @@ struct SearchView: View {
                 router.searchPath.append(DetailRoute.artist(browseId: artist.browseId))
             } label: {
                 HStack(spacing: 12) {
-                    AsyncImageView(url: artist.thumbnailUrl)
+                    ArtistAvatarImageView(name: artist.name, fallbackURL: artist.thumbnailUrl)
                         .frame(width: 56, height: 56)
                         .clipShape(Circle())
                     Text(artist.name)
@@ -430,7 +430,7 @@ struct SearchView: View {
                             router.searchPath.append(DetailRoute.artist(browseId: artist.browseId))
                         } label: {
                             VStack(spacing: 8) {
-                                AsyncImageView(url: artist.thumbnailUrl)
+                                ArtistAvatarImageView(name: artist.name, fallbackURL: artist.thumbnailUrl)
                                     .frame(width: 110, height: 110)
                                     .clipShape(Circle())
                                 Text(artist.name)

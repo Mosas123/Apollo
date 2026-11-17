@@ -431,7 +431,7 @@ struct LibraryView: View {
 
     private func artistCell(url: String?, name: String) -> some View {
         VStack(spacing: 8) {
-            AsyncImageView(url: url)
+            ArtistAvatarImageView(name: name, fallbackURL: url)
                 .frame(width: 120, height: 120)
                 .clipShape(Circle())
             Text(name).lineLimit(1).font(.callout)

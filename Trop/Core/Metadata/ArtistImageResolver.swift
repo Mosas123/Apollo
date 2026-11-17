@@ -47,6 +47,27 @@ enum ArtistImageResolver {
         return youTubeURL
     }
 
+    /// Lightweight avatar resolution for lists (no Apple page fetch): Deezer
+    /// 1000px → Wikimedia → YouTube. The hero uses `preferredImageURL` (Apple
+    /// 1800 first). Same artist photo, different sizes.
+    static func avatarImageURL(name: String, youTubeURL: URL?) async -> URL? {
+        let base = TextMatch.normalizeArtist(name)
+        guard !base.isEmpty else { return youTubeURL }
+        let key = base + "#avatar"
+        if let cached = await Cache.shared.hit(key) { return cached }
+        if await Cache.shared.isMiss(key) { return youTubeURL }
+        if let deezer = await deezerImage(name: name) {
+            await Cache.shared.store(key, deezer)
+            return deezer
+        }
+        if let wiki = await wikipediaImage(name: name) {
+            await Cache.shared.store(key, wiki)
+            return wiki
+        }
+        await Cache.shared.markMiss(key)
+        return youTubeURL
+    }
+
     // MARK: - Apple Music (web page, keyless)
 
     private struct ITunesArtists: Decodable {
