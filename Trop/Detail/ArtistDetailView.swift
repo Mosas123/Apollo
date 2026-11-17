@@ -557,11 +557,14 @@ struct ArtistDetailView: View {
                     .accessibilityLabel("Artist info")
 
                     Button { playArtist(artist) } label: {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 28, weight: .bold))
-                            .foregroundStyle(.black)
-                            .frame(width: 70, height: 70)
-                            .background(Circle().fill(.white))
+                        ZStack {
+                            Circle().fill(.white)
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 28, weight: .bold))
+                                .blendMode(.destinationOut)
+                        }
+                        .compositingGroup()
+                        .frame(width: 70, height: 70)
                     }
                     .buttonStyle(.plain)
                     .disabled(artist.songs.isEmpty)
@@ -729,7 +732,7 @@ struct ArtistDetailView: View {
             NavigationLink(value: DetailRoute.album(browseId: album.browseId)) {
                 HStack(spacing: 12) {
                     AsyncImageView(url: album.thumbnailUrl)
-                        .frame(width: 64, height: 64)
+                        .frame(width: 96, height: 96)
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 3) {
@@ -739,7 +742,7 @@ struct ArtistDetailView: View {
                         Text(album.title)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
-                            .lineLimit(1)
+                            .lineLimit(2)
                         Text(featuredSubtitle(album))
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -761,7 +764,14 @@ struct ArtistDetailView: View {
             .accessibilityLabel("Save album")
         }
         .padding(12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(.white.opacity(0.12))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
+                }
+        }
         .padding(.horizontal, 16)
         .padding(.top, 8)
     }

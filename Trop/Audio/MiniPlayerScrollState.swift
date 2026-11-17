@@ -22,20 +22,30 @@ final class MiniPlayerScrollState {
 struct MiniPlayerInlineOnScrollModifier: ViewModifier {
     @Environment(MiniPlayerScrollState.self) private var scrollState
     var headerHidden: Binding<Bool>? = nil
+    var headerOffset: Binding<CGFloat>? = nil
     @State private var directionAnchor: CGFloat?
 
     private let compactThreshold: CGFloat = 1
 
-    init(headerHidden: Binding<Bool>? = nil) {
+    init(headerHidden: Binding<Bool>? = nil, headerOffset: Binding<CGFloat>? = nil) {
         self.headerHidden = headerHidden
+        self.headerOffset = headerOffset
+    }
+
+    private struct ScrollPosition: Equatable {
+        let offset: CGFloat
+        let topInset: CGFloat
     }
 
     func body(content: Content) -> some View {
         content
             .onScrollGeometryChange(
-                for: CGFloat.self,
-                of: { $0.contentOffset.y },
-                action: { oldOffset, newOffset in
+                for: ScrollPosition.self,
+                of: { ScrollPosition(offset: $0.contentOffset.y, topInset: $0.contentInsets.top) },
+                action: { oldPosition, newPosition in
+                    let oldOffset = oldPosition.offset
+                    let newOffset = newPosition.offset
+                    headerOffset?.wrappedValue = max(0, newOffset + newPosition.topInset)
                     if let headerHidden {
                         let anchor = directionAnchor ?? oldOffset
                         if newOffset <= 20 {

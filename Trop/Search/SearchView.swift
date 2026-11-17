@@ -41,6 +41,9 @@ struct SearchView: View {
                             onAccount: { router.searchPath.append(DetailRoute.settings) },
                             accountInitial: accountState.accountName.first.map(String.init)
                         )
+                        .opacity(headerHidden ? 0 : 1)
+                        .allowsHitTesting(!headerHidden)
+                        .accessibilityHidden(headerHidden)
                         .background {
                             GeometryReader { geometry in
                                 Color.clear.preference(key: TabHeaderMeasurementKey.self, value: geometry.size.height)
@@ -50,13 +53,20 @@ struct SearchView: View {
                     }
                     searchTopBar
                         .background {
+                            Color(.systemBackground)
+                                .ignoresSafeArea(.container, edges: .top)
+                                .allowsHitTesting(false)
+                        }
+                        .background {
                             GeometryReader { geometry in
                                 Color.clear.preference(key: SearchBarHeightKey.self, value: geometry.size.height)
+                                    .allowsHitTesting(false)
                             }
                         }
                         .onPreferenceChange(SearchBarHeightKey.self) { if $0 > 0 { searchBarHeight = $0 } }
                 }
                 .offset(y: !isSearchActive && headerHidden ? -headerHeight : 0)
+                .zIndex(1)
             }
             .frame(maxHeight: .infinity, alignment: .top)
             .toolbar(.hidden, for: .navigationBar)
@@ -100,16 +110,6 @@ struct SearchView: View {
                     .submitLabel(.search)
                     .autocorrectionDisabled()
                     .onSubmit { submit(nil) }
-                if !viewModel.fieldText.isEmpty {
-                    Button {
-                        viewModel.fieldText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Clear search")
-                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -124,6 +124,7 @@ struct SearchView: View {
                         .font(.body.weight(.semibold))
                         .foregroundStyle(.primary)
                         .frame(width: 44, height: 44)
+                        .contentShape(Circle())
                         .glassEffect(.regular.interactive(), in: Circle())
                 }
                 .buttonStyle(.plain)

@@ -33,11 +33,11 @@ struct MiniPlayerBarView: View {
     }
 
     private var barHeight: CGFloat {
-        48
+        48 * 1.03
     }
 
     private var artworkSize: CGFloat {
-        30
+        30 * 1.03
     }
 
     private var isDarkMode: Bool {

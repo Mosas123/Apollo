@@ -340,7 +340,7 @@ struct AlbumDetailView: View {
             GeometryReader { geometry in
                 VariableBlurView(maxBlurRadius: 8, direction: .blurredTopClearBottom)
                     .frame(height: geometry.safeAreaInsets.top + 12)
-                    .offset(y: -geometry.safeAreaInsets.top)
+                    .offset(y: -geometry.safeAreaInsets.top - (geometry.safeAreaInsets.top + 12) * 0.05)
             }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
@@ -414,6 +414,19 @@ struct AlbumDetailView: View {
             }
         }
         .ignoresSafeArea(.container)
+    }
+
+    /// A darker version of the artwork tint keeps the play label legible on white.
+    private var albumPlayColor: Color {
+        guard let color = backdropColors.first else { return .black }
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 0
+        guard UIColor(color).getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) else {
+            return .black
+        }
+        return Color(uiColor: UIColor(hue: hue, saturation: saturation, brightness: min(brightness, 0.32), alpha: 1))
     }
 
 
@@ -595,6 +608,8 @@ struct AlbumDetailView: View {
 
             // Action buttons: shuffle, play, more (matches playlist header)
             PlaybackControlsView(
+                accent: albumPlayColor,
+                albumStyle: true,
                 showsMore: true,
                 onPlay: { playAll(album) },
                 onShuffle: { shufflePlay(album) },

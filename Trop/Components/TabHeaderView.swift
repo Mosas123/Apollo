@@ -42,17 +42,21 @@ struct TabHeaderMeasurementKey: PreferenceKey {
 }
 
 extension View {
-    func floatingTabHeader(hidden: Bool, height: Binding<CGFloat>) -> some View {
-        background {
+    func floatingTabHeader(scrollOffset: CGFloat, height: Binding<CGFloat>) -> some View {
+        let progress = min(max(scrollOffset / max(height.wrappedValue, 1), 0), 1)
+        return background {
             GeometryReader { geometry in
                 Color.clear.preference(key: TabHeaderMeasurementKey.self, value: geometry.size.height)
             }
         }
         .onPreferenceChange(TabHeaderMeasurementKey.self) { if $0 > 0 { height.wrappedValue = $0 } }
-        .background(.ultraThinMaterial)
-        .offset(y: hidden ? -height.wrappedValue - 60 : 0)
-        .opacity(hidden ? 0 : 1)
-        .allowsHitTesting(!hidden)
-        .accessibilityHidden(hidden)
+        .background {
+            Color(.systemBackground)
+                .ignoresSafeArea(.container, edges: .top)
+        }
+        .offset(y: -min(max(scrollOffset, 0), height.wrappedValue))
+        .opacity(1 - progress)
+        .allowsHitTesting(progress < 0.95)
+        .accessibilityHidden(progress >= 0.95)
     }
 }

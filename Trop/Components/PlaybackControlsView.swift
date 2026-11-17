@@ -12,6 +12,7 @@ import SwiftUI
 /// background, accent glow shadow).
 struct PlaybackControlsView: View {
     var accent: Color = .accentColor
+    var albumStyle: Bool = false
     var showsShuffle: Bool = true
     var showsMore: Bool = false
     var onPlay: () -> Void
@@ -26,7 +27,7 @@ struct PlaybackControlsView: View {
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(.primary)
                         .frame(width: 48, height: 48)
-                        .background(Circle().fill(Color(.secondarySystemGroupedBackground)))
+                        .background(Circle().fill(sideButtonColor))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Shuffle")
@@ -39,7 +40,7 @@ struct PlaybackControlsView: View {
                 }
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(accent)
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: albumStyle ? 180 : .infinity)
                 .frame(height: 48)
                 .background(Capsule().fill(Color.white))
             }
@@ -52,13 +53,18 @@ struct PlaybackControlsView: View {
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(.primary)
                         .frame(width: 48, height: 48)
-                        .background(Circle().fill(Color(.secondarySystemGroupedBackground)))
+                        .background(Circle().fill(sideButtonColor))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("More options")
             }
         }
+        .frame(maxWidth: .infinity)
         .padding(.horizontal, 24)
         .padding(.top, 4)
+    }
+
+    private var sideButtonColor: Color {
+        albumStyle ? Color.primary.opacity(0.14) : Color(.secondarySystemGroupedBackground)
     }
 }

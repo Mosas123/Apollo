@@ -16,7 +16,7 @@ struct LibraryView: View {
     @State private var podcasts: [PodcastEntity] = []
     @State private var likedSongCount = 0
     @State private var isLoading = true
-    @State private var headerHidden = false
+    @State private var headerOffset: CGFloat = 0
     @State private var headerHeight: CGFloat = 60
     @State private var selectedFilter: LibraryFilter?
     @State private var showCreateDialog = false
@@ -73,7 +73,7 @@ struct LibraryView: View {
                     onAccount: { router.libraryPath.append(DetailRoute.settings) },
                     accountInitial: accountState.accountName.first.map(String.init)
                 )
-                .floatingTabHeader(hidden: headerHidden, height: $headerHeight)
+                .floatingTabHeader(scrollOffset: headerOffset, height: $headerHeight)
             }
             .frame(maxHeight: .infinity, alignment: .top)
             .toolbar(.hidden, for: .navigationBar)
@@ -150,7 +150,7 @@ struct LibraryView: View {
             .padding(.bottom, 28)
         }
         .scrollIndicators(.automatic)
-        .miniPlayerTracksScroll(headerHidden: $headerHidden).scrollEdgeEffectHidden(true, for: .bottom)
+        .miniPlayerTracksScroll(headerOffset: $headerOffset).scrollEdgeEffectHidden(true, for: .bottom)
     }
 
     /// Simple grouped list of library destinations, Apple Music style.
