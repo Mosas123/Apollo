@@ -608,7 +608,7 @@ final class NowPlaying {
                 loadArtworkFromLocalFile(localURL, videoId: videoId)
                 return
             }
-            if isMusic && SettingsStore.shared.experimentalAppleArtwork {
+            if isMusic {
                 // Apple Music-style: never flash the YouTube cover. Show a
                 // blurred placeholder immediately, then swap in the canonical
                 // cover once resolved; fall back to the crisp YT image only if

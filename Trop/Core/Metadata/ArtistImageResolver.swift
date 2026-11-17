@@ -25,7 +25,6 @@ enum ArtistImageResolver {
     }
 
     static func preferredImageURL(name: String, youTubeURL: URL?) async -> URL? {
-        guard SettingsStore.shared.experimentalAppleArtwork else { return youTubeURL }
         let key = TextMatch.normalizeArtist(name)
         guard !key.isEmpty else { return youTubeURL }
 
@@ -52,7 +51,6 @@ enum ArtistImageResolver {
     /// 1000px → Wikimedia → YouTube. The hero uses `preferredImageURL` (Apple
     /// 1800 first). Same artist photo, different sizes.
     static func avatarImageURL(name: String, youTubeURL: URL?) async -> URL? {
-        guard SettingsStore.shared.experimentalAppleArtwork else { return youTubeURL }
         let base = TextMatch.normalizeArtist(name)
         guard !base.isEmpty else { return youTubeURL }
         let key = base + "#avatar"

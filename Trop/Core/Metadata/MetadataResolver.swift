@@ -27,10 +27,7 @@ enum MetadataResolver {
 
         // Apple Music catalogue (harvested web token, 3000px artwork) first,
         // then iTunes Search, then Deezer, then MusicBrainz.
-        var resolved: ResolvedMetadata?
-        if SettingsStore.shared.experimentalAppleArtwork {
-            resolved = await AppleMusicCatalog.shared.songMetadata(title: title, artist: artist)
-        }
+        var resolved = await AppleMusicCatalog.shared.songMetadata(title: title, artist: artist)
         if resolved == nil {
             resolved = await iTunes(title: title, artist: artist, album: album)
         }

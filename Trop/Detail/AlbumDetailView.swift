@@ -42,8 +42,7 @@ final class AlbumDetailViewModel {
             await refreshSavedState()
 
             // Prefer a canonical, higher-resolution cover (Apple → Deezer → CAA).
-            if SettingsStore.shared.experimentalAppleArtwork,
-               let artist = parsed.artists.first?.name,
+            if let artist = parsed.artists.first?.name,
                let metadata = await MetadataResolver.enrich(title: parsed.title, artist: artist),
                let artwork = metadata.artworkURL {
                 album?.enrichedArtworkURL = artwork.absoluteString
