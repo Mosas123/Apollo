@@ -294,6 +294,7 @@ struct ArtistDetailView: View {
     @State private var linkCopied = false
     @State private var showInfo = false
     @State private var infoGenre: String?
+    @State private var infoBio: ArtistBioResolver.Bio?
     @State private var backdropColors: [Color] = []
     @State private var linkResetTask: Task<Void, Never>?
 
@@ -658,6 +659,12 @@ struct ArtistDetailView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 20) {
+                    if let born = infoBio?.born {
+                        infoField("Born", born)
+                    }
+                    if let from = infoBio?.from {
+                        infoField("From", from)
+                    }
                     if let genre = infoGenre {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Genre")
@@ -701,9 +708,24 @@ struct ArtistDetailView: View {
             .padding(.top, 14)
             .padding(.leading, 16)
         }
-        .task { infoGenre = await ArtistGenreResolver.genre(for: artist.name) }
+        .task {
+            async let genre = ArtistGenreResolver.genre(for: artist.name)
+            async let bio = ArtistBioResolver.bio(for: artist.name)
+            infoGenre = await genre
+            infoBio = await bio
+        }
         .presentationDragIndicator(.hidden)
         .presentationDetents([.large])
+    }
+
+    private func infoField(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(LocalizedStringKey(label))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.body)
+        }
     }
 
     private func subscriberLabel(for count: String) -> String {
