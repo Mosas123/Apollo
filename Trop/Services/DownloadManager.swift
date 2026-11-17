@@ -259,6 +259,7 @@ extension DownloadManager {
     func downloadAll(_ songs: [SongItem], maxConcurrent: Int = 3) async {
         guard !songs.isEmpty else { return }
         let limit = max(1, maxConcurrent)
+        let manager = DownloadManager.shared
         await withTaskGroup(of: Void.self) { group in
             var next = 0
             while next < songs.count {
@@ -266,8 +267,8 @@ extension DownloadManager {
                 for _ in 0..<batch {
                     let song = songs[next]
                     next += 1
-                    group.addTask { @MainActor in
-                        await DownloadManager.shared.download(song: song)
+                    group.addTask {
+                        await manager.download(song: song)
                     }
                 }
                 await group.next()
