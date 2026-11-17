@@ -67,10 +67,16 @@ enum MetadataResolver {
             return nil
         }
 
-        let best = response.results.first { result in
+        let candidates = response.results.filter { result in
             guard let track = result.trackName, let name = result.artistName else { return false }
             return TextMatch.titlesMatch(track, title) && TextMatch.artistsMatch(name, artist)
         }
+        // Prefer the release that matches the album we already know.
+        let best = candidates.first { result in
+            guard let requested = album, !requested.isEmpty,
+                  let found = result.collectionName else { return false }
+            return TextMatch.albumsMatch(found, requested)
+        } ?? candidates.first
         guard let best else { return nil }
 
         // Apple serves up to 3000px from the same URL template; 1200 is a
@@ -163,11 +169,16 @@ enum MetadataResolver {
               let response: DeezerResponse = try? await decode(url, headers: [:]) else {
             return nil
         }
-        let best = response.data.first { track in
+        let candidates = response.data.filter { track in
             guard let trackTitle = track.title else { return false }
             return TextMatch.titlesMatch(trackTitle, title)
                 && TextMatch.artistsMatch(track.artist?.name ?? "", artist)
         }
+        let best = candidates.first { track in
+            guard let requested = album, !requested.isEmpty,
+                  let found = track.album?.title else { return false }
+            return TextMatch.albumsMatch(found, requested)
+        } ?? candidates.first
         guard let best else { return nil }
         return ResolvedMetadata(
             title: best.title ?? title,

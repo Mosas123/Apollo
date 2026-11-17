@@ -49,9 +49,13 @@ struct SongRowView: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 24, alignment: .leading)
             } else {
-                AsyncImageView(url: song.thumbnailUrl)
-                    .frame(width: artSize, height: artSize)
-                    .clipShape(RoundedRectangle(cornerRadius: artRadius, style: .continuous))
+                AlbumArtworkView(
+                    album: song.album,
+                    artist: song.artists.first?.name,
+                    fallbackURL: song.thumbnailUrl
+                )
+                .frame(width: artSize, height: artSize)
+                .clipShape(RoundedRectangle(cornerRadius: artRadius, style: .continuous))
             }
 
             VStack(alignment: .leading, spacing: 2) {

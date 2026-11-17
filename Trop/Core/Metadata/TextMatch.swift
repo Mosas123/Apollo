@@ -38,6 +38,11 @@ enum TextMatch {
             of: "\\s+-\\s+(remaster(ed)?|live|radio edit|album version|single version).*$",
             with: "", options: [.regularExpression, .caseInsensitive]
         )
+        // Album editions: "Deluxe Edition", "Special Edition", …
+        text = text.replacingOccurrences(
+            of: "\\b(deluxe|special|expanded|anniversary|bonus) (edition|version)\\b.*$",
+            with: "", options: [.regularExpression, .caseInsensitive]
+        )
         return normalize(text)
     }
 
@@ -100,6 +105,17 @@ enum TextMatch {
         guard !a.isEmpty, !b.isEmpty else { return false }
         if a == b { return true }
         // Containment only for reasonably long strings, to avoid "Intro" hits.
+        if a.count >= 4, b.count >= 4 {
+            return a.contains(b) || b.contains(a)
+        }
+        return false
+    }
+
+    static func albumsMatch(_ lhs: String, _ rhs: String) -> Bool {
+        let a = normalizeTitle(lhs)
+        let b = normalizeTitle(rhs)
+        guard !a.isEmpty, !b.isEmpty else { return false }
+        if a == b { return true }
         if a.count >= 4, b.count >= 4 {
             return a.contains(b) || b.contains(a)
         }
