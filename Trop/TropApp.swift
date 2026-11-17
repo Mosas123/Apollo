@@ -30,6 +30,7 @@ struct TropApp: App {
         PlayerController.registerRemoteControlSupport()
         observePlaybackSettings()
         Task { await InnerTubeClient.tropShared.syncTropLocale() }
+        Task { await AppleMusicCatalog.shared.warmup() }
         Task { @MainActor in LastFMIntegration.shared.start() }
     }
 

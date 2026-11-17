@@ -25,9 +25,12 @@ enum MetadataResolver {
             return cached.value
         }
 
-        // Apple/iTunes is the primary catalogue (matches the app's design);
-        // MusicBrainz and Deezer are fallbacks only.
-        var resolved = await iTunes(title: title, artist: artist, album: album)
+        // Apple Music catalogue (harvested web token, 3000px artwork) first,
+        // then iTunes Search, then Deezer, then MusicBrainz.
+        var resolved = await AppleMusicCatalog.shared.songMetadata(title: title, artist: artist)
+        if resolved == nil {
+            resolved = await iTunes(title: title, artist: artist, album: album)
+        }
         if resolved == nil {
             resolved = await deezer(title: title, artist: artist)
         }
