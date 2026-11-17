@@ -564,7 +564,7 @@ struct AlbumDetailView: View {
                         backdropColors = [image.extractAlbumBackdropColor()]
                     }
                 }
-            }
+            )
 
             // Album title
             Text(album.title)

@@ -87,17 +87,17 @@ struct StorageSettingsView: View {
         var downloads: Int64 = 0
     }
 
-    private static var caches: URL {
+    nonisolated private static var caches: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
     }
 
-    private static var documents: URL {
+    nonisolated private static var documents: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
     }
 
-    private static func computeSizes() -> Breakdown {
+    nonisolated private static func computeSizes() -> Breakdown {
         var result = Breakdown()
         result.images = directorySize(caches.appendingPathComponent("com.trop.nuke"))
         result.metadata = fileSize(caches.appendingPathComponent("metadata-cache.json"))
@@ -109,12 +109,12 @@ struct StorageSettingsView: View {
         return result
     }
 
-    private static func fileSize(_ url: URL) -> Int64 {
+    nonisolated private static func fileSize(_ url: URL) -> Int64 {
         let values = try? url.resourceValues(forKeys: [.fileSizeKey])
         return Int64(values?.fileSize ?? 0)
     }
 
-    private static func directorySize(_ url: URL) -> Int64 {
+    nonisolated private static func directorySize(_ url: URL) -> Int64 {
         let fm = FileManager.default
         guard let enumerator = fm.enumerator(
             at: url,
@@ -131,11 +131,11 @@ struct StorageSettingsView: View {
         return total
     }
 
-    private static func removeDirectory(_ url: URL) {
+    nonisolated private static func removeDirectory(_ url: URL) {
         try? FileManager.default.removeItem(at: url)
     }
 
-    private static func format(_ bytes: Int64) -> String {
+    nonisolated private static func format(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useKB, .useMB, .useGB]
         formatter.countStyle = .file

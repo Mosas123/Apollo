@@ -29,7 +29,7 @@ enum MetadataResolver {
         // MusicBrainz and Deezer are fallbacks only.
         var resolved = await iTunes(title: title, artist: artist, album: album)
         if resolved == nil {
-            resolved = await deezer(title: title, artist: artist)
+            resolved = await deezer(title: title, artist: artist, album: album)
         }
         if resolved == nil {
             resolved = await musicBrainz(title: title, artist: artist)
@@ -180,7 +180,7 @@ enum MetadataResolver {
         let data: [Track]
     }
 
-    private static func deezer(title: String, artist: String) async -> ResolvedMetadata? {
+    private static func deezer(title: String, artist: String, album: String?) async -> ResolvedMetadata? {
         var components = URLComponents(string: "https://api.deezer.com/search")
         let query = artist.isEmpty ? title : "\(TextMatch.queryArtist(artist)) \(title)"
         components?.queryItems = [
