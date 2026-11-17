@@ -27,7 +27,17 @@ final class DurationResolver {
     }
 
     func handleUpdate(_ notification: Notification, videoId: String?) {
-        guard let vid = notification.userInfo?["videoId"] as? String, vid == videoId else { return }
-        resolved = DurationCache.get(vid) ?? 0
+        guard let videoId else { return }
+        let info = notification.userInfo
+        let matches: Bool
+        if let single = info?["videoId"] as? String {
+            matches = single == videoId
+        } else if let many = info?["videoIds"] as? [String] {
+            matches = many.contains(videoId)
+        } else {
+            matches = false
+        }
+        guard matches else { return }
+        resolved = DurationCache.get(videoId) ?? 0
     }
 }

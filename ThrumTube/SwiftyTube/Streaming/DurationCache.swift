@@ -8,14 +8,20 @@
 import Foundation
 
 public extension Notification.Name {
-    /// Posted on the main queue whenever a duration is stored.
+    /// Posted on the main queue whenever a duration is stored. The payload
+    /// carries `videoIds` (an array) and is coalesced per run-loop batch so a
+    /// burst of lookups doesn't fire hundreds of separate notifications.
     static let durationDidUpdate = Notification.Name("SwiftyTubeDurationDidUpdate")
 }
 
-/// Thread-safe video durations with in-flight marking.
+/// Thread-safe video durations with in-flight marking and LRU eviction.
 public enum DurationCache: Sendable {
     nonisolated(unsafe) private static var cache: [String: Int] = [:]
+    nonisolated(unsafe) private static var recency: [String: Int] = [:]
+    nonisolated(unsafe) private static var clock = 0
     nonisolated(unsafe) private static var pending: Set<String> = []
+    nonisolated(unsafe) private static var dirtyIds: Set<String> = []
+    nonisolated(unsafe) private static var notificationScheduled = false
     private static let lock = NSLock()
 
     public static func isPending(_ videoId: String) -> Bool {
@@ -25,25 +31,26 @@ public enum DurationCache: Sendable {
 
     public static func get(_ videoId: String) -> Int? {
         lock.lock(); defer { lock.unlock() }
-        return cache[videoId]
+        guard let duration = cache[videoId] else { return nil }
+        clock &+= 1
+        recency[videoId] = clock
+        return duration
     }
 
     public static func set(_ videoId: String, _ duration: Int) {
         lock.lock()
+        clock &+= 1
         cache[videoId] = duration
+        recency[videoId] = clock
         pending.remove(videoId)
-        if cache.count > 4000 {
-            // Durations are tiny, but keep the cache from growing for the
-            // whole process lifetime.
-            for key in Array(cache.keys.prefix(1000)) { cache.removeValue(forKey: key) }
-        }
+        if cache.count > 4000 { evictLocked() }
+        dirtyIds.insert(videoId)
+        let shouldSchedule = !notificationScheduled
+        if shouldSchedule { notificationScheduled = true }
         lock.unlock()
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(
-                name: .durationDidUpdate,
-                object: nil,
-                userInfo: ["videoId": videoId]
-            )
+
+        if shouldSchedule {
+            DispatchQueue.main.async { flushNotifications() }
         }
     }
 
@@ -55,5 +62,28 @@ public enum DurationCache: Sendable {
     public static func clearPending(_ videoId: String) {
         lock.lock(); defer { lock.unlock() }
         pending.remove(videoId)
+    }
+
+    /// Evicts the least-recently-used quarter. Must be called with `lock` held.
+    private static func evictLocked() {
+        let victims = recency.sorted { $0.value < $1.value }.prefix(1000)
+        for (key, _) in victims {
+            cache.removeValue(forKey: key)
+            recency.removeValue(forKey: key)
+        }
+    }
+
+    private static func flushNotifications() {
+        lock.lock()
+        let ids = Array(dirtyIds)
+        dirtyIds.removeAll(keepingCapacity: true)
+        notificationScheduled = false
+        lock.unlock()
+        guard !ids.isEmpty else { return }
+        NotificationCenter.default.post(
+            name: .durationDidUpdate,
+            object: nil,
+            userInfo: ["videoIds": ids]
+        )
     }
 }

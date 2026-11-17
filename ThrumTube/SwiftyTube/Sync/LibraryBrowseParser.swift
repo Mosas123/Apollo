@@ -188,8 +188,7 @@ extension LibraryBrowseParser {
 
     private static func thumbnailUrl(_ item: [String: Any]) -> String? {
         guard let thumbnail = item["thumbnail"] as? [String: Any],
-              let musicThumbnail = thumbnail["musicThumbnailRenderer"] as? [String: Any]
-                ?? thumbnail["musicThumbnailRenderer"] as? [String: Any],
+              let musicThumbnail = thumbnail["musicThumbnailRenderer"] as? [String: Any],
               let thumb = musicThumbnail["thumbnail"] as? [String: Any]
                 ?? thumbnail["thumbnails"] as? [String: Any],
               let url = InnerTubeJSON.lastThumbnailURL(thumb["thumbnails"] as? [[String: Any]]) else { return nil }

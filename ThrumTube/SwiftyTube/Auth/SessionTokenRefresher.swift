@@ -36,7 +36,10 @@ public final class SessionTokenRefresher: NSObject {
     #if canImport(UIKit)
     private var hostWindow: UIWindow?
     #endif
-    private var isRunning = false
+    /// The in-flight renewal, shared by concurrent callers. Returning `[ ]`
+    /// to a second waiter would be read as "re-login required", logging the
+    /// user out mid-refresh — so coexist callers await this instead.
+    private var inflight: Task<[String: String], Never>?
 
     static let loginEntryURL = URL(
         string: "https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fmusic.youtube.com%2F"
@@ -57,10 +60,20 @@ public final class SessionTokenRefresher: NSObject {
         baseCookies: [String: String],
         pollSeconds: Int = 40
     ) async -> [String: String] {
-        guard !isRunning else { return [:] }
-        isRunning = true
-        defer { isRunning = false }
+        if let inflight { return await inflight.value }
+        let task = Task { [baseCookies, pollSeconds] in
+            await self.performRefresh(baseCookies: baseCookies, pollSeconds: pollSeconds)
+        }
+        inflight = task
+        let result = await task.value
+        inflight = nil
+        return result
+    }
 
+    private func performRefresh(
+        baseCookies: [String: String],
+        pollSeconds: Int
+    ) async -> [String: String] {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = WKWebsiteDataStore.nonPersistent()
         let store = config.websiteDataStore.httpCookieStore
