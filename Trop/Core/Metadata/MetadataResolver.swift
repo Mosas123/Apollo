@@ -25,9 +25,14 @@ enum MetadataResolver {
             return cached.value
         }
 
+        // Apple/iTunes is the primary catalogue (matches the app's design);
+        // MusicBrainz and Deezer are fallbacks only.
         var resolved = await iTunes(title: title, artist: artist, album: album)
         if resolved == nil {
             resolved = await musicBrainz(title: title, artist: artist)
+        }
+        if resolved == nil {
+            resolved = await deezer(title: title, artist: artist)
         }
         await MetadataCache.shared.store(key, resolved)
         return resolved
@@ -74,9 +79,11 @@ enum MetadataResolver {
         }
         guard let best else { return nil }
 
+        // Apple serves up to 3000px from the same URL template; 1200 is a
+        // crisp cover without wasting memory on lists.
         let artwork = best.artworkUrl100?
-            .replacingOccurrences(of: "100x100bb", with: "600x600bb")
-            .replacingOccurrences(of: "100x100", with: "600x600")
+            .replacingOccurrences(of: "100x100bb", with: "1200x1200bb")
+            .replacingOccurrences(of: "100x100", with: "1200x1200")
         let year = best.releaseDate.flatMap { Int($0.prefix(4)) }
         return ResolvedMetadata(
             title: best.trackName ?? title,
@@ -132,6 +139,55 @@ enum MetadataResolver {
             year: year,
             artworkURL: artworkURL,
             source: "MusicBrainz"
+        )
+    }
+
+    // MARK: - Deezer (fallback)
+
+    private struct DeezerResponse: Decodable {
+        struct Track: Decodable {
+            struct Artist: Decodable { let name: String? }
+            struct Album: Decodable {
+                let title: String?
+                let cover_xl: String?
+            }
+            let title: String?
+            let artist: Artist?
+            let album: Album?
+        }
+        let data: [Track]
+    }
+
+    private static func deezer(title: String, artist: String) async -> ResolvedMetadata? {
+        var components = URLComponents(string: "https://api.deezer.com/search")
+        let query = artist.isEmpty ? title : "\(artist) \(title)"
+        components?.queryItems = [
+            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "limit", value: "5")
+        ]
+        guard let url = components?.url,
+              let response: DeezerResponse = try? await decode(url, headers: [:]) else {
+            return nil
+        }
+        let targetTitle = normalize(title)
+        let targetArtist = normalize(artist)
+        let best = response.data.first { track in
+            guard let trackTitle = track.title else { return false }
+            let titleMatches = normalize(trackTitle).contains(targetTitle) || targetTitle.contains(normalize(trackTitle))
+            let name = track.artist?.name ?? ""
+            let artistMatches = targetArtist.isEmpty
+                || normalize(name).contains(targetArtist)
+                || targetArtist.contains(normalize(name))
+            return titleMatches && artistMatches
+        }
+        guard let best else { return nil }
+        return ResolvedMetadata(
+            title: best.title ?? title,
+            artist: best.artist?.name ?? artist,
+            album: best.album?.title,
+            year: nil,
+            artworkURL: best.album?.cover_xl.flatMap(URL.init(string:)),
+            source: "Deezer"
         )
     }
 
