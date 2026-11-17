@@ -11,6 +11,7 @@ import Foundation
 import GRDB
 import Network
 import Nuke
+import QuartzCore
 import SwiftUI
 import UIKit
 @preconcurrency import ffmpegkit
@@ -39,6 +40,7 @@ final class DownloadManager: ObservableObject {
     private var isReloading = false
     private var cancelledDownloadIds: Set<String> = []
     private var lastReportedProgress: [String: Double] = [:]
+    private var lastProgressTime: [String: CFTimeInterval] = [:]
     private var activeFFmpegSessions: [String: FFmpegSession] = [:]
 
     private var tracksById: [String: DownloadedTrackEntity] = [:]
@@ -559,6 +561,13 @@ extension DownloadManager {
         let clamped = min(0.99, max(0, fraction))
         let last = lastReportedProgress[videoId] ?? -1
         guard clamped >= 0.99 || last < 0 || clamped - last >= 0.02 else { return }
+        // Publishing `downloads` invalidates every observing song row, so cap
+        // it to ~5 Hz per download instead of firing on every 2% step.
+        if clamped < 0.99 {
+            let now = CACurrentMediaTime()
+            if now - (lastProgressTime[videoId] ?? 0) < 0.2 { return }
+            lastProgressTime[videoId] = now
+        }
         lastReportedProgress[videoId] = clamped
         downloads[videoId] = .downloading(clamped)
     }

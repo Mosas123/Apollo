@@ -41,16 +41,10 @@ struct MiniPlayerBarView: View {
         30 * 1.03
     }
 
+    // Environment-driven: the previous scene/window walk ran on every body
+    // evaluation (this view re-renders at progress rate and per drag frame).
     private var isDarkMode: Bool {
-        if let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,
-           let window = scene.windows.first(where: { $0.isKeyWindow }) ?? scene.windows.first {
-            return window.traitCollection.userInterfaceStyle == .dark
-        }
-        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let window = scene.windows.first {
-            return window.traitCollection.userInterfaceStyle == .dark
-        }
-        return colorScheme == .dark
+        colorScheme == .dark
     }
 
     private var titleColor: Color {

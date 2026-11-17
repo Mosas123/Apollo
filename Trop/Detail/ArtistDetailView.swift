@@ -323,7 +323,11 @@ struct ArtistDetailView: View {
                 for: CGFloat.self,
                 of: { $0.contentOffset.y },
                 action: { _, newOffset in
-                    scrollOffset = newOffset
+                    // Publish only coarse steps: writing this @State on every
+                    // scroll pixel re-evaluated the whole page and re-blurred
+                    // the banner per frame.
+                    let clamped = max(0, newOffset)
+                    if abs(clamped - scrollOffset) >= 12 { scrollOffset = clamped }
                 }
             )
             .ignoresSafeArea(.container, edges: .top)
@@ -506,7 +510,7 @@ struct ArtistDetailView: View {
             ZStack {
                 Color(.systemGray5)
 
-                AnimatedDistortion(size: size, isPlaying: NowPlaying.shared.isPlaying, amplitude: 6) {
+                AnimatedDistortion(size: size, isPlaying: NowPlaying.shared.isPlaying && scrollOffset < size.height, amplitude: 6) {
                     AsyncImageView(
                         url: ArtworkURLs.sized(artist.thumbnailUrl, width: 1200, height: 1200),
                         contentMode: .fill,
@@ -944,7 +948,7 @@ struct ArtistDetailView: View {
                 .padding(.top, 24)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: spacing) {
+                LazyHStack(spacing: spacing) {
                     content()
                 }
                 .padding(.horizontal, 16)

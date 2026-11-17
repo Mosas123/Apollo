@@ -9,7 +9,10 @@ struct PlayerBackgroundShader: View {
 
     var body: some View {
         GeometryReader { geometry in
-            TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: !isPlaying)) { context in
+            // 15 fps: the full-screen 80-pt blur + distortion is the most
+            // expensive per-frame effect in the app; the motion is slow enough
+            // that 15 fps reads the same while cutting GPU work ~40%.
+            TimelineView(.animation(minimumInterval: 1.0 / 15.0, paused: !isPlaying)) { context in
                 let time = context.date.timeIntervalSinceReferenceDate
                 Group {
                     if let image {

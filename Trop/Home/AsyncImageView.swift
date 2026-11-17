@@ -155,13 +155,18 @@ struct AsyncImageView: View {
     }
 }
 
+private let thumbnailCropRegex = try? NSRegularExpression(pattern: "(?<=[sh]\\d+)-c")
+private let thumbnailSizeRegex = try? NSRegularExpression(pattern: "w(\\d+)-h(\\d+)")
+
 private func normalizeThumbnailURL(_ urlString: String, pixels: Int) -> String {
     var url = urlString
 
-    url = url.replacingOccurrences(of: "(?<=[sh]\\d+)-c", with: "", options: .regularExpression)
+    if let crop = thumbnailCropRegex {
+        url = crop.stringByReplacingMatches(in: url, range: NSRange(url.startIndex..., in: url), withTemplate: "")
+    }
 
     if url.contains("googleusercontent.com") || url.contains("ggpht.com") {
-        if let match = try? NSRegularExpression(pattern: "w(\\d+)-h(\\d+)"),
+        if let match = thumbnailSizeRegex,
            let result = match.firstMatch(in: url, range: NSRange(url.startIndex..., in: url)),
            let wRange = Range(result.range(at: 1), in: url),
            let hRange = Range(result.range(at: 2), in: url),

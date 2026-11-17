@@ -319,7 +319,8 @@ struct HomeScreenView: View {
     private func mixedSection(_ section: HomeSection) -> some View {
         let queue = section.items.compactMap { if case .song(let s) = $0 { return s } else { return nil } }
         return HorizontalSection(title: section.displayTitle, vSpacing: 8, contentVerticalPadding: 0) {
-            HStack(spacing: 12) {
+            // Lazy so off-screen cards (and their image loads) build on approach.
+            LazyHStack(spacing: 12) {
                 ForEach(section.items, id: \.id) { item in
                     if case .song(let s) = item, !queue.isEmpty {
                         YouTubeGridItemView(item: item, onTap: { handleSongTap(s, in: queue) })

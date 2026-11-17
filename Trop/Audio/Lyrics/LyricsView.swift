@@ -22,6 +22,9 @@ struct LyricsView<ProgressSlider: View>: View {
     @State private var displayTime: TimeInterval = 0
     @State private var showSongMenu = false
     @State private var instrumentalGaps: [InstrumentalGap] = []
+    @State private var gapByAfterIndex: [Int: InstrumentalGap] = [:]
+    @State private var timedLineIndex: [Int] = []
+    @State private var timedLineStarts: [TimeInterval] = []
     @State private var romanizedLines: [String?] = []
 
     struct InstrumentalGap {
@@ -230,7 +233,7 @@ struct LyricsView<ProgressSlider: View>: View {
     /// A lyric line plus its interval ring, which only exists in the hierarchy
     /// while playback is actually inside the gap.
     private func lyricsLineRow(index: Int, line: LyricLine) -> some View {
-        let gap = instrumentalGaps.last(where: { $0.afterIndex == index })
+        let gap = gapByAfterIndex[index]
         let showRing = settings.showIntervalIndicator && gap != nil && isVisibleInGap(gap!)
         let romanized = romanization(for: index)
 
@@ -426,6 +429,7 @@ struct LyricsView<ProgressSlider: View>: View {
         }
         lines = []
         instrumentalGaps = []
+        rebuildLyricLookups()
         activeIndex = 0
         hasPositionedInitialLyrics = false
         isAutoScrollEnabled = true
@@ -439,24 +443,47 @@ struct LyricsView<ProgressSlider: View>: View {
             let withoutMarkers = result.filter { !Self.isInstrumentalMarker($0) }
             lines = withoutMarkers.isEmpty ? result : withoutMarkers
             instrumentalGaps = detectGaps(in: result)
+            rebuildLyricLookups()
             updateActiveLine()
             await rebuildRomanization()
         } catch {
         }
     }
 
-    private func updateActiveLine() {
-        guard !lines.isEmpty else { return }
-        let t = np.currentTime + settings.lyricsOffsetSeconds
-        var idx = 0
+    /// Precomputes the gap-by-line lookup and a sorted index of timed lines
+    /// once per lyric load, instead of scanning on every tick/row render.
+    private func rebuildLyricLookups() {
+        var gapMap: [Int: InstrumentalGap] = [:]
+        for gap in instrumentalGaps where gapMap[gap.afterIndex] == nil {
+            gapMap[gap.afterIndex] = gap
+        }
+        gapByAfterIndex = gapMap
+
+        var idx: [Int] = []
+        var starts: [TimeInterval] = []
+        idx.reserveCapacity(lines.count)
+        starts.reserveCapacity(lines.count)
         for (i, line) in lines.enumerated() {
-            guard let start = line.startTime else { continue }
-            if start <= t {
-                idx = i
-            } else {
-                break
+            if let start = line.startTime {
+                idx.append(i)
+                starts.append(start)
             }
         }
+        timedLineIndex = idx
+        timedLineStarts = starts
+    }
+
+    private func updateActiveLine() {
+        guard !timedLineStarts.isEmpty else { return }
+        let t = np.currentTime + settings.lyricsOffsetSeconds
+        // Last timed line whose start is <= t (binary search).
+        var lo = 0
+        var hi = timedLineStarts.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if timedLineStarts[mid] <= t { lo = mid + 1 } else { hi = mid }
+        }
+        let idx = lo > 0 ? timedLineIndex[lo - 1] : 0
         if idx != activeIndex {
             activeIndex = idx
         }
