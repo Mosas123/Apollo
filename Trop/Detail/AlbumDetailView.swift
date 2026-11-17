@@ -311,6 +311,7 @@ struct AlbumDetailView: View {
     @State private var descriptionExpanded = false
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     init(browseId: String) {
         self.browseId = browseId
@@ -318,34 +319,37 @@ struct AlbumDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
-            DetailStateContainer(
-                isLoading: viewModel.isLoading,
-                error: viewModel.error,
-                data: viewModel.album,
-                noun: "album",
-                emptyIcon: "music.note"
-            ) { album in
-                albumContent(for: album)
+        ZStack(alignment: .top) {
+            ScrollView {
+                DetailStateContainer(
+                    isLoading: viewModel.isLoading,
+                    error: viewModel.error,
+                    data: viewModel.album,
+                    noun: "album",
+                    emptyIcon: "music.note"
+                ) { album in
+                    albumContent(for: album)
+                }
             }
+            .scrollDisabled(viewModel.isLoading || viewModel.error != nil || viewModel.album == nil)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Color.clear.frame(height: 52).allowsHitTesting(false)
+            }
+            .background(albumBackdrop)
+            .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
+            .overlay(alignment: .top) {
+                GeometryReader { geometry in
+                    VariableBlurView(maxBlurRadius: 8, direction: .blurredTopClearBottom)
+                        .frame(height: geometry.safeAreaInsets.top + 12)
+                        .offset(y: -geometry.safeAreaInsets.top - (geometry.safeAreaInsets.top + 12) * 0.05)
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+            albumTopBar
+                .zIndex(1)
         }
-        .scrollDisabled(viewModel.isLoading || viewModel.error != nil || viewModel.album == nil)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            Color.clear.frame(height: 52)
-        }
-        .background(albumBackdrop)
-        .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
         .toolbar(.hidden, for: .navigationBar)
-        .overlay(alignment: .top) {
-            GeometryReader { geometry in
-                VariableBlurView(maxBlurRadius: 8, direction: .blurredTopClearBottom)
-                    .frame(height: geometry.safeAreaInsets.top + 12)
-                    .offset(y: -geometry.safeAreaInsets.top - (geometry.safeAreaInsets.top + 12) * 0.05)
-            }
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-        }
-        .overlay(alignment: .top) { albumTopBar }
         .task {
             guard viewModel.isLoading else { return }
             await viewModel.load()
@@ -367,8 +371,9 @@ struct AlbumDetailView: View {
             Button { dismiss() } label: {
                 Image(systemName: "chevron.left")
                     .font(.body.weight(.semibold))
-                    .frame(width: 40, height: 40)
-                    .glassEffect(.regular.interactive(), in: Circle())
+                    .frame(width: 44, height: 44)
+                    .contentShape(Circle())
+                    .background(.ultraThinMaterial, in: Circle())
             }
             .accessibilityLabel("Back")
 
@@ -380,15 +385,17 @@ struct AlbumDetailView: View {
                     ShareLink(item: url) {
                         Image(systemName: "square.and.arrow.up")
                             .frame(width: 40, height: 40)
+                            .contentShape(Rectangle())
                     }
                     .accessibilityLabel("Share album")
                     Button { showMoreSheet = true } label: {
                         Image(systemName: "ellipsis")
                             .frame(width: 40, height: 40)
+                            .contentShape(Rectangle())
                     }
                     .accessibilityLabel("Album options")
                 }
-                .glassEffect(.regular, in: Capsule())
+                .background(.ultraThinMaterial, in: Capsule())
             }
         }
         .foregroundStyle(.primary)
@@ -404,9 +411,9 @@ struct AlbumDetailView: View {
             if let primary = backdropColors.first {
                 LinearGradient(
                     colors: [
-                        primary.opacity(0.72),
-                        primary.opacity(0.66),
-                        primary.opacity(0.58)
+                        primary.opacity(colorScheme == .dark ? 0.72 : 0.16),
+                        primary.opacity(colorScheme == .dark ? 0.66 : 0.14),
+                        primary.opacity(colorScheme == .dark ? 0.58 : 0.12)
                     ],
                     startPoint: .top,
                     endPoint: .bottom

@@ -15,6 +15,7 @@ import Nuke
 /// tab bar, matching the Apple Music behavior; otherwise it renders as the
 /// 48pt floating glass capsule with a bottom progress line.
 struct MiniPlayerBarView: View {
+    let artworkNamespace: Namespace.ID
     let onExpand: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
@@ -61,14 +62,21 @@ struct MiniPlayerBarView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            if isDetached {
-                detachedNowPlaying
-            } else {
-                pagingArea
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                if isDetached {
+                    detachedNowPlaying
+                } else {
+                    pagingArea
+                }
+                playPauseButton
+                    .frame(width: 44, height: barHeight)
+                if geometry.size.width >= 300 && np.hasNext {
+                    nextButton
+                        .frame(width: 44, height: barHeight)
+                }
             }
-            playPauseButton
-                .padding(.trailing, 16)
+            .padding(.trailing, 8)
         }
         .frame(height: barHeight)
         .frame(maxWidth: .infinity)
@@ -123,7 +131,7 @@ struct MiniPlayerBarView: View {
                         .offset(x: pageWidth)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            .frame(width: pageWidth, height: barHeight, alignment: .center)
             .offset(x: dragOffset)
             .clipped()
             .contentShape(Rectangle())
@@ -152,8 +160,10 @@ struct MiniPlayerBarView: View {
                     .truncationMode(.tail)
             }
         }
-        .frame(width: width, alignment: .leading)
         .padding(.leading, 16)
+        .padding(.trailing, 8)
+        .frame(width: width, alignment: .leading)
+        .clipped()
         .contentShape(Rectangle())
     }
 
@@ -171,17 +181,37 @@ struct MiniPlayerBarView: View {
         }
         .frame(width: artworkSize, height: artworkSize)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .modifier(PlayerArtworkMatch(namespace: artworkNamespace, isCurrent: isCurrent, isSource: miniArtworkIsSource))
+    }
+
+    private var miniArtworkIsSource: Bool {
+        !sheet.isExpanded || sheet.isCollapsing || !sheet.hasExpandedArtwork
     }
 
     private var playPauseButton: some View {
-                Button(action: { player.togglePlayPause() }, label: {
+        Button(action: { player.togglePlayPause() }, label: {
             Image(systemName: np.isPlaying ? "pause.fill" : "play.fill")
                 .contentTransition(.symbolEffect(.replace))
                 .font(.system(size: 17))
-                .foregroundStyle(.tint)
+                .foregroundStyle(titleColor)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
         })
+        .buttonStyle(.plain)
         .accessibilityLabel(np.isPlaying ? "Pause" : "Play")
         .sensoryFeedback(.impact(weight: .light), trigger: np.isPlaying)
+    }
+
+    private var nextButton: some View {
+        Button { np.playNext() } label: {
+            Image(systemName: "forward.fill")
+                .font(.system(size: 17))
+                .foregroundStyle(titleColor)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Next track")
     }
 
     private var progressLine: some View {
@@ -235,6 +265,7 @@ struct MiniPlayerBarView: View {
             }
             .frame(width: artworkSize, height: artworkSize)
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .modifier(PlayerArtworkMatch(namespace: artworkNamespace, isCurrent: true, isSource: miniArtworkIsSource))
 
             VStack(alignment: .leading, spacing: 0) {
                 Text(np.title)
@@ -248,6 +279,8 @@ struct MiniPlayerBarView: View {
                     .truncationMode(.tail)
                     .foregroundStyle(artistColor)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .clipped()
 
             Spacer(minLength: 0)
         }
@@ -338,6 +371,21 @@ struct MiniPlayerBarView: View {
             }
             withAnimation(nil) { dragOffset = 0 }
             isCommitting = false
+        }
+    }
+}
+
+private struct PlayerArtworkMatch: ViewModifier {
+    let namespace: Namespace.ID
+    let isCurrent: Bool
+    let isSource: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isCurrent {
+            content.matchedGeometryEffect(id: "playerArtwork", in: namespace, isSource: isSource)
+        } else {
+            content
         }
     }
 }

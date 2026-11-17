@@ -15,6 +15,7 @@ struct ContentView: View {
     @State private var selectedTab = SettingsStore.shared.defaultTab
     @State private var sheet = PlayerSheetState.shared
     @State private var scrollState = MiniPlayerScrollState()
+    @Namespace private var playerArtworkNamespace
 
     var body: some View {
         ZStack {
@@ -25,7 +26,7 @@ struct ContentView: View {
             tabContent
 
             if sheet.isExpanded {
-                FullPlayerView(onCollapse: collapsePlayer)
+                FullPlayerView(artworkNamespace: playerArtworkNamespace, onCollapse: collapsePlayer)
                     .transition(.move(edge: .bottom))
             }
         }
@@ -52,13 +53,13 @@ struct ContentView: View {
         .onReceive(AppRouter.shared.$activeRoute) { route in
             // A detail page was opened from an overlay: collapse the player so
             // the pushed page is visible underneath.
-            if route != nil {
-                withAnimation(.smooth(duration: 0.3)) {
-                    sheet.isExpanded = false
-                }
+            if route != nil, sheet.isExpanded {
+                collapsePlayer()
             }
         }
         .onReceive(AppRouter.shared.$playerExpandToken.dropFirst()) { _ in
+            guard !sheet.isCollapsing else { return }
+            sheet.hasExpandedArtwork = !nowPlaying.isVideoMode
             withAnimation(.smooth(duration: 0.3)) {
                 sheet.isExpanded = true
             }
@@ -68,7 +69,7 @@ struct ContentView: View {
 
     private var tabContent: some View {
         TabView(selection: $selectedTab) {
-            Tab("Home", systemImage: "music.note.house.fill", value: 0) {
+            Tab("Home", systemImage: "house.fill", value: 0) {
                 HomeScreenView()
             }
 
@@ -94,7 +95,7 @@ struct ContentView: View {
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .tabViewBottomAccessory(isEnabled: nowPlaying.isBarPresented) {
-            MiniPlayerBarView(onExpand: {
+            MiniPlayerBarView(artworkNamespace: playerArtworkNamespace, onExpand: {
                 // Dismiss the keyboard before expanding the player so the reveal is visible on the first tap.
                 UIApplication.shared.sendAction(
                     #selector(UIResponder.resignFirstResponder),
@@ -102,6 +103,7 @@ struct ContentView: View {
                     from: nil,
                     for: nil
                 )
+                sheet.hasExpandedArtwork = !nowPlaying.isVideoMode
                 withAnimation(.smooth(duration: 0.3)) {
                     sheet.isExpanded = true
                 }
@@ -113,15 +115,14 @@ struct ContentView: View {
     }
 
     private func collapsePlayer() {
-        withAnimation(.smooth(duration: 0.3)) {
+        guard !sheet.isCollapsing else { return }
+        withAnimation(.smooth(duration: 0.3), completionCriteria: .logicallyComplete) {
+            sheet.isCollapsing = true
+            sheet.dragOffset = max(UIScreen.main.bounds.height * 1.1, sheet.dragOffset)
+        } completion: {
             sheet.isExpanded = false
-        }
-        // Keep the drag offset until the player has finished sliding out.
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(320))
-            if !sheet.isExpanded {
-                sheet.dragOffset = 0
-            }
+            sheet.dragOffset = 0
+            sheet.isCollapsing = false
         }
     }
 

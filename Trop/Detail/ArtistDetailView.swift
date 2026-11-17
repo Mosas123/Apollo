@@ -336,6 +336,7 @@ struct ArtistDetailView: View {
 
             customTopBar
                 .padding(.top, geo.safeAreaInsets.top)
+                .zIndex(1)
         }
         .ignoresSafeArea(.container, edges: .top)
         }
@@ -359,11 +360,12 @@ struct ArtistDetailView: View {
                     ShareLink(item: url) {
                         Image(systemName: "square.and.arrow.up")
                             .frame(width: 40, height: 40)
+                            .contentShape(Rectangle())
                     }
                     .accessibilityLabel("Share artist")
                     topBarMenuButton
                 }
-                .glassEffect(.regular, in: Capsule())
+                .background(.ultraThinMaterial, in: Capsule())
             }
         }
         .foregroundStyle(.primary)
@@ -410,8 +412,9 @@ struct ArtistDetailView: View {
         Button(action: action, label: {
             Image(systemName: systemName)
                 .font(.body.weight(.semibold))
-                .frame(width: 40, height: 40)
-                .glassEffect(.regular.interactive(), in: Circle())
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+                .background(.ultraThinMaterial, in: Circle())
         })
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
@@ -728,7 +731,7 @@ struct ArtistDetailView: View {
     }
 
     private func featuredAlbumCard(_ album: AlbumItem) -> some View {
-        HStack(spacing: 12) {
+        ZStack(alignment: .trailing) {
             NavigationLink(value: DetailRoute.album(browseId: album.browseId)) {
                 HStack(spacing: 12) {
                     AsyncImageView(url: album.thumbnailUrl)
@@ -749,8 +752,11 @@ struct ArtistDetailView: View {
                             .lineLimit(2)
                     }
 
-                    Spacer(minLength: 8)
+                    Spacer(minLength: 48)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             }
             .buttonStyle(.plain)
 
@@ -762,8 +768,8 @@ struct ArtistDetailView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Save album")
+            .padding(.trailing, 12)
         }
-        .padding(12)
         .background {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(.white.opacity(0.12))

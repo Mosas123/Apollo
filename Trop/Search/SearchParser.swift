@@ -8,7 +8,9 @@
 import Foundation
 
 struct SearchSection: Identifiable {
-    let id = UUID()
+    // The parser merges sections by title; keep that identity stable when
+    // sorted or library sections are rebuilt during a scroll update.
+    var id: String { title }
     var title: String
     var items: [YTItem]
 }

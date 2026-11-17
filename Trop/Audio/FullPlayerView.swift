@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct FullPlayerView: View {
+    let artworkNamespace: Namespace.ID
     let onCollapse: () -> Void
 
     @Environment(SettingsStore.self) private var settings
@@ -87,7 +88,7 @@ struct FullPlayerView: View {
                     }
                 }
 
-                if !showLyrics && !showQueue && !np.isVideoMode {
+                if showsMainArtwork {
                     // Centered rounded-square cover (Apple Music style): the same
                     // shape for every song, so square album art and 16:9 video
                     // thumbnails all read consistently over the gradient.
@@ -95,6 +96,7 @@ struct FullPlayerView: View {
                         .aspectRatio(1, contentMode: .fit)
                         .frame(maxWidth: min(geometry.size.width - 48, 520))
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .matchedGeometryEffect(id: "playerArtwork", in: artworkNamespace, isSource: !sheet.isCollapsing)
                         .shadow(color: .black.opacity(0.4), radius: 28, y: 16)
                         .padding(.top, geometry.safeAreaInsets.top + 36)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -197,11 +199,19 @@ struct FullPlayerView: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
+                .opacity(1 - min(max((sheet.dragOffset - 40) / 180, 0), 1))
+                .allowsHitTesting(sheet.dragOffset < 40 && !sheet.isCollapsing)
             }
             .overlay {
                 if showGoToMenu {
                     goToMenuOverlay
                 }
+            }
+            .overlay(alignment: .top) {
+                transitionMiniPlayer
+                    .opacity(min(max((sheet.dragOffset - 80) / 140, 0), 1))
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
             .clipShape(
                 UnevenRoundedRectangle(
@@ -214,6 +224,9 @@ struct FullPlayerView: View {
             .offset(y: sheet.dragOffset)
             .animation(.easeInOut(duration: 0.35), value: showQueue)
             .simultaneousGesture(collapseDrag)
+            .onChange(of: showsMainArtwork, initial: true) { _, visible in
+                sheet.hasExpandedArtwork = visible
+            }
             .onChange(of: np.videoId) { _, _ in
                 np.isVideoMode = false
                 showLyrics = false
@@ -246,7 +259,36 @@ struct FullPlayerView: View {
         .preferredColorScheme(.dark)
     }
 
+    private var showsMainArtwork: Bool {
+        !showLyrics && !showQueue && !np.isVideoMode
+    }
+
     // MARK: - Go to album/artist
+
+    /// A compact representation follows the card as it approaches the accessory.
+    private var transitionMiniPlayer: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(np.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                Text(np.displayArtist)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Image(systemName: np.isPlaying ? "pause.fill" : "play.fill")
+                .frame(width: 30, height: 40)
+            if np.hasNext {
+                Image(systemName: "forward.fill")
+                    .frame(width: 30, height: 40)
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+    }
 
     private var currentSong: SongItem? {
         np.queueSongs.indices.contains(np.queueIndex) ? np.queueSongs[np.queueIndex] : nil
@@ -359,15 +401,16 @@ struct FullPlayerView: View {
     private var collapseDrag: some Gesture {
         DragGesture(minimumDistance: 12)
             .onChanged { value in
-                guard value.translation.height > 0,
+                guard !sheet.isCollapsing, value.translation.height > 0,
                       value.translation.height > abs(value.translation.width) else { return }
                 // Track the finger 1:1 while the content behind stays in place.
                 sheet.dragOffset = value.translation.height
             }
             .onEnded { value in
+                guard !sheet.isCollapsing else { return }
                 let isVertical = value.translation.height > abs(value.translation.width)
                 if isVertical, value.translation.height > 140 {
-                    // collapsePlayer relaxes dragOffset after the card slides out.
+                    // Finish the current drag using the same dismissal transition.
                     onCollapse()
                 } else {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
