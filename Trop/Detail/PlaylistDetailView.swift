@@ -134,7 +134,7 @@ final class PlaylistDetailViewModel {
                 with: "", options: .regularExpression
             ).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !artist.isEmpty, !title.isEmpty,
-                  let metadata = await MetadataResolver.enrich(title: title, artist: artist, album: song.album),
+                  let metadata = await MetadataResolver.enrich(title: title, artist: artist, album: song.album, duration: song.duration),
                   TextMatch.titlesMatch(metadata.title, title),
                   TextMatch.artistsMatch(metadata.artist, artist) else { continue }
             guard !Task.isCancelled, generation == loadGeneration else { return }

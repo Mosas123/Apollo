@@ -655,8 +655,13 @@ final class NowPlaying {
         guard !MusicPlaybackIdentity.isExternal(videoId) else { return false }
         let title = title
         let artist = artist
+        let song = queueSongs.first { $0.videoId == videoId }
+        let album = song?.album
+        let duration = song?.duration
         guard !title.isEmpty else { return false }
-        let resolved = await Self.resolveMetadataWithTimeout(title: title, artist: artist, seconds: 2.5)
+        let resolved = await Self.resolveMetadataWithTimeout(
+            title: title, artist: artist, album: album, duration: duration, seconds: 2.5
+        )
         guard let resolved, !Task.isCancelled, lastLoadedVideoId == videoId else { return false }
         guard TextMatch.titlesMatch(resolved.title, title) else { return false }
         if !artist.isEmpty {
@@ -665,7 +670,13 @@ final class NowPlaying {
         if !resolved.title.isEmpty { self.title = resolved.title }
         if !resolved.artist.isEmpty { self.artist = resolved.artist }
         if let album = resolved.album, !album.isEmpty { self.albumTitle = album }
-        guard let artworkString = ArtworkURLs.highRes(resolved.artworkURL?.absoluteString),
+        // One cover per album: every track of the same album shows the same art.
+        var coverURL = resolved.artworkURL
+        if let album, !album.isEmpty,
+           let albumCover = await AlbumCoverStore.shared.coverURL(album: album, artist: artist) {
+            coverURL = albumCover
+        }
+        guard let artworkString = ArtworkURLs.highRes(coverURL?.absoluteString),
               let artworkURL = URL(string: artworkString),
               let image = try? await ArtworkLoader.image(for: artworkURL) else { return false }
         guard lastLoadedVideoId == videoId else { return false }
@@ -678,10 +689,16 @@ final class NowPlaying {
     private static func resolveMetadataWithTimeout(
         title: String,
         artist: String,
+        album: String?,
+        duration: Int?,
         seconds: Double
     ) async -> ResolvedMetadata? {
         await withTaskGroup(of: ResolvedMetadata?.self) { group in
-            group.addTask { await MetadataResolver.enrich(title: title, artist: artist) }
+            group.addTask {
+                await MetadataResolver.enrich(
+                    title: title, artist: artist, album: album, duration: duration
+                )
+            }
             group.addTask {
                 try? await Task.sleep(for: .seconds(seconds))
                 return nil

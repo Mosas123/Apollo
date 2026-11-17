@@ -15,7 +15,7 @@ struct ResolvedMetadata: Sendable, Codable {
 /// only reads public catalogues.
 enum MetadataResolver {
     /// Resolve canonical metadata for a track. Tries iTunes, then MusicBrainz.
-    static func enrich(title: String, artist: String, album: String? = nil) async -> ResolvedMetadata? {
+    static func enrich(title: String, artist: String, album: String? = nil, duration: Int? = nil) async -> ResolvedMetadata? {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let artist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return nil }
@@ -27,9 +27,9 @@ enum MetadataResolver {
 
         // Apple/iTunes is the primary catalogue (matches the app's design);
         // MusicBrainz and Deezer are fallbacks only.
-        var resolved = await iTunes(title: title, artist: artist, album: album)
+        var resolved = await iTunes(title: title, artist: artist, album: album, duration: duration)
         if resolved == nil {
-            resolved = await deezer(title: title, artist: artist, album: album)
+            resolved = await deezer(title: title, artist: artist, album: album, duration: duration)
         }
         if resolved == nil {
             resolved = await musicBrainz(title: title, artist: artist)
@@ -77,11 +77,12 @@ enum MetadataResolver {
             let collectionName: String?
             let releaseDate: String?
             let artworkUrl100: String?
+            let trackTimeMillis: Int?
         }
         let results: [Result]
     }
 
-    private static func iTunes(title: String, artist: String, album: String?) async -> ResolvedMetadata? {
+    private static func iTunes(title: String, artist: String, album: String?, duration: Int?) async -> ResolvedMetadata? {
         var components = URLComponents(string: "https://itunes.apple.com/search")
         components?.queryItems = [
             URLQueryItem(name: "term", value: "\(TextMatch.queryArtist(artist)) \(title)"),
@@ -95,7 +96,14 @@ enum MetadataResolver {
 
         let candidates = response.results.filter { result in
             guard let track = result.trackName, let name = result.artistName else { return false }
-            return TextMatch.titlesMatch(track, title) && TextMatch.artistsMatch(name, artist)
+            guard TextMatch.titlesMatch(track, title), TextMatch.artistsMatch(name, artist) else { return false }
+            let querySuspicious = TextMatch.isSuspiciousVersion(title)
+            if !querySuspicious, TextMatch.isSuspiciousVersion(track) { return false }
+            if let duration, duration > 0, let millis = result.trackTimeMillis {
+                let seconds = millis / 1000
+                if abs(seconds - duration) > 15 { return false }
+            }
+            return true
         }
         // Prefer the release that matches the album we already know.
         let best = candidates.first { result in
@@ -176,11 +184,12 @@ enum MetadataResolver {
             let title: String?
             let artist: Artist?
             let album: Album?
+            let duration: Int?
         }
         let data: [Track]
     }
 
-    private static func deezer(title: String, artist: String, album: String?) async -> ResolvedMetadata? {
+    private static func deezer(title: String, artist: String, album: String?, duration: Int?) async -> ResolvedMetadata? {
         var components = URLComponents(string: "https://api.deezer.com/search")
         let query = artist.isEmpty ? title : "\(TextMatch.queryArtist(artist)) \(title)"
         components?.queryItems = [
@@ -193,8 +202,15 @@ enum MetadataResolver {
         }
         let candidates = response.data.filter { track in
             guard let trackTitle = track.title else { return false }
-            return TextMatch.titlesMatch(trackTitle, title)
-                && TextMatch.artistsMatch(track.artist?.name ?? "", artist)
+            guard TextMatch.titlesMatch(trackTitle, title),
+                  TextMatch.artistsMatch(track.artist?.name ?? "", artist) else { return false }
+            let querySuspicious = TextMatch.isSuspiciousVersion(title)
+            if !querySuspicious, TextMatch.isSuspiciousVersion(trackTitle) { return false }
+            if let duration, duration > 0, let seconds = track.duration,
+               abs(seconds - duration) > 15 {
+                return false
+            }
+            return true
         }
         let best = candidates.first { track in
             guard let requested = album, !requested.isEmpty,

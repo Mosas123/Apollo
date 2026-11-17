@@ -111,6 +111,17 @@ enum TextMatch {
         return false
     }
 
+    /// Karaoke/tribute/sped-up uploads that pollute catalogue matches.
+    static func isSuspiciousVersion(_ title: String) -> Bool {
+        let text = normalizeTitle(title)
+        let markers = [
+            "karaoke", "tribute", "made famous", "instrumental",
+            "8d audio", "sped up", "nightcore", "reverb",
+            "in the style of", "cover by", "originally performed"
+        ]
+        return markers.contains { text.contains($0) }
+    }
+
     static func albumsMatch(_ lhs: String, _ rhs: String) -> Bool {
         let a = normalizeTitle(lhs)
         let b = normalizeTitle(rhs)
