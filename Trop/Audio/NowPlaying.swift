@@ -595,6 +595,11 @@ final class NowPlaying {
         }
 
         let hasTrackArtwork = !(thumb?.isEmpty ?? true)
+        let kind = queueSongs.first { $0.videoId == videoId }?.contentKind
+        let isPodcast = kind == .episode || kind == .podcast
+        let isMusic = !isPodcast
+            && playbackKind != .radio
+            && !MusicPlaybackIdentity.isExternal(videoId)
         artworkLoadTask?.cancel()
         artworkLoadTask = Task {
             // For downloaded songs, try to extract embedded artwork from the local file first.
@@ -603,10 +608,81 @@ final class NowPlaying {
                 loadArtworkFromLocalFile(localURL, videoId: videoId)
                 return
             }
-            loadThumbnailFromCDN(videoId: videoId, thumbnailUrl: thumb)
-            // Only fill in a cover when the track has none: replacing an existing
-            // YT Music cover with a resolver match can swap in the wrong release.
-            enrichArtwork(videoId: videoId, replaceArtwork: !hasTrackArtwork)
+            if isMusic {
+                // Apple Music-style: never flash the YouTube cover. Show a
+                // blurred placeholder immediately, then swap in the canonical
+                // cover once resolved; fall back to the crisp YT image only if
+                // resolution misses.
+                thumbnailUIImage = nil
+                thumbnailImage = nil
+                thumbnailVersion &+= 1
+                let youTubeImage = await Self.fetchImage(thumb)
+                if let youTubeImage {
+                    publishArtwork(Self.blurredPlaceholder(youTubeImage))
+                }
+                let resolved = await resolveCanonicalArtwork(videoId: videoId)
+                if !resolved, let youTubeImage, lastLoadedVideoId == videoId {
+                    publishArtwork(youTubeImage)
+                }
+            } else {
+                loadThumbnailFromCDN(videoId: videoId, thumbnailUrl: thumb)
+                enrichArtwork(videoId: videoId, replaceArtwork: !hasTrackArtwork)
+            }
+        }
+    }
+
+    private static func fetchImage(_ urlString: String?) async -> UIImage? {
+        guard let urlString, let url = URL(string: urlString) else { return nil }
+        return try? await ArtworkLoader.image(for: url)
+    }
+
+    /// Tiny downscale used as a soft placeholder (the player upscales it).
+    private static func blurredPlaceholder(_ image: UIImage) -> UIImage {
+        let side: CGFloat = 16
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: side, height: side))
+        return renderer.image { _ in
+            image.draw(in: CGRect(x: 0, y: 0, width: side, height: side))
+        }
+    }
+
+    /// Resolves the canonical cover (Apple → Deezer → CAA) with a hard timeout
+    /// and publishes it if it clearly matches. Returns whether it published.
+    private func resolveCanonicalArtwork(videoId: String) async -> Bool {
+        guard !MusicPlaybackIdentity.isExternal(videoId) else { return false }
+        let title = title
+        let artist = artist
+        guard !title.isEmpty else { return false }
+        let resolved = await Self.resolveMetadataWithTimeout(title: title, artist: artist, seconds: 2.5)
+        guard let resolved, !Task.isCancelled, lastLoadedVideoId == videoId else { return false }
+        guard TextMatch.titlesMatch(resolved.title, title) else { return false }
+        if !artist.isEmpty {
+            guard TextMatch.artistsMatch(resolved.artist, artist) else { return false }
+        }
+        if !resolved.title.isEmpty { self.title = resolved.title }
+        if !resolved.artist.isEmpty { self.artist = resolved.artist }
+        if let album = resolved.album, !album.isEmpty { self.albumTitle = album }
+        guard let artworkURL = resolved.artworkURL,
+              let image = try? await ArtworkLoader.image(for: artworkURL) else { return false }
+        guard lastLoadedVideoId == videoId else { return false }
+        publishArtwork(image)
+        PlayerController.shared.setNowPlayingMetadata()
+        return true
+    }
+
+    private static func resolveMetadataWithTimeout(
+        title: String,
+        artist: String,
+        seconds: Double
+    ) async -> ResolvedMetadata? {
+        await withTaskGroup(of: ResolvedMetadata?.self) { group in
+            group.addTask { await MetadataResolver.enrich(title: title, artist: artist) }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(seconds))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
         }
     }
 
