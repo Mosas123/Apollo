@@ -39,6 +39,10 @@ struct ContentView: View {
                     .transition(.move(edge: .bottom))
             }
         }
+        .background {
+            Color(.systemBackground)
+                .ignoresSafeArea(.container, edges: .all)
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .environment(scrollState)
         .onAppear {

@@ -104,7 +104,7 @@ struct FullPlayerView: View {
                     Capsule()
                         .fill(.white.opacity(0.3))
                         .frame(width: 36, height: 5)
-                        .padding(.top, 16)
+                        .padding(.top, geometry.safeAreaInsets.top + 16)
                         .padding(.bottom, 16)
                         .contentShape(Rectangle().size(width: 60, height: 30))
                         .onTapGesture {
@@ -203,7 +203,6 @@ struct FullPlayerView: View {
                     goToMenuOverlay
                 }
             }
-            .ignoresSafeArea(.container, edges: .bottom)
             .clipShape(
                 UnevenRoundedRectangle(
                     topLeadingRadius: 38 * cardProgress,
@@ -211,6 +210,7 @@ struct FullPlayerView: View {
                     style: .continuous
                 )
             )
+            .ignoresSafeArea(.container, edges: .all)
             .offset(y: sheet.dragOffset)
             .animation(.easeInOut(duration: 0.35), value: showQueue)
             .simultaneousGesture(collapseDrag)
