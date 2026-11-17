@@ -335,6 +335,20 @@ actor PlaybackManager {
         return nil
     }
 
+    /// Lossless always beats lossy. Between lossy sources, the higher bitrate
+    /// wins; if YouTube's bitrate is unknown, prefer a known upgrade.
+    private static func shouldPreferUpgrade(
+        _ upgrade: PlaybackResult,
+        over current: PlaybackResult
+    ) -> Bool {
+        if losslessLabel(upgrade) != nil { return true }
+        if losslessLabel(current) != nil { return false }
+        let upgradeRate = upgrade.bitrate
+        let currentRate = current.bitrate
+        if currentRate <= 0 { return upgradeRate > 0 }
+        return upgradeRate > currentRate
+    }
+
     private static func qualityLabel(_ result: PlaybackResult) -> String? {
         if let lossless = losslessLabel(result) { return lossless }
         let mime = result.mimeType.lowercased()
@@ -476,11 +490,6 @@ actor PlaybackManager {
     /// Runs the client fallback chain for playback. Only called once per
     /// videoId by `resolveAndPlay`, which owns the in-flight dedup entry.
     private func resolveAndPlayFromNetwork(videoId: String) async throws -> PlaybackResult {
-        // Lossless if it was prefetched ahead of time; never blocks the play.
-        if let lossless = prefetchedUpgrade(videoId: videoId) {
-            await playNetworkResult(lossless, videoId: videoId)
-            return lossless
-        }
         var request = StreamResolveRequest.playback(videoId: videoId)
         request.options.audioQuality = SettingsStore.shared.audioQuality
         let result = try await StreamFallback.resolveFirstValid(
@@ -488,6 +497,14 @@ actor PlaybackManager {
             using: InnerTubeClient.tropShared,
             providers: .tropLive
         )
+        // If a better source was prefetched, use whichever is higher quality.
+        // Lossless always wins; otherwise compare bitrate. The prefetched
+        // result is local, so this comparison adds no wait.
+        if let upgrade = prefetchedUpgrade(videoId: videoId),
+           Self.shouldPreferUpgrade(upgrade, over: result) {
+            await playNetworkResult(upgrade, videoId: videoId)
+            return upgrade
+        }
         await playNetworkResult(result, videoId: videoId)
         // Warm this track (for replays) and the next one while it plays. Off the
         // play path: never delays audio.
