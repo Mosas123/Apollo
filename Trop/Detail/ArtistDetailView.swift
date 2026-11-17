@@ -44,6 +44,8 @@ final class ArtistDetailViewModel {
             if let resolved = await ArtistImageResolver.preferredImageURL(name: parsed.name, youTubeURL: ytURL) {
                 artist?.heroImageURL = resolved.absoluteString
             }
+            // Unblock the hero either way (falls back to the YouTube thumbnail).
+            artist?.heroImageResolved = true
         } catch {
             self.error = error
             isLoading = false
@@ -518,19 +520,30 @@ struct ArtistDetailView: View {
                 Color(.systemGray5)
 
                 AnimatedDistortion(size: size, isPlaying: NowPlaying.shared.isPlaying && scrollOffset < size.height, amplitude: 6) {
-                    AsyncImageView(
-                        url: ArtworkURLs.sized(artist.heroImageURL ?? artist.thumbnailUrl, width: 1200, height: 1200),
-                        contentMode: .fill,
-                        onImageLoaded: { image in
-                            guard backdropColors.isEmpty else { return }
-                            withAnimation(.easeInOut(duration: 0.4)) {
-                                backdropColors = image.extractDominantColors()
-                            }
+                    Group {
+                        if artist.heroImageResolved {
+                            AsyncImageView(
+                                url: ArtworkURLs.sized(artist.heroImageURL ?? artist.thumbnailUrl, width: 1200, height: 1200),
+                                contentMode: .fill,
+                                onImageLoaded: { image in
+                                    guard backdropColors.isEmpty else { return }
+                                    withAnimation(.easeInOut(duration: 0.4)) {
+                                        backdropColors = image.extractDominantColors()
+                                    }
+                                }
+                            )
+                        } else {
+                            AsyncImageView(
+                                url: ArtworkURLs.sized(artist.thumbnailUrl, width: 600, height: 600),
+                                contentMode: .fill
+                            )
+                            .blur(radius: 30)
+                            .opacity(0.5)
                         }
-                    )
+                    }
                     .frame(width: size.width, height: size.height)
-                    .blur(radius: min(max(scrollOffset, 0) / 20, 12))
                     .clipped()
+                    .blur(radius: min(max(scrollOffset, 0) / 20, 12))
                 }
 
                 // Fades the photo into the artist's dominant color so the page reads
@@ -636,10 +649,21 @@ struct ArtistDetailView: View {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .bottomLeading) {
                     ZStack {
-                        AsyncImageView(
-                            url: ArtworkURLs.sized(artist.heroImageURL ?? artist.thumbnailUrl, width: 1200, height: 1200),
-                            contentMode: .fill
-                        )
+                        Group {
+                            if artist.heroImageResolved {
+                                AsyncImageView(
+                                    url: ArtworkURLs.sized(artist.heroImageURL ?? artist.thumbnailUrl, width: 1200, height: 1200),
+                                    contentMode: .fill
+                                )
+                            } else {
+                                AsyncImageView(
+                                    url: ArtworkURLs.sized(artist.thumbnailUrl, width: 600, height: 600),
+                                    contentMode: .fill
+                                )
+                                .blur(radius: 30)
+                                .opacity(0.5)
+                            }
+                        }
                         .frame(height: UIScreen.main.bounds.height * 0.52)
                         .clipped()
 

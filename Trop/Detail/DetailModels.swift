@@ -24,6 +24,8 @@ struct AlbumDetailInfo {
     var featuredPlaylists: [PlaylistItem] = []
     /// Canonical, higher-resolution cover (Apple/Deezer), when resolved.
     var enrichedArtworkURL: String? = nil
+    /// False while we're still resolving the canonical cover (shows placeholder).
+    var artworkResolved: Bool = false
 }
 
 /// Parsed detail data for an artist page.
@@ -42,6 +44,8 @@ struct ArtistDetailInfo {
     var relatedArtists: [ArtistItem] = []
     /// Higher-quality profile photo (Apple/Deezer/Wikimedia), when resolved.
     var heroImageURL: String? = nil
+    /// False while the profile photo is still being resolved (shows placeholder).
+    var heroImageResolved: Bool = false
 }
 
 /// Parsed detail data for a playlist page.

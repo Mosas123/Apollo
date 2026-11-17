@@ -47,6 +47,7 @@ final class AlbumDetailViewModel {
                let artwork = metadata.artworkURL {
                 album?.enrichedArtworkURL = artwork.absoluteString
             }
+            album?.artworkResolved = true
         } catch {
             Log.albumDetailViewModel.error("Failed: \(error)")
             self.error = error
@@ -571,15 +572,25 @@ struct AlbumDetailView: View {
     private func header(for album: AlbumDetailInfo) -> some View {
         VStack(spacing: 12) {
             // Album artwork
-            HeroArtworkView(
-                url: album.enrichedArtworkURL ?? album.thumbnailUrl,
-                onImageLoaded: { image in
-                    guard backdropColors.isEmpty else { return }
-                    withAnimation(.easeInOut(duration: 0.4)) {
-                        backdropColors = [image.extractAlbumBackdropColor()]
-                    }
+            Group {
+                if album.artworkResolved {
+                    HeroArtworkView(
+                        url: album.enrichedArtworkURL ?? album.thumbnailUrl,
+                        onImageLoaded: { image in
+                            guard backdropColors.isEmpty else { return }
+                            withAnimation(.easeInOut(duration: 0.4)) {
+                                backdropColors = [image.extractAlbumBackdropColor()]
+                            }
+                        }
+                    )
+                } else {
+                    AsyncImageView(url: album.thumbnailUrl)
+                        .blur(radius: 24)
+                        .opacity(0.5)
+                        .aspectRatio(1, contentMode: .fit)
+                        .padding(.horizontal, 40)
                 }
-            )
+            }
 
             // Album title
             Text(album.title)
