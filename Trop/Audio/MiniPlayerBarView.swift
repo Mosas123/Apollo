@@ -188,11 +188,22 @@ struct MiniPlayerBarView: View {
         }
         .frame(width: artworkSize, height: artworkSize)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .modifier(PlayerArtworkMatch(namespace: artworkNamespace, isCurrent: isCurrent, isSource: miniArtworkIsSource))
+        .modifier(PlayerArtworkMatch(
+            namespace: artworkNamespace,
+            isCurrent: isCurrent,
+            isSource: miniArtworkIsSource,
+            isEnabled: miniArtworkMatchingEnabled
+        ))
+    }
+
+    /// A hidden accessory must not become a destination when the full player
+    /// switches to queue, lyrics or video. Reconnect only for presentation/docking.
+    private var miniArtworkMatchingEnabled: Bool {
+        !sheet.isExpanded || sheet.isCollapsing
     }
 
     private var miniArtworkIsSource: Bool {
-        !sheet.isExpanded || sheet.isCollapsing || !sheet.hasExpandedArtwork
+        !sheet.isExpanded || sheet.isCollapsing
     }
 
     private var playPauseButton: some View {
@@ -272,7 +283,12 @@ struct MiniPlayerBarView: View {
             }
             .frame(width: artworkSize, height: artworkSize)
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .modifier(PlayerArtworkMatch(namespace: artworkNamespace, isCurrent: true, isSource: miniArtworkIsSource))
+            .modifier(PlayerArtworkMatch(
+                namespace: artworkNamespace,
+                isCurrent: true,
+                isSource: miniArtworkIsSource,
+                isEnabled: miniArtworkMatchingEnabled
+            ))
 
             VStack(alignment: .leading, spacing: 0) {
                 Text(np.title)
@@ -386,10 +402,11 @@ private struct PlayerArtworkMatch: ViewModifier {
     let namespace: Namespace.ID
     let isCurrent: Bool
     let isSource: Bool
+    let isEnabled: Bool
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        if isCurrent {
+        if isCurrent && isEnabled {
             content.matchedGeometryEffect(id: "playerArtwork", in: namespace, isSource: isSource)
         } else {
             content

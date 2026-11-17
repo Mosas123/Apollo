@@ -125,9 +125,11 @@ struct FullPlayerView: View {
                             progressSlider: { progressSlider(horizontalPadding: horizontalPadding) }
                         )
                         .padding(.bottom, bottomInset)
+                        .transition(.opacity)
                     } else if np.isVideoMode && np.hasVideo {
                         musicVideoContent
                             .padding(.bottom, bottomInset)
+                        .transition(.opacity)
                     } else if showQueue {
                         QueueView(
                             showQueue: $showQueue,
@@ -139,6 +141,7 @@ struct FullPlayerView: View {
                             progressSlider: { progressSlider(horizontalPadding: horizontalPadding) }
                         )
                         .padding(.bottom, bottomInset)
+                        .transition(.opacity)
                     } else {
                         // The cover occupies the space left by the controls.
                         // Sharing this VStack prevents artwork/title collisions.
@@ -153,6 +156,7 @@ struct FullPlayerView: View {
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
                         .padding(.bottom, isCompact ? 16 : 24)
+                        .transition(.opacity)
 
                         titleAndActionsRow
                             .padding(.horizontal, horizontalPadding)
