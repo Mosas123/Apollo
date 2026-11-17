@@ -234,10 +234,10 @@ final class SettingsStore: @unchecked Sendable {
         didSet { Self.defaults.set(pencariMusicBaseURL, forKey: Keys.pencariMusicBaseURL) }
     }
 
-    /// When on, playback tries the bundled PencariMusic FLAC for the same track
-    /// before the YouTube stream, falling back silently if it isn't found.
-    var preferLosslessAudio: Bool {
-        didSet { Self.defaults.set(preferLosslessAudio, forKey: Keys.preferLosslessAudio) }
+    /// Source preference for a track: Auto / High / Lossless. Upgrades are
+    /// prefetched at track boundaries and never block playback.
+    var musicQualityMode: MusicQualityMode {
+        didSet { Self.defaults.set(musicQualityMode.rawValue, forKey: Keys.musicQualityMode) }
     }
 
     // MARK: - Liquid Glass
@@ -438,7 +438,7 @@ final class SettingsStore: @unchecked Sendable {
         static let glassStyle = "settings.glassStyle"
         static let podcastIndexKey = "settings.podcastIndexKey"
         static let pencariMusicBaseURL = "settings.pencariMusicBaseURL"
-        static let preferLosslessAudio = "settings.preferLosslessAudio"
+        static let musicQualityMode = "settings.musicQualityMode"
         static let aiProvider = "settings.aiProvider"
         static let aiKey = "settings.aiKey"
         static let aiModel = "settings.aiModel"
@@ -518,7 +518,7 @@ final class SettingsStore: @unchecked Sendable {
         glassStyle = Self.loadEnum(Keys.glassStyle, default: .regular)
         podcastIndexKey = Self.loadString(Keys.podcastIndexKey, default: "")
         pencariMusicBaseURL = Self.loadString(Keys.pencariMusicBaseURL, default: PencariMusicClient.defaultBase)
-        preferLosslessAudio = Self.load(Keys.preferLosslessAudio, default: false)
+        musicQualityMode = Self.loadEnum(Keys.musicQualityMode, default: .auto)
         aiProvider = Self.loadString(Keys.aiProvider, default: AIProvider.off.rawValue)
         aiKey = Self.loadString(Keys.aiKey, default: "")
         aiModel = Self.loadString(Keys.aiModel, default: "")

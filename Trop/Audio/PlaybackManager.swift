@@ -167,7 +167,7 @@ actor PlaybackManager {
     private let pencariCooldownKey = "pencari.cooldownUntil"
     private var pencariMatchCache: [String: String] = [:]
     /// Prefetched FLAC resolutions keyed by the YouTube videoId they upgrade.
-    private var pencariResultCache: [String: (result: PlaybackResult, at: Date)] = [:]
+    private var upgradeResultCache: [String: (result: PlaybackResult, at: Date)] = [:]
     private let pencariResultTTL: TimeInterval = 600
 
     /// Persisted so a slow/empty origin doesn't cost every relaunch a timeout.
@@ -185,10 +185,10 @@ actor PlaybackManager {
 
     /// Only ever returns an *already prefetched* FLAC, so the play path never
     /// touches the network for lossless. Misses go straight to YouTube.
-    private func prefetchedLossless(videoId: String) -> PlaybackResult? {
-        guard SettingsStore.shared.preferLosslessAudio else { return nil }
+    private func prefetchedUpgrade(videoId: String) -> PlaybackResult? {
+        guard SettingsStore.shared.musicQualityMode != .auto else { return nil }
         guard !MusicPlaybackIdentity.isExternal(videoId) else { return nil }
-        guard let cached = pencariResultCache[videoId],
+        guard let cached = upgradeResultCache[videoId],
               Date().timeIntervalSince(cached.at) < pencariResultTTL else {
             return nil
         }
@@ -200,7 +200,7 @@ actor PlaybackManager {
     /// miss/failure so the caller falls back to YouTube. A short cooldown after
     /// a failure avoids slowing every subsequent play while the origin is down.
     private func resolveLosslessUpgrade(videoId: String) async -> PlaybackResult? {
-        guard SettingsStore.shared.preferLosslessAudio else { return nil }
+        guard SettingsStore.shared.musicQualityMode == .lossless else { return nil }
         guard !MusicPlaybackIdentity.isExternal(videoId) else { return nil }
         if isPencariCoolingDown { return nil }
         guard let song = await queueSong(for: videoId) else { return nil }
@@ -248,10 +248,10 @@ actor PlaybackManager {
                 muxedStreamUrl: nil,
                 loudnessDb: nil
             )
-            if pencariResultCache.count >= 100 {
-                pencariResultCache.removeAll(keepingCapacity: true)
+            if upgradeResultCache.count >= 100 {
+                upgradeResultCache.removeAll(keepingCapacity: true)
             }
-            pencariResultCache[videoId] = (result, Date())
+            upgradeResultCache[videoId] = (result, Date())
             return result
         } catch {
             markPencariCooldown()
@@ -259,21 +259,68 @@ actor PlaybackManager {
         }
     }
 
+    /// "High" mode: match the track on JioSaavn and cache its 320 kbps stream.
+    private func resolveHighQualityUpgrade(videoId: String) async -> PlaybackResult? {
+        guard SettingsStore.shared.musicQualityMode == .high else { return nil }
+        guard !MusicPlaybackIdentity.isExternal(videoId) else { return nil }
+        guard let song = await queueSong(for: videoId) else { return nil }
+        let title = song.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return nil }
+        let artist = song.artists.first?.name ?? ""
+        let query = artist.isEmpty ? title : "\(artist) \(title)"
+        guard let tracks = try? await JioSaavnClient().search(query: query, limit: 8),
+              let best = Self.bestPencariMatch(tracks, title: title, artist: artist),
+              let url = try? await JioSaavnClient().resolveStreamURL(for: best.id.rawValue) else {
+            return nil
+        }
+        let ext = url.pathExtension.lowercased()
+        let mime = ext == "mp3" ? "audio/mpeg" : (ext == "aac" ? "audio/aac" : "audio/mp4")
+        let result = PlaybackResult(
+            streamUrl: url.absoluteString,
+            itag: 0,
+            mimeType: mime,
+            bitrate: 320_000,
+            audioQuality: "jiosaavn-320",
+            videoId: videoId,
+            title: song.title,
+            author: song.artistNamesDisplay,
+            duration: song.duration,
+            expiresInSeconds: 0,
+            clientName: "jiosaavn",
+            musicVideoType: nil,
+            hasVideoContent: false,
+            muxedStreamUrl: nil,
+            loudnessDb: nil
+        )
+        if upgradeResultCache.count >= 100 { upgradeResultCache.removeAll(keepingCapacity: true) }
+        upgradeResultCache[videoId] = (result, Date())
+        return result
+    }
+
+    /// Dispatches the prefetch by the user's quality mode.
+    private func resolvePreferredUpgrade(videoId: String) async -> PlaybackResult? {
+        switch SettingsStore.shared.musicQualityMode {
+        case .auto: return nil
+        case .lossless: return await resolveLosslessUpgrade(videoId: videoId)
+        case .high: return await resolveHighQualityUpgrade(videoId: videoId)
+        }
+    }
+
     /// Warms the FLAC for the next queue track while the current one plays, so
     /// lossless is ready with zero delay when it comes up. Runs off the play
     /// path and respects the origin cooldown.
-    private func prefetchNextLossless(after videoId: String) async {
-        guard SettingsStore.shared.preferLosslessAudio, !isPencariCoolingDown else { return }
+    private func prefetchNextUpgrade(after videoId: String) async {
+        guard SettingsStore.shared.musicQualityMode != .auto else { return }
         let queue = await MainActor.run { NowPlaying.shared.queueSongs }
         guard let index = queue.firstIndex(where: { $0.videoId == videoId }),
               queue.indices.contains(index + 1) else { return }
         let next = queue[index + 1].videoId
         guard !MusicPlaybackIdentity.isExternal(next) else { return }
-        if let cached = pencariResultCache[next],
+        if let cached = upgradeResultCache[next],
            Date().timeIntervalSince(cached.at) < pencariResultTTL {
             return
         }
-        _ = await resolveLosslessUpgrade(videoId: next)
+        _ = await resolvePreferredUpgrade(videoId: next)
     }
 
     private static func losslessLabel(_ result: PlaybackResult) -> String? {
@@ -286,6 +333,22 @@ actor PlaybackManager {
         }
         if quality.contains("lossless") { return "FLAC" }
         return nil
+    }
+
+    private static func qualityLabel(_ result: PlaybackResult) -> String? {
+        if let lossless = losslessLabel(result) { return lossless }
+        let mime = result.mimeType.lowercased()
+        let kbps = result.bitrate > 0 ? " \(Int((Double(result.bitrate) / 1000).rounded()))" : ""
+        if mime.contains("flac") { return "FLAC" }
+        if mime.contains("aac") || mime.contains("mp4") || result.audioQuality.lowercased().contains("aac") {
+            return "AAC\(kbps)"
+        }
+        if mime.contains("opus") || mime.contains("ogg") || mime.contains("webm") {
+            return "Opus\(kbps)"
+        }
+        if mime.contains("mpeg") { return "MP3\(kbps)" }
+        if result.audioQuality.lowercased().contains("jiosaavn") { return "AAC\(kbps.isEmpty ? " 320" : kbps)" }
+        return kbps.isEmpty ? nil : "Audio\(kbps)"
     }
 
     private static func normalizedMatchKey(_ value: String) -> String {
@@ -337,7 +400,8 @@ actor PlaybackManager {
                 duration: song.map { TimeInterval($0.duration) },
                 artists: song?.artists ?? [],
                 thumbnailUrl: song?.thumbnailUrl,
-                losslessLabel: Self.losslessLabel(result)
+                losslessLabel: Self.losslessLabel(result),
+                qualityLabel: Self.qualityLabel(result)
             )
             return result
         }
@@ -353,7 +417,8 @@ actor PlaybackManager {
                 duration: song.map { TimeInterval($0.duration) },
                 artists: artists,
                 thumbnailUrl: song?.thumbnailUrl,
-                losslessLabel: localPath.pathExtension.lowercased() == "flac" ? "FLAC" : nil
+                losslessLabel: localPath.pathExtension.lowercased() == "flac" ? "FLAC" : nil,
+                qualityLabel: localPath.pathExtension.lowercased() == "flac" ? "FLAC" : "File"
             )
             await MainActor.run {
                 NowPlaying.shared.updateVideoAvailability()
@@ -388,7 +453,8 @@ actor PlaybackManager {
                 artists: queueSong?.artists ?? [],
                 loudnessDb: cached.loudnessDb,
                 thumbnailUrl: queueSong?.thumbnailUrl,
-                losslessLabel: Self.losslessLabel(cached)
+                losslessLabel: Self.losslessLabel(cached),
+                qualityLabel: Self.qualityLabel(cached)
             )
             await publishVideoAvailability(result: cached, videoId: videoId, rowType: queueSong?.musicVideoType)
             return cached
@@ -411,7 +477,7 @@ actor PlaybackManager {
     /// videoId by `resolveAndPlay`, which owns the in-flight dedup entry.
     private func resolveAndPlayFromNetwork(videoId: String) async throws -> PlaybackResult {
         // Lossless if it was prefetched ahead of time; never blocks the play.
-        if let lossless = prefetchedLossless(videoId: videoId) {
+        if let lossless = prefetchedUpgrade(videoId: videoId) {
             await playNetworkResult(lossless, videoId: videoId)
             return lossless
         }
@@ -429,12 +495,11 @@ actor PlaybackManager {
             // Boundary-only upgrade: warm this track (for replays) and the next
             // one so it *starts* in FLAC. No mid-track swap, so nothing is
             // audible to the user.
-            if SettingsStore.shared.preferLosslessAudio,
-               !self.isPencariCoolingDown,
-               self.pencariResultCache[videoId] == nil {
-                _ = await self.resolveLosslessUpgrade(videoId: videoId)
+            if SettingsStore.shared.musicQualityMode != .auto,
+               self.upgradeResultCache[videoId] == nil {
+                _ = await self.resolvePreferredUpgrade(videoId: videoId)
             }
-            await self.prefetchNextLossless(after: videoId)
+            await self.prefetchNextUpgrade(after: videoId)
         }
         return result
     }
@@ -454,7 +519,8 @@ actor PlaybackManager {
             artists: queueSong?.artists ?? [],
             loudnessDb: result.loudnessDb,
             thumbnailUrl: queueSong?.thumbnailUrl,
-            losslessLabel: Self.losslessLabel(result)
+            losslessLabel: Self.losslessLabel(result),
+            qualityLabel: Self.qualityLabel(result)
         )
         await publishVideoAvailability(result: result, videoId: videoId, rowType: queueSong?.musicVideoType)
     }

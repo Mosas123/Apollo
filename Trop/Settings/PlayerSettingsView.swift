@@ -26,7 +26,7 @@ struct PlayerSettingsView: View {
 
             Section {
                 SettingsPickerRow("Audio Quality", icon: "waveform", selection: $settings.audioQuality)
-                SettingsToggleRow("Prefer Lossless (FLAC)", icon: "opticaldisc", isOn: $settings.preferLosslessAudio)
+                SettingsPickerRow("Preferred Source", icon: "opticaldisc", selection: $settings.musicQualityMode)
                 SettingsToggleRow("Audio Normalization", icon: "speaker.wave.2", isOn: $settings.audioNormalization)
                 SettingsToggleRow("Gapless Playback", icon: "arrow.right.arrow.left", isOn: $settings.gaplessPlayback)
             } header: {

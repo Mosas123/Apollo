@@ -222,11 +222,13 @@ extension PlayerController {
         loudnessDb: Double? = nil,
         thumbnailUrl: String? = nil,
         losslessLabel: String? = nil,
+        qualityLabel: String? = nil,
         startAt: TimeInterval = 0
     ) async {
         currentLoudnessDb = loudnessDb
         NowPlaying.shared.losslessFormatLabel = losslessLabel
         NowPlaying.shared.isLosslessStream = losslessLabel != nil
+        NowPlaying.shared.qualityBadgeLabel = qualityLabel ?? losslessLabel
         guard let url = URL(string: url) else {
             Log.player.error("Invalid URL: \(url)")
             return

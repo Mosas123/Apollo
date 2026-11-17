@@ -701,10 +701,10 @@ struct FullPlayerView: View {
                     .contentTransition(.numericText())
             }
             .overlay {
-                if np.isLosslessStream {
+                if let label = np.qualityBadgeLabel {
                     HStack(spacing: 4) {
                         Image(systemName: "waveform")
-                        Text(np.losslessFormatLabel ?? "Lossless")
+                        Text(label)
                     }
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.white.opacity(0.8))
