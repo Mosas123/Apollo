@@ -16,7 +16,6 @@ struct LibraryView: View {
     @State private var podcasts: [PodcastEntity] = []
     @State private var likedSongCount = 0
     @State private var isLoading = true
-    @State private var headerHidden = false
     @State private var selectedFilter: LibraryFilter?
     @State private var showCreateDialog = false
     @State private var playlistToDelete: PlaylistEntity?
@@ -65,7 +64,6 @@ struct LibraryView: View {
                     onAccount: { router.libraryPath.append(DetailRoute.settings) },
                     accountInitial: accountState.accountName.first.map(String.init)
                 )
-                .collapsibleTabHeader(isHidden: headerHidden)
 
                 Group {
                     if isLoading {
@@ -149,7 +147,6 @@ struct LibraryView: View {
             .padding(.bottom, 28)
         }
         .scrollIndicators(.automatic)
-        .tabHeaderTracksScroll(isHidden: $headerHidden)
         .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
     }
 

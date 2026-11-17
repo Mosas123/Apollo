@@ -14,7 +14,6 @@ struct HomeScreenView: View {
     private let accountState = AccountSheetState.shared
 
     @State private var pendingRoute: DetailRoute?
-    @State private var headerHidden = false
     @State private var speedDialEntries: [SpeedDialEntry] = []
     @State private var selectedCategory: ContentCategory = .all
     @State private var forYouSongs: [SongItem] = []
@@ -31,7 +30,6 @@ struct HomeScreenView: View {
                     onAccount: { router.homePath.append(DetailRoute.settings) },
                     accountInitial: accountState.accountName.first.map(String.init)
                 )
-                .collapsibleTabHeader(isHidden: headerHidden)
 
                 if viewModel.isLoading {
                     Spacer()
@@ -111,7 +109,6 @@ struct HomeScreenView: View {
             }
         }
         .scrollIndicators(.automatic)
-        .tabHeaderTracksScroll(isHidden: $headerHidden)
         .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
         .task(id: selectedCategory) {
             await viewModel.loadCategoryFeed(selectedCategory)
