@@ -24,7 +24,6 @@ struct ContentView: View {
 
             tabContent
                 .scaleEffect(1 - 0.08 * backgroundProgress, anchor: .center)
-                .clipShape(RoundedRectangle(cornerRadius: 38 * backgroundProgress, style: .continuous))
                 .overlay {
                     if backgroundProgress > 0 {
                         Color.black
@@ -38,6 +37,10 @@ struct ContentView: View {
                 FullPlayerView(onCollapse: collapsePlayer)
                     .transition(.move(edge: .bottom))
             }
+        }
+        .background {
+            Color(.systemBackground)
+                .ignoresSafeArea(.container, edges: .all)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .environment(scrollState)
