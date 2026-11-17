@@ -186,7 +186,7 @@ actor PlaybackManager {
     /// Only ever returns an *already prefetched* FLAC, so the play path never
     /// touches the network for lossless. Misses go straight to YouTube.
     private func prefetchedUpgrade(videoId: String) -> PlaybackResult? {
-        guard SettingsStore.shared.musicQualityMode != .auto else { return nil }
+        guard upgradeMode != .auto else { return nil }
         guard !MusicPlaybackIdentity.isExternal(videoId) else { return nil }
         guard let cached = upgradeResultCache[videoId],
               Date().timeIntervalSince(cached.at) < pencariResultTTL else {
@@ -200,7 +200,7 @@ actor PlaybackManager {
     /// miss/failure so the caller falls back to YouTube. A short cooldown after
     /// a failure avoids slowing every subsequent play while the origin is down.
     private func resolveLosslessUpgrade(videoId: String) async -> PlaybackResult? {
-        guard SettingsStore.shared.musicQualityMode == .lossless else { return nil }
+        guard upgradeMode == .lossless else { return nil }
         guard !MusicPlaybackIdentity.isExternal(videoId) else { return nil }
         if isPencariCoolingDown { return nil }
         guard let song = await queueSong(for: videoId) else { return nil }
@@ -261,7 +261,7 @@ actor PlaybackManager {
 
     /// "High" mode: match the track on JioSaavn and cache its 320 kbps stream.
     private func resolveHighQualityUpgrade(videoId: String) async -> PlaybackResult? {
-        guard SettingsStore.shared.musicQualityMode == .high else { return nil }
+        guard upgradeMode != .auto else { return nil }
         guard !MusicPlaybackIdentity.isExternal(videoId) else { return nil }
         guard let song = await queueSong(for: videoId) else { return nil }
         let title = song.title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -297,13 +297,31 @@ actor PlaybackManager {
         return result
     }
 
-    /// Dispatches the prefetch by the user's quality mode.
+    /// Dispatches the prefetch by the user's quality mode. Lossless falls back
+    /// to JioSaavn High so an unreachable FLAC origin doesn't leave the user on
+    /// Standard.
     private func resolvePreferredUpgrade(videoId: String) async -> PlaybackResult? {
-        switch SettingsStore.shared.musicQualityMode {
-        case .auto: return nil
-        case .lossless: return await resolveLosslessUpgrade(videoId: videoId)
-        case .high: return await resolveHighQualityUpgrade(videoId: videoId)
+        if let cached = upgradeResultCache[videoId],
+           Date().timeIntervalSince(cached.at) < pencariResultTTL {
+            return cached.result
         }
+        switch upgradeMode {
+        case .auto:
+            return nil
+        case .lossless:
+            if let lossless = await resolveLosslessUpgrade(videoId: videoId) { return lossless }
+            return await resolveHighQualityUpgrade(videoId: videoId)
+        case .high:
+            return await resolveHighQualityUpgrade(videoId: videoId)
+        }
+    }
+
+    /// With "Upgrade during playback" on and Preferred Source = Auto, treat it
+    /// as Lossless (best-first); otherwise honour the selected mode.
+    private var upgradeMode: MusicQualityMode {
+        let mode = SettingsStore.shared.musicQualityMode
+        if mode == .auto, SettingsStore.shared.upgradeDuringPlayback { return .lossless }
+        return mode
     }
 
     private static func tierRank(_ label: String?) -> Int {
@@ -352,10 +370,17 @@ actor PlaybackManager {
     /// so it *starts* in the better source. Never swaps mid-track.
     private func scheduleUpgradePrefetch(videoId: String) {
         Task {
-            if SettingsStore.shared.musicQualityMode != .auto,
-               self.upgradeResultCache[videoId] == nil,
-               let upgraded = await self.resolvePreferredUpgrade(videoId: videoId) {
-                await self.applyUpgradeIfEnabled(upgraded, videoId: videoId)
+            if upgradeMode != .auto {
+                let needsFetch = self.upgradeResultCache[videoId] == nil
+                    && SettingsStore.shared.upgradeDuringPlayback
+                if needsFetch {
+                    await MainActor.run { NowPlaying.shared.isUpgradingQuality = true }
+                }
+                let upgraded = await self.resolvePreferredUpgrade(videoId: videoId)
+                await MainActor.run { NowPlaying.shared.isUpgradingQuality = false }
+                if let upgraded {
+                    await self.applyUpgradeIfEnabled(upgraded, videoId: videoId)
+                }
             }
             await self.prefetchNextUpgrade(after: videoId)
         }

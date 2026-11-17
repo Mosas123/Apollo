@@ -49,9 +49,10 @@ final class NowPlaying {
     var isLosslessStream = false
     /// Codec/quality label for the badge, e.g. "FLAC" or "FLAC · CD".
     var losslessFormatLabel: String?
-    /// Detected quality of whatever is currently playing, e.g. "FLAC",
-    /// "AAC 320", "Opus 160". Shown in the player badge.
+    /// Detected quality of whatever is currently playing (tier label).
     var qualityBadgeLabel: String?
+    /// True while a better source is being resolved for the current track.
+    var isUpgradingQuality = false
     var currentTime: TimeInterval = 0
     var duration: TimeInterval = 0
     var progress: Float {

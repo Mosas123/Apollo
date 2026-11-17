@@ -688,10 +688,10 @@ struct FullPlayerView: View {
                     .contentTransition(.numericText())
             }
             .overlay {
-                if let label = np.qualityBadgeLabel {
+                if np.isUpgradingQuality || np.qualityBadgeLabel != nil {
                     HStack(spacing: 4) {
                         Image(systemName: "waveform")
-                        Text(label)
+                        Text(np.isUpgradingQuality ? "Upgrading…" : (np.qualityBadgeLabel ?? "Standard"))
                     }
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.white.opacity(0.8))
