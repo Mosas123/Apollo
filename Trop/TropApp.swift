@@ -15,7 +15,9 @@ struct TropApp: App {
 
     init() {
         configureNuke()
+        configureURLCache()
         ensureDirectories()
+        Self.pruneSyncDiagnostics()
         NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification,
             object: nil,
@@ -25,6 +27,7 @@ struct TropApp: App {
             // configureNuke); `ImageCache.shared` is a different instance.
             ImagePipeline.shared.configuration.imageCache?.removeAll()
             AsyncImageView.clearArtworkCache()
+            URLCache.shared.removeAllCachedResponses()
         }
         Log.wireSwiftyTube()
         PlayerController.registerRemoteControlSupport()
@@ -65,13 +68,45 @@ struct TropApp: App {
 
     private func configureNuke() {
         let dataCache = try? DataCache(name: "com.trop.nuke")
-        dataCache?.sizeLimit = 2 * 1024 * 1024 * 1024
+        // 300 MB is plenty for covers and evicts with LRU; 2 GB accumulated too
+        // much compared with other players.
+        dataCache?.sizeLimit = 300 * 1024 * 1024
 
         var config = ImagePipeline.Configuration()
         config.dataCache = dataCache
-        config.imageCache = ImageCache(costLimit: 100 * 1024 * 1024)
+        config.imageCache = ImageCache(costLimit: 64 * 1024 * 1024)
 
         ImagePipeline.shared = ImagePipeline(configuration: config)
+    }
+
+    /// Bounded HTTP cache for API/JSON responses instead of the system default.
+    private func configureURLCache() {
+        URLCache.shared = URLCache(
+            memoryCapacity: 16 * 1024 * 1024,
+            diskCapacity: 64 * 1024 * 1024,
+            diskPath: "com.trop.urlcache"
+        )
+    }
+
+    /// Diagnostic playlist dumps are timestamped and were never deleted. Keep
+    /// only the five newest.
+    private static func pruneSyncDiagnostics() {
+        let fm = FileManager.default
+        guard let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let dir = docs.appendingPathComponent("sync-debug", isDirectory: true)
+        guard let files = try? fm.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        let sorted = files.sorted {
+            let a = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            let b = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            return a > b
+        }
+        for url in sorted.dropFirst(5) {
+            try? fm.removeItem(at: url)
+        }
     }
 
     private func ensureDirectories() {

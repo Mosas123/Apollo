@@ -270,4 +270,10 @@ actor MetadataCache {
         guard let data = try? JSONEncoder().encode(store) else { return }
         try? data.write(to: diskURL, options: .atomic)
     }
+
+    func clear() {
+        store.removeAll()
+        persistTask?.cancel()
+        try? FileManager.default.removeItem(at: diskURL)
+    }
 }

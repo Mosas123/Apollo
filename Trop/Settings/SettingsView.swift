@@ -25,6 +25,9 @@ struct SettingsView: View {
                 SettingsNavigationRow("Player", icon: "play.circle.fill") {
                     PlayerSettingsView()
                 }
+                SettingsNavigationRow("Storage", icon: "internaldrive.fill") {
+                    StorageSettingsView()
+                }
                 SettingsNavigationRow("Downloads", icon: "arrow.down.circle.fill") {
                     DownloadSettingsView()
                 }

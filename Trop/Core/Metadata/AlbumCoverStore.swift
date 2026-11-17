@@ -124,6 +124,12 @@ actor AlbumCoverStore {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
+    func clear() {
+        hits.removeAll()
+        misses.removeAll()
+        try? FileManager.default.removeItem(at: diskURL)
+    }
+
     private func persist() {
         let snapshot = hits.reduce(into: [String: String]()) { result, entry in
             result[entry.key] = entry.value.absoluteString

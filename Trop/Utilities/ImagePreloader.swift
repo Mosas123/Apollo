@@ -20,7 +20,7 @@ actor ImagePreloader {
     private var seen: Set<URL> = []
     private var seenOrder: [URL] = []
     private static let maxSeen = 1000
-    private static let maxPreloadBatch = 60
+    private static let maxPreloadBatch = 30
 
     nonisolated static let shared = ImagePreloader()
 
