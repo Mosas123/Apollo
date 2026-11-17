@@ -62,7 +62,7 @@ actor AlbumCoverStore {
 
     private func iTunesAlbum(album: String, artist: String) async -> URL? {
         var comps = URLComponents(string: "https://itunes.apple.com/search")
-        let query = artist.isEmpty ? album : "\(TextMatch.queryArtist(artist)) \(album)"
+        let query = artist.isEmpty ? album : "\(TextMatch.queryArtist(artist)) \(TextMatch.queryTitle(album))"
         comps?.queryItems = [
             URLQueryItem(name: "term", value: query),
             URLQueryItem(name: "entity", value: "album"),
@@ -96,7 +96,7 @@ actor AlbumCoverStore {
 
     private func deezerAlbum(album: String, artist: String) async -> URL? {
         var comps = URLComponents(string: "https://api.deezer.com/search/album")
-        let query = artist.isEmpty ? album : "\(TextMatch.queryArtist(artist)) \(album)"
+        let query = artist.isEmpty ? album : "\(TextMatch.queryArtist(artist)) \(TextMatch.queryTitle(album))"
         comps?.queryItems = [
             URLQueryItem(name: "q", value: query),
             URLQueryItem(name: "limit", value: "5")

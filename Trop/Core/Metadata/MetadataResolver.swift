@@ -85,7 +85,7 @@ enum MetadataResolver {
     private static func iTunes(title: String, artist: String, album: String?, duration: Int?) async -> ResolvedMetadata? {
         var components = URLComponents(string: "https://itunes.apple.com/search")
         components?.queryItems = [
-            URLQueryItem(name: "term", value: "\(TextMatch.queryArtist(artist)) \(title)"),
+            URLQueryItem(name: "term", value: "\(TextMatch.queryArtist(artist)) \(TextMatch.queryTitle(title))"),
             URLQueryItem(name: "entity", value: "song"),
             URLQueryItem(name: "limit", value: "5")
         ]
@@ -144,7 +144,7 @@ enum MetadataResolver {
     private static func musicBrainz(title: String, artist: String) async -> ResolvedMetadata? {
         var components = URLComponents(string: "https://musicbrainz.org/ws/2/recording/")
         components?.queryItems = [
-            URLQueryItem(name: "query", value: "recording:\"\(title)\" AND artist:\"\(TextMatch.queryArtist(artist))\""),
+            URLQueryItem(name: "query", value: "recording:\"\(TextMatch.queryTitle(title))\" AND artist:\"\(TextMatch.queryArtist(artist))\""),
             URLQueryItem(name: "fmt", value: "json"),
             URLQueryItem(name: "limit", value: "1")
         ]
@@ -191,7 +191,7 @@ enum MetadataResolver {
 
     private static func deezer(title: String, artist: String, album: String?, duration: Int?) async -> ResolvedMetadata? {
         var components = URLComponents(string: "https://api.deezer.com/search")
-        let query = artist.isEmpty ? title : "\(TextMatch.queryArtist(artist)) \(title)"
+        let query = artist.isEmpty ? TextMatch.queryTitle(title) : "\(TextMatch.queryArtist(artist)) \(TextMatch.queryTitle(title))"
         components?.queryItems = [
             URLQueryItem(name: "q", value: query),
             URLQueryItem(name: "limit", value: "5")

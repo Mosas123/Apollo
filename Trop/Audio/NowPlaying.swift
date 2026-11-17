@@ -653,8 +653,13 @@ final class NowPlaying {
     /// and publishes it if it clearly matches. Returns whether it published.
     private func resolveCanonicalArtwork(videoId: String) async -> Bool {
         guard !MusicPlaybackIdentity.isExternal(videoId) else { return false }
-        let title = title
-        let artist = artist
+        var title = title
+        var artist = artist
+        // "Artist - Title" uploads often have no artist field.
+        if artist.isEmpty, let separator = title.range(of: " - ") {
+            artist = String(title[..<separator.lowerBound]).trimmingCharacters(in: .whitespaces)
+            title = String(title[separator.upperBound...]).trimmingCharacters(in: .whitespaces)
+        }
         let song = queueSongs.first { $0.videoId == videoId }
         let album = song?.album
         let duration = song?.duration

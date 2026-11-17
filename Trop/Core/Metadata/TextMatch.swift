@@ -46,6 +46,28 @@ enum TextMatch {
         return normalize(text)
     }
 
+    /// Title as it should be sent to a catalogue search: keeps casing, strips
+    /// video/lyrics/remaster suffixes and featured acts.
+    static func queryTitle(_ value: String) -> String {
+        var text = value
+        text = text.replacingOccurrences(
+            of: "\\s*[\\[(][^\\])]*[\\])]", with: "", options: .regularExpression
+        )
+        text = text.replacingOccurrences(
+            of: "\\s+(-\\s+)?(feat\\.?|ft\\.?|featuring)\\s+.*$",
+            with: "", options: [.regularExpression, .caseInsensitive]
+        )
+        text = text.replacingOccurrences(
+            of: "\\s+-\\s+(official\\s+(music\\s+)?(video|audio)|lyrics?|lyric\\s+video|audio|video|visualizer).*$",
+            with: "", options: [.regularExpression, .caseInsensitive]
+        )
+        text = text.replacingOccurrences(
+            of: "\\s+-\\s+(remaster(ed)?|live|radio edit|album version|single version).*$",
+            with: "", options: [.regularExpression, .caseInsensitive]
+        )
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Primary artist name, without channel suffixes or featured acts.
     static func normalizeArtist(_ value: String) -> String {
         var text = value
