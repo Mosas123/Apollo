@@ -27,12 +27,13 @@ struct PlayerSettingsView: View {
             Section {
                 SettingsPickerRow("Audio Quality", icon: "waveform", selection: $settings.audioQuality)
                 SettingsPickerRow("Preferred Source", icon: "opticaldisc", selection: $settings.musicQualityMode)
+                SettingsToggleRow("Upgrade to best quality during playback", icon: "arrow.up.circle", isOn: $settings.upgradeDuringPlayback)
                 SettingsToggleRow("Audio Normalization", icon: "speaker.wave.2", isOn: $settings.audioNormalization)
                 SettingsToggleRow("Gapless Playback", icon: "arrow.right.arrow.left", isOn: $settings.gaplessPlayback)
             } header: {
                 Text("Audio")
             } footer: {
-                Text("When enabled, the app tries a lossless FLAC stream first and falls back to YouTube if none is available.")
+                Text("Preferred Source picks which stream to use. If \"Upgrade to best quality during playback\" is on, the app may switch to a better source mid-song; you'll hear a very short fade (about 0.3s) while the new stream loads, then playback continues at the same position.")
             }
 
             Section {

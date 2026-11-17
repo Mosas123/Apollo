@@ -306,13 +306,56 @@ actor PlaybackManager {
         }
     }
 
+    private static func tierRank(_ label: String?) -> Int {
+        switch label {
+        case "Lossless": return 2
+        case "High": return 1
+        default: return 0
+        }
+    }
+
+    /// Optional mid-track upgrade (user setting). Fades out, reloads the better
+    /// stream at the same position, fades back in, and updates the badge.
+    private func applyUpgradeIfEnabled(_ result: PlaybackResult, videoId: String) async {
+        guard SettingsStore.shared.upgradeDuringPlayback else { return }
+        let snapshot = await MainActor.run {
+            (
+                NowPlaying.shared.videoId,
+                NowPlaying.shared.currentTime,
+                NowPlaying.shared.isPlaying,
+                NowPlaying.shared.qualityBadgeLabel
+            )
+        }
+        guard snapshot.0 == videoId, snapshot.2 else { return }
+        let newLabel = Self.qualityLabel(result)
+        guard Self.tierRank(newLabel) > Self.tierRank(snapshot.3) else { return }
+        let song = await queueSong(for: videoId)
+        let targetVolume = await MainActor.run { SettingsStore.shared.playerVolume }
+        await PlayerController.shared.fadeVolume(to: 0, duration: 0.12)
+        await PlayerController.shared.play(
+            url: result.streamUrl,
+            title: song?.title,
+            artist: song?.artistNamesDisplay,
+            videoId: videoId,
+            duration: song.map { TimeInterval($0.duration) },
+            artists: song?.artists ?? [],
+            thumbnailUrl: song?.thumbnailUrl,
+            losslessLabel: Self.losslessLabel(result),
+            qualityLabel: newLabel,
+            startAt: snapshot.1
+        )
+        await PlayerController.shared.fadeVolume(to: targetVolume, duration: 0.2)
+        await MainActor.run { PlayerController.shared.setVolumeOverride(nil) }
+    }
+
     /// Boundary-only upgrade: warm this track (for replays) and the next one
     /// so it *starts* in the better source. Never swaps mid-track.
     private func scheduleUpgradePrefetch(videoId: String) {
         Task {
             if SettingsStore.shared.musicQualityMode != .auto,
-               self.upgradeResultCache[videoId] == nil {
-                _ = await self.resolvePreferredUpgrade(videoId: videoId)
+               self.upgradeResultCache[videoId] == nil,
+               let upgraded = await self.resolvePreferredUpgrade(videoId: videoId) {
+                await self.applyUpgradeIfEnabled(upgraded, videoId: videoId)
             }
             await self.prefetchNextUpgrade(after: videoId)
         }

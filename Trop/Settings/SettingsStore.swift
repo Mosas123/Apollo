@@ -240,6 +240,12 @@ final class SettingsStore: @unchecked Sendable {
         didSet { Self.defaults.set(musicQualityMode.rawValue, forKey: Keys.musicQualityMode) }
     }
 
+    /// When on, the app may switch to a better source *during* playback. The
+    /// user hears a very short fade while the stream reloads.
+    var upgradeDuringPlayback: Bool {
+        didSet { Self.defaults.set(upgradeDuringPlayback, forKey: Keys.upgradeDuringPlayback) }
+    }
+
     // MARK: - Liquid Glass
 
     /// Translucency of the player's floating glass chips (iOS 27 style control).
@@ -439,6 +445,7 @@ final class SettingsStore: @unchecked Sendable {
         static let podcastIndexKey = "settings.podcastIndexKey"
         static let pencariMusicBaseURL = "settings.pencariMusicBaseURL"
         static let musicQualityMode = "settings.musicQualityMode"
+        static let upgradeDuringPlayback = "settings.upgradeDuringPlayback"
         static let aiProvider = "settings.aiProvider"
         static let aiKey = "settings.aiKey"
         static let aiModel = "settings.aiModel"
@@ -519,6 +526,7 @@ final class SettingsStore: @unchecked Sendable {
         podcastIndexKey = Self.loadString(Keys.podcastIndexKey, default: "")
         pencariMusicBaseURL = Self.loadString(Keys.pencariMusicBaseURL, default: PencariMusicClient.defaultBase)
         musicQualityMode = Self.loadEnum(Keys.musicQualityMode, default: .auto)
+        upgradeDuringPlayback = Self.load(Keys.upgradeDuringPlayback, default: false)
         aiProvider = Self.loadString(Keys.aiProvider, default: AIProvider.off.rawValue)
         aiKey = Self.loadString(Keys.aiKey, default: "")
         aiModel = Self.loadString(Keys.aiModel, default: "")
