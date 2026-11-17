@@ -129,6 +129,7 @@ final class PlayerController {
     var pendingResumeAt: TimeInterval = 0
     var nowPlayingInfo = [String: Any]()
     private var pendingSeek: (target: TimeInterval, deadline: Date)?
+    private var metadataDebounceTask: Task<Void, Never>?
 
     var currentTime: TimeInterval {
         withMpv { mpv in
@@ -573,7 +574,9 @@ extension PlayerController {
             if newDur > 0 {
                 Task { @MainActor in
                     NowPlaying.shared.duration = newDur
-                    self.setNowPlayingMetadata()
+                    // mpv can emit several duration updates as a stream
+                    // settles; coalesce the (expensive) metadata rebuild.
+                    self.scheduleNowPlayingMetadata()
                 }
             }
         } else if name == "video-params/w", prop.format == MPV_FORMAT_INT64 {
@@ -1071,6 +1074,17 @@ extension PlayerController {
 // MARK: - Now Playing info / lock-screen
 
 extension PlayerController {
+    /// Coalesced variant of `setNowPlayingMetadata()` for high-frequency
+    /// duration updates.
+    private func scheduleNowPlayingMetadata() {
+        metadataDebounceTask?.cancel()
+        metadataDebounceTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            self?.setNowPlayingMetadata()
+        }
+    }
+
     func setNowPlayingMetadata() {
         assertAudioSession()
         let np = NowPlaying.shared

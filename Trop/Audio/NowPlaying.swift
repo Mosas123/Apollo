@@ -761,7 +761,9 @@ final class NowPlaying {
     @MainActor
     private func timerTick() {
         currentTime = PlayerController.shared.currentTime
-        duration = PlayerController.shared.duration
+        // `duration` arrives via mpv property events and
+        // `updateNowPlayingProgress`; polling it every tick doubled the
+        // synchronous mpv reads on the main actor.
         progressTick += 1
         if progressTick % 4 == 0 {
             PlayerController.shared.updateNowPlayingProgress()
