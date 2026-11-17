@@ -45,6 +45,13 @@ struct FullPlayerView: View {
 
     var body: some View {
         GeometryReader { geometry in
+            // The card fills the screen; only its content clears system insets.
+            let windowInsets = (UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
+                .first { $0.isKeyWindow })?.safeAreaInsets ?? .zero
+            let topInset = max(geometry.safeAreaInsets.top, windowInsets.top)
+            let bottomInset = max(geometry.safeAreaInsets.bottom, windowInsets.bottom)
             let horizontalPadding: CGFloat = geometry.size.width < 375 ? 24 : 32
             let isCompact = geometry.size.height < 700
             let globalFrame = geometry.frame(in: .global)
@@ -96,25 +103,11 @@ struct FullPlayerView: View {
                     }
                 }
 
-                if showsMainArtwork {
-                    // Centered rounded-square cover (Apple Music style): the same
-                    // shape for every song, so square album art and 16:9 video
-                    // thumbnails all read consistently over the gradient.
-                    artwork
-                        .aspectRatio(1, contentMode: .fit)
-                        .frame(maxWidth: min(geometry.size.width - 48, 520))
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .matchedGeometryEffect(id: "playerArtwork", in: artworkNamespace, isSource: !sheet.isCollapsing)
-                        .shadow(color: .black.opacity(0.4), radius: 28, y: 16)
-                        .padding(.top, geometry.safeAreaInsets.top + 36)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                }
-
                 VStack(spacing: 0) {
                     Capsule()
                         .fill(.white.opacity(0.3))
                         .frame(width: 36, height: 5)
-                        .padding(.top, geometry.safeAreaInsets.top + 16)
+                        .padding(.top, topInset + 16)
                         .padding(.bottom, 16)
                         .contentShape(Rectangle().size(width: 60, height: 30))
                         .onTapGesture {
@@ -131,10 +124,10 @@ struct FullPlayerView: View {
                             pendingRoute: $pendingRoute,
                             progressSlider: { progressSlider(horizontalPadding: horizontalPadding) }
                         )
-                        .padding(.bottom, geometry.safeAreaInsets.bottom)
+                        .padding(.bottom, bottomInset)
                     } else if np.isVideoMode && np.hasVideo {
                         musicVideoContent
-                            .padding(.bottom, geometry.safeAreaInsets.bottom)
+                            .padding(.bottom, bottomInset)
                     } else if showQueue {
                         QueueView(
                             showQueue: $showQueue,
@@ -145,11 +138,21 @@ struct FullPlayerView: View {
                             pendingRoute: $pendingRoute,
                             progressSlider: { progressSlider(horizontalPadding: horizontalPadding) }
                         )
-                        .padding(.bottom, geometry.safeAreaInsets.bottom)
+                        .padding(.bottom, bottomInset)
                     } else {
-                        Color.clear.frame(height: isCompact ? 4 : 8)
-
-                        Spacer(minLength: isCompact ? 8 : 16)
+                        // The cover occupies the space left by the controls.
+                        // Sharing this VStack prevents artwork/title collisions.
+                        GeometryReader { artworkGeometry in
+                            let side = max(1, min(artworkGeometry.size.width - 48,
+                                                  artworkGeometry.size.height, 520))
+                            artwork
+                                .frame(width: side, height: side)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .matchedGeometryEffect(id: "playerArtwork", in: artworkNamespace, isSource: !sheet.isCollapsing)
+                                .shadow(color: .black.opacity(0.4), radius: 28, y: 16)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                        .padding(.bottom, isCompact ? 16 : 24)
 
                         titleAndActionsRow
                             .padding(.horizontal, horizontalPadding)
@@ -202,7 +205,7 @@ struct FullPlayerView: View {
                         // clear the home indicator (safe area), per Apple's
                         // guidance: backgrounds ignore it, content respects it.
                         Color.clear.frame(
-                            height: max(isCompact ? 2 : 8, geometry.safeAreaInsets.bottom)
+                            height: max(isCompact ? 2 : 8, bottomInset)
                         )
                     }
                 }

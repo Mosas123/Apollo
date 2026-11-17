@@ -27,6 +27,7 @@ struct ContentView: View {
 
             if sheet.isExpanded {
                 FullPlayerView(artworkNamespace: playerArtworkNamespace, onCollapse: collapsePlayer)
+                    .ignoresSafeArea(.container, edges: .all)
                     .transition(.move(edge: .bottom))
             }
         }
