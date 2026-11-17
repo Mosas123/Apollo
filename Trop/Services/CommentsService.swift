@@ -36,11 +36,22 @@ actor CommentsService {
     private let musicClient = InnerTubeClient.tropShared
     private let youtubeClient = InnerTubeClient(config: .youtube)
 
+    private var initialCache: [String: (page: CommentsPage, date: Date)] = [:]
+    private let initialTTL: TimeInterval = 300
+
     func loadInitial(videoId: String) async throws -> CommentsPage {
+        if let cached = initialCache[videoId],
+           Date().timeIntervalSince(cached.date) < initialTTL {
+            return cached.page
+        }
         let token = try await initialCommentsToken(videoId: videoId)
         let page = try await fetchPage(continuation: token)
         if page.items.isEmpty, page.nextPageToken == nil {
             throw CommentsError.disabled
+        }
+        initialCache[videoId] = (page, Date())
+        if initialCache.count > 20 {
+            initialCache = initialCache.filter { Date().timeIntervalSince($0.value.date) < initialTTL }
         }
         return page
     }

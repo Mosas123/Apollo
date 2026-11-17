@@ -3,24 +3,27 @@ import UIKit
 
 /// Animated, blurred cover backdrop for the full player: a Metal distortion
 /// shader driven by `TimelineView` (WWDC "Compose advanced graphics effects").
+///
+/// The "blur" is baked once into a tiny bitmap and upscaled, so the shader
+/// samples a cheap texture instead of re-running an 80-pt blur every frame.
 struct PlayerBackgroundShader: View {
-    let image: Image?
+    let image: UIImage?
     let isPlaying: Bool
+
+    @State private var backdrop: Image?
 
     var body: some View {
         GeometryReader { geometry in
-            // 15 fps: the full-screen 80-pt blur + distortion is the most
-            // expensive per-frame effect in the app; the motion is slow enough
-            // that 15 fps reads the same while cutting GPU work ~40%.
             TimelineView(.animation(minimumInterval: 1.0 / 15.0, paused: !isPlaying)) { context in
                 let time = context.date.timeIntervalSinceReferenceDate
                 Group {
-                    if let image {
-                        image
+                    if let backdrop {
+                        backdrop
                             .resizable()
+                            .interpolation(.high)
                             .scaledToFill()
                             .frame(width: geometry.size.width, height: geometry.size.height)
-                            .blur(radius: 80)
+                            .clipped()
                     } else {
                         Color.clear
                     }
@@ -36,8 +39,33 @@ struct PlayerBackgroundShader: View {
                 )
             }
         }
+        .task(id: image.map(ObjectIdentifier.init)) {
+            backdrop = image.map(Self.makeBackdrop)
+        }
         .ignoresSafeArea(.container)
         .allowsHitTesting(false)
+    }
+
+    /// Aspect-fills the cover into a ~40 pt square. Upscaling that bitmap to
+    /// the screen produces the soft, heavy blur look at a fraction of the cost.
+    private static func makeBackdrop(_ image: UIImage) -> Image {
+        let side: CGFloat = 40
+        let target = CGSize(width: side, height: side)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: target, format: format)
+        let tiny = renderer.image { _ in
+            let size = image.size
+            guard size.width > 0, size.height > 0 else { return }
+            let scale = max(target.width / size.width, target.height / size.height)
+            let drawSize = CGSize(width: size.width * scale, height: size.height * scale)
+            let origin = CGPoint(
+                x: (target.width - drawSize.width) / 2,
+                y: (target.height - drawSize.height) / 2
+            )
+            image.draw(in: CGRect(origin: origin, size: drawSize))
+        }
+        return Image(uiImage: tiny)
     }
 }
 

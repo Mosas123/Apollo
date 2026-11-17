@@ -424,9 +424,13 @@ final class SearchViewModel {
                     values = Array(try await SearchSuggestions.suggest(query: query).prefix(5))
                 }
                 guard !Task.isCancelled, self.submittedQuery == query else { return }
+                // Dedupe (case-insensitive) so `ForEach(id: \.self)` never hits
+                // duplicate identities.
+                var seen = Set<String>()
+                let unique = values.filter { seen.insert($0.lowercased()).inserted }
                 if self.suggestionCache.count >= 40 { self.suggestionCache.removeAll() }
-                self.suggestionCache[query] = values
-                self.suggestions = values
+                self.suggestionCache[query] = unique
+                self.suggestions = unique
             } catch { /* Suggestions are optional; results continue independently. */ }
         }
         fetchTask = Task { [weak self] in
