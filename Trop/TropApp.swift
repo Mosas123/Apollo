@@ -70,7 +70,7 @@ struct TropApp: App {
         let dataCache = try? DataCache(name: "com.trop.nuke")
         // 300 MB is plenty for covers and evicts with LRU; 2 GB accumulated too
         // much compared with other players.
-        dataCache?.sizeLimit = 300 * 1024 * 1024
+        dataCache?.sizeLimit = 200 * 1024 * 1024
 
         var config = ImagePipeline.Configuration()
         config.dataCache = dataCache
