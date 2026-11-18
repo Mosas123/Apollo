@@ -71,14 +71,13 @@ struct YTMusicLyricsProvider: LyricsProvider {
     }
 
     static func plainLyrics(_ root: [String: Any]) -> String? {
-        if let lyrics = findValue(forKey: "lyrics", in: root) as? String, !lyrics.isEmpty {
-            return lyrics
-        }
-        if let runs = findValue(forKey: "runs", in: root) as? [[String: Any]] {
-            let text = runs.compactMap { $0["text"] as? String }.joined()
-            if text.count > 20 { return text }
-        }
-        return nil
+        // Only the description shelf holds the plain lyrics; scanning arbitrary
+        // "runs" elsewhere can pick a header/title and show the wrong text.
+        guard let shelf = findValue(forKey: "musicDescriptionShelfRenderer", in: root) as? [String: Any],
+              let description = shelf["description"] as? [String: Any],
+              let runs = description["runs"] as? [[String: Any]] else { return nil }
+        let text = runs.compactMap { $0["text"] as? String }.joined()
+        return text.count > 20 ? text : nil
     }
 
     // MARK: - JSON walking
