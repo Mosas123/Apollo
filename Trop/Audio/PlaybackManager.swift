@@ -372,12 +372,30 @@ actor PlaybackManager {
             if let cached { return cached }
             return await resolveHighQualityUpgrade(videoId: videoId)
         case .lossless:
-            // Lossless gets priority even when a High result is cached.
+            // Lossless gets priority even when a High result is cached, but it
+            // only gets 8 seconds before we fall back to High/best available.
             if let cached, Self.isLosslessResult(cached) { return cached }
-            if let lossless = await resolveLosslessUpgrade(videoId: videoId) { return lossless }
+            if let lossless = await losslessWithinBudget(videoId: videoId, seconds: 8) {
+                return lossless
+            }
             if let cached { return cached }
             return await resolveHighQualityUpgrade(videoId: videoId)
         }
+    }
+
+    private func losslessWithinBudget(videoId: String, seconds: Double) async -> PlaybackResult? {
+        let result = await withTaskGroup(of: PlaybackResult?.self) { group -> PlaybackResult? in
+            group.addTask { await self.resolveLosslessUpgrade(videoId: videoId) }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(seconds))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+        if result == nil { markPencariCooldown(120) }
+        return result
     }
 
     private static func isLosslessResult(_ result: PlaybackResult) -> Bool {
