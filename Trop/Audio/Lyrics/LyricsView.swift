@@ -13,6 +13,7 @@ struct LyricsView<ProgressSlider: View>: View {
     @Environment(SettingsStore.self) private var settings
 
     @Binding var showLyrics: Bool
+    @Binding var showQueue: Bool
     let pendingRoute: Binding<DetailRoute?>
     @ViewBuilder var progressSlider: () -> ProgressSlider
 
@@ -55,7 +56,6 @@ struct LyricsView<ProgressSlider: View>: View {
 
             playbackControls
         }
-        .ignoresSafeArea(.container, edges: .bottom)
         .simultaneousGesture(swipeBackGesture)
         .sheet(isPresented: $showSongMenu) {
             LyricsMenuSheet()
@@ -75,8 +75,7 @@ struct LyricsView<ProgressSlider: View>: View {
     // MARK: - Header
 
     private var headerBar: some View {
-        Color.clear
-            .padding(.top, 16)
+        Color.clear.frame(height: 8)
     }
 
     private var swipeBackGesture: some Gesture {
@@ -133,6 +132,14 @@ struct LyricsView<ProgressSlider: View>: View {
                         .padding(.vertical, 8)
                     }
                     .scrollIndicators(.hidden)
+                    .mask {
+                        LinearGradient(stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .black, location: 0.08),
+                            .init(color: .black, location: 0.90),
+                            .init(color: .clear, location: 1)
+                        ], startPoint: .top, endPoint: .bottom)
+                    }
                     .onScrollPhaseChange { _, newPhase in
                         if newPhase == .tracking || newPhase == .interacting {
                             pauseAutoScroll()
@@ -365,21 +372,34 @@ struct LyricsView<ProgressSlider: View>: View {
 
     private var songInfoRow: some View {
         HStack(spacing: 12) {
-            if let uiImage = np.thumbnailUIImage {
-                // Already center-cropped by NowPlaying.
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 64, height: 64)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            } else {
-                Image(systemName: "music.note")
-                    .font(.title2)
-                    .foregroundStyle(.white.opacity(0.4))
-                    .frame(width: 64, height: 64)
+            Button {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showLyrics = false
+                }
+            } label: {
+                if let uiImage = np.thumbnailUIImage {
+                    // Already center-cropped by NowPlaying.
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 44, height: 44)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                } else {
+                    Image(systemName: "music.note")
+                        .font(.title2)
+                        .foregroundStyle(.white.opacity(0.4))
+                        .frame(width: 44, height: 44)
+                }
             }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .accessibilityLabel("Back to player")
 
-            PlayerTitleBlock(title: np.title, artist: np.displayArtist)
+            PlayerTitleBlock(
+                title: np.title, artist: np.displayArtist,
+                titleFont: .subheadline.weight(.semibold), titleHeight: 20,
+                artistFont: .caption
+            )
 
             Spacer()
 
@@ -407,17 +427,41 @@ struct LyricsView<ProgressSlider: View>: View {
     }
 
     private var playbackControls: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 0) {
             progressSlider()
+                .padding(.bottom, 12)
 
-            PlayerPlayPauseButton(isPlaying: np.isPlaying) {
-                player.togglePlayPause()
-            }
+            PlaybackControlsRow(
+                isPlaying: np.isPlaying,
+                hasPrevious: np.hasPrevious,
+                hasNext: np.hasNext,
+                onPrevious: { np.playPrevious() },
+                onPlayPause: { player.togglePlayPause() },
+                onNext: { np.playNext() }
+            )
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: np.isPlaying)
+            .padding(.bottom, 8)
+
+            HStack(spacing: 12) {
+                Image(systemName: "speaker.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.5))
+                PlayerVolumeSlider().frame(height: 28)
+                Image(systemName: "speaker.wave.3.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+            .padding(.horizontal, 32)
+            .padding(.bottom, 4)
+
+            SecondaryActionsRow(
+                showQueue: $showQueue,
+                isRepeatOn: Binding(get: { np.isRepeatOn }, set: { np.isRepeatOn = $0 }),
+                showLyrics: $showLyrics
+            )
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 12)
-        .padding(.bottom, 20)
     }
 
     // MARK: - Data

@@ -104,6 +104,7 @@ struct FullPlayerView: View {
                     if showLyrics {
                         LyricsView(
                             showLyrics: $showLyrics,
+                            showQueue: $showQueue,
                             pendingRoute: $pendingRoute,
                             progressSlider: { progressSlider(horizontalPadding: horizontalPadding) }
                         )
@@ -229,6 +230,7 @@ struct FullPlayerView: View {
                 y: isDocking ? miniFrame.minY - globalFrame.minY : sheet.dragOffset
             )
             .animation(.easeInOut(duration: 0.35), value: showQueue)
+            .animation(.easeInOut(duration: 0.3), value: showLyrics)
             .simultaneousGesture(collapseDrag)
             .onChange(of: showsMainArtwork, initial: true) { _, visible in
                 sheet.hasExpandedArtwork = visible

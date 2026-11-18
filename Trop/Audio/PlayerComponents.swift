@@ -171,6 +171,7 @@ struct SecondaryActionsRow: View {
             ZStack(alignment: .topTrailing) {
                 Button {
                     showQueue.toggle()
+                    if showQueue { showLyrics?.wrappedValue = false }
                 } label: {
                     Image(systemName: "list.bullet")
                         .font(.title3)

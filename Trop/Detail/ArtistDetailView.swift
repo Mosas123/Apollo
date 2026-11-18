@@ -33,7 +33,11 @@ final class ArtistDetailViewModel {
 
         do {
             let json = try await innerTube.browse(browseId: browseId).value
-            let parsed = Self.parseArtistDetail(from: json, browseId: browseId)
+            var parsed = Self.parseArtistDetail(from: json, browseId: browseId)
+            if !(await CookieStore().isLoggedIn()) {
+                let saved = try? await DatabaseService.shared.fetchOne(ArtistEntity.self, key: browseId)
+                parsed.isSubscribed = saved?.bookmarkedAt != nil
+            }
             Self.preloadHeroArtwork(for: parsed.thumbnailUrl)
             artist = parsed
             isLoading = false
@@ -302,6 +306,8 @@ struct ArtistDetailView: View {
     @State private var scrollOffset: CGFloat = 0
     @State private var linkCopied = false
     @State private var showInfo = false
+    @State private var isUpdatingSubscription = false
+    @State private var showSubscriptionError = false
     @State private var infoGenre: String?
     @State private var infoBio: ArtistBioResolver.Bio?
     @State private var backdropColors: [Color] = []
@@ -360,6 +366,11 @@ struct ArtistDetailView: View {
             if let artist = viewModel.artist {
                 artistInfoSheet(for: artist)
             }
+        }
+        .alert("Couldn't update favorite", isPresented: $showSubscriptionError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Your previous selection was restored. Please try again.")
         }
         .onDisappear { linkResetTask?.cancel() }
     }
@@ -608,6 +619,7 @@ struct ArtistDetailView: View {
                             .background(Circle().fill(.white.opacity(0.22)))
                     }
                     .buttonStyle(.plain)
+                    .disabled(isUpdatingSubscription)
                     .accessibilityLabel(artist.isSubscribed ? "Unfollow artist" : "Follow artist")
                 }
 
@@ -1015,32 +1027,54 @@ struct ArtistDetailView: View {
     }
 
     private func toggleSubscribe(_ artist: ArtistDetailInfo) {
-        loggedTask(Log.artistDetail, "Subscribe failed") {
-            let channelId = artist.browseId
-            let entity = ArtistEntity(
-                id: artist.browseId,
-                name: artist.name,
-                thumbnailUrl: artist.thumbnailUrl,
-                bookmarkedAt: artist.isSubscribed ? nil : Date(),
-                isPodcastChannel: false,
-                channelId: channelId
-            )
-            try await DatabaseService.shared.insertOrReplace(entity)
+        guard !isUpdatingSubscription else { return }
+        isUpdatingSubscription = true
+        let desiredState = !artist.isSubscribed
+        // Change only the flag; retain the resolved hero and its loading state.
+        viewModel.artist?.isSubscribed = desiredState
 
-            if artist.isSubscribed {
-                try await SyncBridge.mutations.unsubscribeArtist(channelId: channelId, artistId: artist.browseId)
-            } else {
-                try await SyncBridge.mutations.subscribeArtist(channelId: channelId, artistId: artist.browseId)
-            }
-
-            await MainActor.run {
-                guard viewModel.artist?.browseId == artist.browseId else { return }
-                // Preserve the resolved hero URL and loading state. Rebuilding
-                // ArtistDetailInfo reset them and restored the blurred placeholder.
-                viewModel.artist?.isSubscribed = !artist.isSubscribed
+        Task { @MainActor in
+            defer { isUpdatingSubscription = false }
+            do {
+                let previous = try await DatabaseService.shared.fetchOne(ArtistEntity.self, key: artist.browseId)
+                var entity = previous ?? ArtistEntity(
+                    id: artist.browseId, name: artist.name,
+                    thumbnailUrl: artist.thumbnailUrl, bookmarkedAt: nil,
+                    isPodcastChannel: false, channelId: artist.browseId
+                )
+                entity.bookmarkedAt = desiredState ? Date() : nil
+                let channelId = entity.channelId ?? artist.browseId
+                entity.channelId = channelId
+                do {
+                    try await DatabaseService.shared.insertOrReplace(entity)
+                    // Guest favorites belong to this device, not a Google account.
+                    if await CookieStore().isLoggedIn() {
+                        if desiredState {
+                            try await SyncBridge.mutations.subscribeArtist(channelId: channelId, artistId: artist.browseId)
+                        } else {
+                            try await SyncBridge.mutations.unsubscribeArtist(channelId: channelId, artistId: artist.browseId)
+                        }
+                    }
+                } catch {
+                    if let previous {
+                        try? await DatabaseService.shared.insertOrReplace(previous)
+                    } else {
+                        entity.bookmarkedAt = nil
+                        try? await DatabaseService.shared.insertOrReplace(entity)
+                    }
+                    throw error
+                }
+                NotificationCenter.default.post(name: .personalizationDataUpdated, object: nil)
+            } catch {
+                Log.artistDetail.error("Update artist favorite failed: \(error)")
+                if viewModel.artist?.browseId == artist.browseId {
+                    viewModel.artist?.isSubscribed = artist.isSubscribed
+                    showSubscriptionError = true
+                }
             }
         }
     }
+
 }
 
 /// Read dismiss inside the presented sheet, not from ArtistDetailView's
