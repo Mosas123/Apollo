@@ -113,13 +113,13 @@ actor PlaybackManager {
         guard let client = await PencariMusicClient.configured() else {
             throw PencariMusicError.notConfigured
         }
-        let streamURL = try await client.resolveStreamURL(for: identifier.rawValue)
+        let info = try await client.resolveStreamInfo(for: identifier.rawValue)
         return PlaybackResult(
-            streamUrl: streamURL.absoluteString,
+            streamUrl: info.url.absoluteString,
             itag: 0,
             mimeType: "audio/flac",
-            bitrate: 0,
-            audioQuality: "pencari-flac",
+            bitrate: (info.bitrateKbps ?? 0) * 1000,
+            audioQuality: info.isHiRes ? "pencari-hi-res" : "pencari-flac",
             videoId: videoId,
             title: song.title,
             author: song.artistNamesDisplay,
@@ -191,6 +191,7 @@ actor PlaybackManager {
         }
         let client = try MusicAddonClient(installation: installation)
         let stream = try await client.resolveStream(type: ref.t, id: ref.i)
+        guard !stream.isEncrypted else { throw MusicCatalogError.unavailableTrack }
 
         if case .youtube(let youTubeId) = stream.kind {
             var request = StreamResolveRequest.playback(videoId: youTubeId)
@@ -220,7 +221,12 @@ actor PlaybackManager {
         guard case .url(let url) = stream.kind else {
             throw MusicCatalogError.unavailableTrack
         }
-        let quality = stream.qualityTier.lowercased()
+        let quality: String
+        if stream.qualityTier == "Lossless" {
+            quality = stream.isHiRes ? "hi-res" : "cd"
+        } else {
+            quality = stream.qualityTier.lowercased()
+        }
         return PlaybackResult(
             streamUrl: url.absoluteString,
             itag: 0,
@@ -246,6 +252,7 @@ actor PlaybackManager {
     private var pencariMatchCache: [String: String] = [:]
     /// Prefetched FLAC resolutions keyed by the YouTube videoId they upgrade.
     private var upgradeResultCache: [String: (result: PlaybackResult, at: Date)] = [:]
+    private var upgradePrefetchInFlight: Set<String> = []
     private let pencariResultTTL: TimeInterval = 600
 
     /// Persisted so a slow/empty origin doesn't cost every relaunch a timeout.
@@ -267,18 +274,24 @@ actor PlaybackManager {
         guard upgradeMode != .auto else { return nil }
         guard !MusicPlaybackIdentity.isExternal(videoId) else { return nil }
         guard let cached = upgradeResultCache[videoId],
-              Date().timeIntervalSince(cached.at) < pencariResultTTL else {
+              Date().timeIntervalSince(cached.at) < upgradeTTL(for: cached.result) else {
             return nil
         }
+        if upgradeMode == .cd, Self.isHiResResult(cached.result) { return nil }
         return cached.result
+    }
+
+    /// Add-on URLs are minted per request and expire sooner than Pencari's.
+    private func upgradeTTL(for result: PlaybackResult) -> TimeInterval {
+        result.clientName == "addon" ? 240 : pencariResultTTL
     }
 
     /// When the user prefers lossless, tries to find the same track on the
     /// bundled PencariMusic addon and resolve a FLAC stream. Returns nil on any
     /// miss/failure so the caller falls back to YouTube. A short cooldown after
     /// a failure avoids slowing every subsequent play while the origin is down.
-    private func resolveLosslessUpgrade(videoId: String) async -> PlaybackResult? {
-        guard upgradeMode == .lossless else { return nil }
+    private func resolveLosslessUpgrade(videoId: String, requireCD: Bool) async -> PlaybackResult? {
+        guard upgradeMode.prefersLossless else { return nil }
         guard !MusicPlaybackIdentity.isExternal(videoId) else { return nil }
         if isPencariCoolingDown { return nil }
         guard let song = await queueSong(for: videoId) else { return nil }
@@ -308,13 +321,14 @@ actor PlaybackManager {
         }
 
         do {
-            let url = try await client.resolveStreamURLFast(for: pencariId)
+            let info = try await client.resolveStreamInfoFast(for: pencariId)
+            if requireCD, info.isHiRes { return nil }
             let result = PlaybackResult(
-                streamUrl: url.absoluteString,
+                streamUrl: info.url.absoluteString,
                 itag: 0,
                 mimeType: "audio/flac",
-                bitrate: 0,
-                audioQuality: "pencari-flac",
+                bitrate: (info.bitrateKbps ?? 0) * 1000,
+                audioQuality: info.isHiRes ? "pencari-hi-res" : "pencari-flac",
                 videoId: videoId,
                 title: song.title,
                 author: song.artistNamesDisplay,
@@ -378,9 +392,13 @@ actor PlaybackManager {
     /// Dispatches the prefetch by the user's quality mode. Lossless falls back
     /// to JioSaavn High so an unreachable FLAC origin doesn't leave the user on
     /// Standard.
-    private func resolvePreferredUpgrade(videoId: String, interactive: Bool = false) async -> PlaybackResult? {
+    private func resolvePreferredUpgrade(
+        videoId: String,
+        interactive: Bool = false,
+        budget: Double? = nil
+    ) async -> PlaybackResult? {
         let cached = upgradeResultCache[videoId].flatMap {
-            Date().timeIntervalSince($0.at) < pencariResultTTL ? $0.result : nil
+            Date().timeIntervalSince($0.at) < upgradeTTL(for: $0.result) ? $0.result : nil
         }
         switch upgradeMode {
         case .auto:
@@ -388,14 +406,22 @@ actor PlaybackManager {
         case .high:
             if let cached { return cached }
             return await resolveHighQualityUpgrade(videoId: videoId)
-        case .lossless:
+        case .cd, .lossless:
+            let requireCD = upgradeMode == .cd
             // Lossless gets priority even when a High result is cached, but it
             // only gets 8 seconds before we fall back to High/best available.
-            if let cached, Self.isLosslessResult(cached) { return cached }
-            if let lossless = await losslessWithinBudget(videoId: videoId, seconds: interactive ? 4 : 8) {
+            if let cached, Self.isLosslessResult(cached),
+               !(requireCD && Self.isHiResResult(cached)) {
+                return cached
+            }
+            if let lossless = await losslessWithinBudget(
+                videoId: videoId,
+                seconds: budget ?? (interactive ? 4 : 8),
+                requireCD: requireCD
+            ) {
                 return lossless
             }
-            if let cached { return cached }
+            if let cached, !(requireCD && Self.isHiResResult(cached)) { return cached }
             return await resolveHighQualityUpgrade(videoId: videoId)
         }
     }
@@ -408,16 +434,20 @@ actor PlaybackManager {
 
     /// Pencari and the enabled add-ons race for the FLAC; whichever answers
     /// first wins and the other lookup is cancelled.
-    private func losslessWithinBudget(videoId: String, seconds: Double) async -> PlaybackResult? {
+    private func losslessWithinBudget(
+        videoId: String,
+        seconds: Double,
+        requireCD: Bool = false
+    ) async -> PlaybackResult? {
         let result = await withTaskGroup(of: UpgradeRaceOutcome.self) { group -> PlaybackResult? in
             group.addTask {
-                if let result = await self.resolveLosslessUpgrade(videoId: videoId) {
+                if let result = await self.resolveLosslessUpgrade(videoId: videoId, requireCD: requireCD) {
                     return .lossless(result)
                 }
                 return .miss
             }
             group.addTask {
-                if let result = await self.resolveAddonLossless(videoId: videoId) {
+                if let result = await self.resolveAddonLossless(videoId: videoId, requireCD: requireCD) {
                     return .lossless(result)
                 }
                 return .miss
@@ -450,12 +480,17 @@ actor PlaybackManager {
     }
 
     /// Same track as a lossless stream on one of the installed add-ons.
-    private func resolveAddonLossless(videoId: String) async -> PlaybackResult? {
-        guard upgradeMode == .lossless else { return nil }
+    private func resolveAddonLossless(videoId: String, requireCD: Bool) async -> PlaybackResult? {
+        guard upgradeMode.prefersLossless else { return nil }
         guard !MusicPlaybackIdentity.isExternal(videoId) else { return nil }
         guard let song = await queueSong(for: videoId) else { return nil }
-        guard let match = await AddonSourceResolver.bestMatch(for: song),
-              match.stream.qualityTier == "Lossless",
+        let preferAtmos = SettingsStore.shared.preferAtmos && upgradeMode != .cd
+        guard let match = await AddonSourceResolver.bestMatch(
+                  for: song,
+                  requireCD: requireCD,
+                  preferAtmos: preferAtmos
+              ),
+              match.stream.qualityTier == "Lossless" || match.stream.qualityTier == "Atmos",
               case .url(let url) = match.stream.kind,
               await Self.verifyStream(url.absoluteString) else { return nil }
         let result = PlaybackResult(
@@ -463,7 +498,9 @@ actor PlaybackManager {
             itag: 0,
             mimeType: match.stream.mimeType,
             bitrate: match.stream.bitrate,
-            audioQuality: "addon-lossless",
+            audioQuality: match.stream.qualityTier == "Atmos"
+                ? "addon-atmos"
+                : (match.stream.isHiRes ? "addon-hi-res" : "addon-cd"),
             videoId: videoId,
             title: song.title,
             author: song.artistNamesDisplay,
@@ -484,6 +521,10 @@ actor PlaybackManager {
 
     private static func isLosslessResult(_ result: PlaybackResult) -> Bool {
         losslessLabel(result) != nil
+    }
+
+    private static func isHiResResult(_ result: PlaybackResult) -> Bool {
+        result.audioQuality.lowercased().contains("hi-res")
     }
 
     /// With "Upgrade during playback" on and Preferred Source = Auto, treat it
@@ -612,7 +653,7 @@ actor PlaybackManager {
                     await self.applyUpgradeIfEnabled(upgraded, videoId: videoId)
                 }
             }
-            await self.prefetchNextUpgrade(after: videoId)
+            await self.prefetchUpcomingUpgrades(after: videoId, count: 2)
             await self.prefetchNextMetadata(after: videoId)
         }
     }
@@ -636,27 +677,52 @@ actor PlaybackManager {
         }
     }
 
-    /// Warms the FLAC for the next queue track while the current one plays, so
-    /// lossless is ready with zero delay when it comes up. Runs off the play
-    /// path and respects the origin cooldown.
-    private func prefetchNextUpgrade(after videoId: String) async {
+    /// Warms the next two queue tracks while the current one plays, so both
+    /// start straight in the better source instead of waiting for the search.
+    /// Runs off the play path, sequentially, with a longer budget for the cold
+    /// addon lookups.
+    private func prefetchUpcomingUpgrades(after videoId: String, count: Int = 2) async {
         guard upgradeMode != .auto else { return }
         let queue = await MainActor.run { NowPlaying.shared.queueSongs }
-        guard let index = queue.firstIndex(where: { $0.videoId == videoId }),
-              queue.indices.contains(index + 1) else { return }
-        let next = queue[index + 1].videoId
-        await MainActor.run { SponsorBlockIntegration.shared.warm(for: next) }
-        guard !MusicPlaybackIdentity.isExternal(next) else { return }
-        if let cached = upgradeResultCache[next],
-           Date().timeIntervalSince(cached.at) < pencariResultTTL {
-            return
+        guard let index = queue.firstIndex(where: { $0.videoId == videoId }) else { return }
+        let upcoming = queue.dropFirst(index + 1).prefix(count).map(\.videoId)
+
+        var targets: [String] = []
+        for id in upcoming {
+            guard !MusicPlaybackIdentity.isExternal(id) else { continue }
+            if let cached = upgradeResultCache[id],
+               Date().timeIntervalSince(cached.at) < upgradeTTL(for: cached.result) {
+                continue
+            }
+            guard upgradePrefetchInFlight.insert(id).inserted else { continue }
+            targets.append(id)
         }
-        _ = await resolvePreferredUpgrade(videoId: next)
+
+        for id in targets {
+            guard !Task.isCancelled else { break }
+            // The queue may have moved on while the previous track was warmed.
+            let stillUpcoming = await MainActor.run { () -> Bool in
+                guard let current = NowPlaying.shared.videoId,
+                      let position = NowPlaying.shared.queueSongs.firstIndex(where: { $0.videoId == current }) else {
+                    return false
+                }
+                return NowPlaying.shared.queueSongs
+                    .dropFirst(position + 1)
+                    .prefix(3)
+                    .contains { $0.videoId == id }
+            }
+            guard stillUpcoming else { continue }
+            await MainActor.run { SponsorBlockIntegration.shared.warm(for: id) }
+            _ = await resolvePreferredUpgrade(videoId: id, budget: 30)
+        }
+        upgradePrefetchInFlight.subtract(targets)
     }
 
     private static func losslessLabel(_ result: PlaybackResult) -> String? {
         let mime = result.mimeType.lowercased()
         let quality = result.audioQuality.lowercased()
+        if quality == "addon-hi-res" { return "FLAC · Hi-Res" }
+        if quality == "addon-cd" { return "FLAC · CD" }
         if mime == "audio/flac" || quality == "pencari-flac" { return "FLAC" }
         if quality == "qobuz-cd" { return "FLAC · CD" }
         if quality.contains("hi-res") || quality.contains("hires") || quality.contains("24") {
@@ -682,6 +748,7 @@ actor PlaybackManager {
 
     /// Badge text is a tier, not a codec: Standard / High / Lossless.
     private static func qualityLabel(_ result: PlaybackResult) -> String? {
+        if result.audioQuality.lowercased().contains("atmos") { return "Dolby Atmos" }
         if losslessLabel(result) != nil { return "Lossless" }
         if result.bitrate >= 160_000 { return "High" }
         if result.audioQuality.lowercased().contains("jiosaavn") { return "High" }
@@ -799,6 +866,19 @@ actor PlaybackManager {
         }
         await MainActor.run { SponsorBlockIntegration.shared.warm(for: videoId) }
 
+        // A prefetched lossless/high stream means the track can start right in
+        // the better source instead of resolving YouTube first.
+        if let upgrade = prefetchedUpgrade(videoId: videoId),
+           Self.isLosslessResult(upgrade) || upgrade.bitrate >= 256_000,
+           !(upgradeMode == .cd && Self.isHiResResult(upgrade)) {
+            if await Self.verifyStream(upgrade.streamUrl) {
+                await playNetworkResult(upgrade, videoId: videoId)
+                scheduleUpgradePrefetch(videoId: videoId)
+                return upgrade
+            }
+            upgradeResultCache[videoId] = nil
+        }
+
         if let cached = await StreamCache.shared.get(videoId: videoId) {
             // A prefetched upgrade can still be better than the cached stream.
             if let upgrade = prefetchedUpgrade(videoId: videoId),
@@ -847,14 +927,15 @@ actor PlaybackManager {
            Self.shouldPreferUpgrade(upgrade, over: result) {
             if await Self.verifyStream(upgrade.streamUrl) {
                 await playNetworkResult(upgrade, videoId: videoId)
+                scheduleUpgradePrefetch(videoId: videoId)
                 return upgrade
             }
             // Dead cached URL (origin rotated/expired): drop it, use YouTube.
             upgradeResultCache[videoId] = nil
         }
         await playNetworkResult(result, videoId: videoId)
-        // Warm this track (for replays) and the next one while it plays. Off the
-        // play path: never delays audio.
+        // Warm this track (for replays) and the next two while it plays. Off
+        // the play path: never delays audio.
         scheduleUpgradePrefetch(videoId: videoId)
         return result
     }

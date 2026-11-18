@@ -27,13 +27,14 @@ struct PlayerSettingsView: View {
             Section {
                 SettingsPickerRow("Audio Quality", icon: "waveform", selection: $settings.audioQuality)
                 SettingsPickerRow("Preferred Source", icon: "opticaldisc", selection: $settings.musicQualityMode)
+                SettingsToggleRow("Prefer Dolby Atmos when available", icon: "spatial.audio", isOn: $settings.preferAtmos)
                 SettingsToggleRow("Upgrade to best quality during playback", icon: "arrow.up.circle", isOn: $settings.upgradeDuringPlayback)
                 SettingsToggleRow("Audio Normalization", icon: "speaker.wave.2", isOn: $settings.audioNormalization)
                 SettingsToggleRow("Gapless Playback", icon: "arrow.right.arrow.left", isOn: $settings.gaplessPlayback)
             } header: {
                 Text("Audio")
             } footer: {
-                Text("Preferred Source picks which stream to use. If \"Upgrade to best quality during playback\" is on, the app may switch to a better source mid-song; you'll hear a very short fade (about 0.3s) while the new stream loads, then playback continues at the same position.")
+                Text("Preferred Source picks which stream to use. CD keeps 16-bit / 44.1 kHz FLAC and skips hi-res (much smaller files); Lossless takes the best FLAC available. \"Prefer Dolby Atmos\" plays the addon's E-AC3 5.1 copy when it exists; iOS downmixes it to stereo, so it is a taste choice, not an upgrade over FLAC. If \"Upgrade to best quality during playback\" is on, the app may switch to a better source mid-song; you'll hear a very short fade (about 0.3s) while the new stream loads, then playback continues at the same position.")
             }
 
             Section {

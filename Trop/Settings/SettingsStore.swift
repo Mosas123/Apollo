@@ -240,6 +240,12 @@ final class SettingsStore: @unchecked Sendable {
         didSet { Self.defaults.set(musicQualityMode.rawValue, forKey: Keys.musicQualityMode) }
     }
 
+    /// Take the Dolby Atmos copy (E-AC3 5.1, downmixed to stereo by iOS) when an
+    /// addon offers one. Off by default: it is a preference, not "better".
+    var preferAtmos: Bool {
+        didSet { Self.defaults.set(preferAtmos, forKey: Keys.preferAtmos) }
+    }
+
     /// When on, the app may switch to a better source *during* playback. The
     /// user hears a very short fade while the stream reloads.
     var upgradeDuringPlayback: Bool {
@@ -450,6 +456,7 @@ final class SettingsStore: @unchecked Sendable {
         static let podcastIndexKey = "settings.podcastIndexKey"
         static let pencariMusicBaseURL = "settings.pencariMusicBaseURL"
         static let musicQualityMode = "settings.musicQualityMode"
+        static let preferAtmos = "settings.preferAtmos"
         static let upgradeDuringPlayback = "settings.upgradeDuringPlayback"
         static let aiProvider = "settings.aiProvider"
         static let aiKey = "settings.aiKey"
@@ -532,6 +539,7 @@ final class SettingsStore: @unchecked Sendable {
         podcastIndexKey = Self.loadString(Keys.podcastIndexKey, default: "")
         pencariMusicBaseURL = Self.loadString(Keys.pencariMusicBaseURL, default: PencariMusicClient.defaultBase)
         musicQualityMode = Self.loadEnum(Keys.musicQualityMode, default: .auto)
+        preferAtmos = Self.load(Keys.preferAtmos, default: false)
         upgradeDuringPlayback = Self.load(Keys.upgradeDuringPlayback, default: false)
         aiProvider = Self.loadString(Keys.aiProvider, default: AIProvider.off.rawValue)
         aiKey = Self.loadString(Keys.aiKey, default: "")
