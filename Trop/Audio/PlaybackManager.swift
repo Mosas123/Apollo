@@ -369,16 +369,29 @@ actor PlaybackManager {
             qualityLabel: newLabel,
             startAt: position
         )
-        await PlayerController.shared.fadeVolume(to: targetVolume, duration: 0.2)
-        await MainActor.run { PlayerController.shared.setVolumeOverride(nil) }
+        // Stay muted while the new stream buffers; fade in only once audio is
+        // actually advancing. Fading during buffering made it enter abruptly
+        // at full volume.
+        var started = false
+        for _ in 0..<60 {
+            try? await Task.sleep(for: .milliseconds(50))
+            let time = await MainActor.run { NowPlaying.shared.currentTime }
+            let currentId = await MainActor.run { NowPlaying.shared.videoId }
+            if currentId != videoId { break }
+            if time > position + 0.05 { started = true; break }
+        }
 
-        // Confirm it actually started decoding; otherwise roll back silently.
-        try? await Task.sleep(for: .seconds(1.5))
-        let advanced = await MainActor.run { NowPlaying.shared.currentTime }
-        let currentId = await MainActor.run { NowPlaying.shared.videoId }
-        if currentId == videoId, advanced <= position + 0.05, let oldURL {
-            upgradeResultCache[videoId] = nil
-            if result.audioQuality.lowercased().contains("pencari") { markPencariCooldown() }
+        if started {
+            await PlayerController.shared.fadeVolume(to: targetVolume, duration: 0.35)
+            await MainActor.run { PlayerController.shared.setVolumeOverride(nil) }
+            return
+        }
+
+        // Didn't start: roll back to the previous stream, audible again.
+        upgradeResultCache[videoId] = nil
+        if result.audioQuality.lowercased().contains("pencari") { markPencariCooldown() }
+        await MainActor.run { PlayerController.shared.setVolumeOverride(targetVolume) }
+        if let oldURL {
             await PlayerController.shared.play(
                 url: oldURL,
                 title: song?.title,
@@ -392,6 +405,7 @@ actor PlaybackManager {
                 startAt: position
             )
         }
+        await MainActor.run { PlayerController.shared.setVolumeOverride(nil) }
     }
 
     /// Cheap reachability check: Range request, 200/206, audio-ish content type.
