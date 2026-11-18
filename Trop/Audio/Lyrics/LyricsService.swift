@@ -259,7 +259,8 @@ actor LyricsService {
             title: cleaned.title,
             artist: cleaned.artist,
             album: cleaned.album,
-            duration: duration > 0 ? duration : 0
+            duration: duration > 0 ? duration : 0,
+            videoId: NowPlaying.shared.videoId
         )
     }
 

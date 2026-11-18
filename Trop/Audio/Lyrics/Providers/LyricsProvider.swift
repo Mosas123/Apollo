@@ -13,6 +13,7 @@ struct LyricsQuery: Sendable {
     let artist: String
     let album: String?
     let duration: TimeInterval
+    var videoId: String? = nil
 
     var durationSeconds: Int { Int(duration) }
 }
