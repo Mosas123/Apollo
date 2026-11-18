@@ -283,7 +283,13 @@ extension PlayerController {
         sharedState.withLock { $0.pendingVideoId = videoId }
         // `startAt` lets an in-place quality upgrade resume at the same
         // position instead of restarting the track.
-        let playbackStart = startAt > 0 ? startAt : skipStart
+        var playbackStart = startAt > 0 ? startAt : skipStart
+        if startAt == 0,
+           let resume = NowPlaying.shared.takeResumePosition(for: videoId),
+           resume > 5,
+           resume < (duration ?? .greatestFiniteMagnitude) - 5 {
+            playbackStart = resume
+        }
         let loadStart = playbackStart > 0 ? Int(playbackStart.rounded(.up)) : 0
         let loadArguments = loadStart > 0
             ? ["loadfile", url.absoluteString, "replace", "-1", "start=\(loadStart)"]

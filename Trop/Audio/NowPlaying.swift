@@ -129,6 +129,9 @@ final class NowPlaying {
     private var lastFailureAt: [String: Date] = [:]
 
     private static let queueKey = "nowPlaying.queue"
+    private static let positionKey = "nowPlaying.lastPosition"
+    private var pendingResumePosition: TimeInterval?
+    private var pendingResumeAt: Date?
     private static let queueIndexKey = "nowPlaying.queueIndex"
     private static let shuffleKey = "nowPlaying.shuffle"
     private static let repeatKey = "nowPlaying.repeat"
@@ -145,6 +148,17 @@ final class NowPlaying {
     }
 
     // MARK: - Persistent queue
+
+    /// Consumes a saved position for the first play after launch.
+    func takeResumePosition(for videoId: String?) -> TimeInterval? {
+        guard let videoId, videoId == self.videoId,
+              let position = pendingResumePosition,
+              let savedAt = pendingResumeAt,
+              Date().timeIntervalSince(savedAt) < 86_400 else { return nil }
+        pendingResumePosition = nil
+        pendingResumeAt = nil
+        return position
+    }
 
     private func restoreQueueIfNeeded() {
         guard SettingsStore.shared.persistQueue,
@@ -164,6 +178,17 @@ final class NowPlaying {
         isRepeatOn = UserDefaults.standard.bool(forKey: Self.repeatKey)
         queueIndex = max(0, queueIndex)
         lastPersistedQueue = songs
+        if let saved = UserDefaults.standard.dictionary(forKey: Self.positionKey),
+           let savedId = saved["videoId"] as? String,
+           let position = saved["position"] as? Double,
+           let at = saved["at"] as? Double,
+           queueSongs.indices.contains(queueIndex),
+           queueSongs[queueIndex].videoId == savedId,
+           Date().timeIntervalSince1970 - at < 86_400 {
+            pendingResumePosition = position
+            pendingResumeAt = Date(timeIntervalSince1970: at)
+            currentTime = position
+        }
     }
 
     func persistQueueState() {
@@ -940,6 +965,14 @@ final class NowPlaying {
         // `updateNowPlayingProgress`; polling it every tick doubled the
         // synchronous mpv reads on the main actor.
         progressTick += 1
+        if progressTick % 20 == 0, isPlaying, let videoId {
+            let payload: [String: Any] = [
+                "videoId": videoId,
+                "position": currentTime,
+                "at": Date().timeIntervalSince1970
+            ]
+            UserDefaults.standard.set(payload, forKey: Self.positionKey)
+        }
         if progressTick % 4 == 0 {
             PlayerController.shared.updateNowPlayingProgress()
         }

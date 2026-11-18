@@ -529,6 +529,26 @@ actor PlaybackManager {
                 }
             }
             await self.prefetchNextUpgrade(after: videoId)
+            await self.prefetchNextMetadata(after: videoId)
+        }
+    }
+
+    /// Warms catalogue metadata + album cover for the next queue track.
+    private func prefetchNextMetadata(after videoId: String) async {
+        let queue = await MainActor.run { NowPlaying.shared.queueSongs }
+        guard let index = queue.firstIndex(where: { $0.videoId == videoId }),
+              queue.indices.contains(index + 1) else { return }
+        let next = queue[index + 1]
+        guard !MusicPlaybackIdentity.isExternal(next.videoId) else { return }
+        let artist = next.artists.first?.name ?? ""
+        _ = await MetadataResolver.enrich(
+            title: next.title,
+            artist: artist,
+            album: next.album,
+            duration: next.duration
+        )
+        if let album = next.album, !album.isEmpty {
+            _ = await AlbumCoverStore.shared.coverURL(album: album, artist: artist)
         }
     }
 
