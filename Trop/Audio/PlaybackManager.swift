@@ -28,10 +28,12 @@ actor PlaybackManager {
 
     /// Audius uses its own full-track streaming endpoint and never passes a
     /// provider-prefixed ID to the YouTube stream resolver.
-    private func resolveAudius(videoId: String) async throws -> PlaybackResult {
+    private func resolveAudius(videoId: String, song fallbackSong: SongItem? = nil) async throws -> PlaybackResult {
         guard let identifier = MusicCatalogID(storageKey: videoId),
-              identifier.source == .audius,
-              let song = await queueSong(for: videoId) else {
+              identifier.source == .audius else {
+            throw MusicCatalogError.unavailableTrack
+        }
+        guard let song = await songForResolve(videoId, fallback: fallbackSong) else {
             throw MusicCatalogError.unavailableTrack
         }
         let sourceTrack = MusicCatalogTrack(
@@ -65,10 +67,12 @@ actor PlaybackManager {
 
     /// Qobuz uses fresh, authorized, short-lived FLAC links. Its IDs must
     /// never enter the YouTube stream resolver.
-    private func resolveQobuz(videoId: String) async throws -> PlaybackResult {
+    private func resolveQobuz(videoId: String, song fallbackSong: SongItem? = nil) async throws -> PlaybackResult {
         guard let identifier = MusicCatalogID(storageKey: videoId),
-              identifier.source == .qobuz,
-              let song = await queueSong(for: videoId) else {
+              identifier.source == .qobuz else {
+            throw QobuzError.invalidTrack
+        }
+        guard let song = await songForResolve(videoId, fallback: fallbackSong) else {
             throw QobuzError.invalidTrack
         }
         guard let credentials = try await QobuzCredentialStore.shared.load() else {
@@ -98,10 +102,12 @@ actor PlaybackManager {
 
     /// PencariMusic streams resolve server-side to a short-lived FLAC URL; the
     /// short code must never reach the YouTube resolver.
-    private func resolvePencari(videoId: String) async throws -> PlaybackResult {
+    private func resolvePencari(videoId: String, song fallbackSong: SongItem? = nil) async throws -> PlaybackResult {
         guard let identifier = MusicCatalogID(storageKey: videoId),
-              identifier.source == .pencari,
-              let song = await queueSong(for: videoId) else {
+              identifier.source == .pencari else {
+            throw MusicCatalogError.unavailableTrack
+        }
+        guard let song = await songForResolve(videoId, fallback: fallbackSong) else {
             throw MusicCatalogError.unavailableTrack
         }
         guard let client = await PencariMusicClient.configured() else {
@@ -128,10 +134,12 @@ actor PlaybackManager {
     }
 
     /// JioSaavn resolves to a decrypted (usually 320 kbps AAC) URL.
-    private func resolveJioSaavn(videoId: String) async throws -> PlaybackResult {
+    private func resolveJioSaavn(videoId: String, song fallbackSong: SongItem? = nil) async throws -> PlaybackResult {
         guard let identifier = MusicCatalogID(storageKey: videoId),
-              identifier.source == .jiosaavn,
-              let song = await queueSong(for: videoId) else {
+              identifier.source == .jiosaavn else {
+            throw MusicCatalogError.unavailableTrack
+        }
+        guard let song = await songForResolve(videoId, fallback: fallbackSong) else {
             throw MusicCatalogError.unavailableTrack
         }
         let streamURL = try await JioSaavnClient().resolveStreamURL(for: identifier.rawValue)
@@ -162,14 +170,23 @@ actor PlaybackManager {
         )
     }
 
+    /// Queue metadata for a track that isn't necessarily playing (downloads
+    /// from a list pass their own SongItem).
+    private func songForResolve(_ videoId: String, fallback: SongItem?) async -> SongItem? {
+        if let fallback { return fallback }
+        return await queueSong(for: videoId)
+    }
+
     /// Reads a Stremio music addon: resolves the stream URL and maps its
     /// declared quality into the player badge.
-    private func resolveAddon(videoId: String) async throws -> PlaybackResult {
+    private func resolveAddon(videoId: String, song fallbackSong: SongItem? = nil) async throws -> PlaybackResult {
         guard let ref = AddonPlaybackID.decode(videoId),
               let installation = await MainActor.run(body: {
                   MusicAddonsStore.shared.installation(key: ref.k)
-              }),
-              let song = await queueSong(for: videoId) else {
+              }) else {
+            throw MusicCatalogError.unavailableTrack
+        }
+        guard let song = await songForResolve(videoId, fallback: fallbackSong) else {
             throw MusicCatalogError.unavailableTrack
         }
         let client = try MusicAddonClient(installation: installation)
@@ -383,18 +400,85 @@ actor PlaybackManager {
         }
     }
 
+    private enum UpgradeRaceOutcome: Sendable {
+        case lossless(PlaybackResult)
+        case miss
+        case timeout
+    }
+
+    /// Pencari and the enabled add-ons race for the FLAC; whichever answers
+    /// first wins and the other lookup is cancelled.
     private func losslessWithinBudget(videoId: String, seconds: Double) async -> PlaybackResult? {
-        let result = await withTaskGroup(of: PlaybackResult?.self) { group -> PlaybackResult? in
-            group.addTask { await self.resolveLosslessUpgrade(videoId: videoId) }
+        let result = await withTaskGroup(of: UpgradeRaceOutcome.self) { group -> PlaybackResult? in
+            group.addTask {
+                if let result = await self.resolveLosslessUpgrade(videoId: videoId) {
+                    return .lossless(result)
+                }
+                return .miss
+            }
+            group.addTask {
+                if let result = await self.resolveAddonLossless(videoId: videoId) {
+                    return .lossless(result)
+                }
+                return .miss
+            }
             group.addTask {
                 try? await Task.sleep(for: .seconds(seconds))
-                return nil
+                return .timeout
             }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first
+            var misses = 0
+            for await outcome in group {
+                switch outcome {
+                case .lossless(let result):
+                    group.cancelAll()
+                    return result
+                case .miss:
+                    misses += 1
+                    if misses == 2 {
+                        group.cancelAll()
+                        return nil
+                    }
+                case .timeout:
+                    group.cancelAll()
+                    return nil
+                }
+            }
+            return nil
         }
         if result == nil { markPencariCooldown(120) }
+        return result
+    }
+
+    /// Same track as a lossless stream on one of the installed add-ons.
+    private func resolveAddonLossless(videoId: String) async -> PlaybackResult? {
+        guard upgradeMode == .lossless else { return nil }
+        guard !MusicPlaybackIdentity.isExternal(videoId) else { return nil }
+        guard let song = await queueSong(for: videoId) else { return nil }
+        guard let match = await AddonSourceResolver.bestMatch(for: song),
+              match.stream.qualityTier == "Lossless",
+              case .url(let url) = match.stream.kind,
+              await Self.verifyStream(url.absoluteString) else { return nil }
+        let result = PlaybackResult(
+            streamUrl: url.absoluteString,
+            itag: 0,
+            mimeType: match.stream.mimeType,
+            bitrate: match.stream.bitrate,
+            audioQuality: "addon-lossless",
+            videoId: videoId,
+            title: song.title,
+            author: song.artistNamesDisplay,
+            duration: song.duration,
+            expiresInSeconds: 0,
+            clientName: "addon",
+            musicVideoType: nil,
+            hasVideoContent: false,
+            muxedStreamUrl: nil,
+            loudnessDb: nil
+        )
+        if upgradeResultCache.count >= 100 {
+            upgradeResultCache.removeAll(keepingCapacity: true)
+        }
+        upgradeResultCache[videoId] = (result, Date())
         return result
     }
 
@@ -891,26 +975,28 @@ actor PlaybackManager {
     /// Stable per-launch session id for PoToken minting.
     static let sessionId: String = UUID().uuidString
     /// Resolve a video without playing. Useful for previews / testing.
-    func resolve(videoId: String, preferredFormat: Format? = nil, forDownload: Bool = false) async throws -> PlaybackResult {
+    func resolve(
+        videoId: String,
+        preferredFormat: Format? = nil,
+        forDownload: Bool = false,
+        song: SongItem? = nil
+    ) async throws -> PlaybackResult {
         if MusicPlaybackIdentity.isExternal(videoId) {
-            // Add-on tracks can be saved offline: the stream URL is direct.
-            // The other external sources are streaming-only for now.
-            guard !forDownload || MusicPlaybackIdentity.isAddon(videoId) else {
-                throw MusicCatalogError.unavailableTrack
-            }
+            // Every external resolver returns a direct stream URL, so all of
+            // them can also be saved for offline playback.
             if MusicPlaybackIdentity.isQobuz(videoId) {
-                return try await resolveQobuz(videoId: videoId)
+                return try await resolveQobuz(videoId: videoId, song: song)
             }
             if MusicPlaybackIdentity.isPencari(videoId) {
-                return try await resolvePencari(videoId: videoId)
+                return try await resolvePencari(videoId: videoId, song: song)
             }
             if MusicPlaybackIdentity.isJioSaavn(videoId) {
-                return try await resolveJioSaavn(videoId: videoId)
+                return try await resolveJioSaavn(videoId: videoId, song: song)
             }
             if MusicPlaybackIdentity.isAddon(videoId) {
-                return try await resolveAddon(videoId: videoId)
+                return try await resolveAddon(videoId: videoId, song: song)
             }
-            return try await resolveAudius(videoId: videoId)
+            return try await resolveAudius(videoId: videoId, song: song)
         }
         if !forDownload, let cached = await StreamCache.shared.get(videoId: videoId) {
             return cached

@@ -25,8 +25,15 @@ enum AddonSourceResolver {
 
         let title = TextMatch.queryTitle(song.title)
         let artist = TextMatch.queryArtist(song.artists.first?.name ?? "")
-        let queries = [([artist, title].filter { !$0.isEmpty }.joined(separator: " ")), title]
-            .filter { !$0.isEmpty }
+        // Two searches race per addon: the specific one (artist + album +
+        // title) and the fallback (artist + title) for addons whose search
+        // chokes on the extra album words.
+        let album = TextMatch.queryTitle(song.album ?? "")
+        var queries: [String] = []
+        let withAlbum = [artist, album, title].filter { !$0.isEmpty }.joined(separator: " ")
+        let withoutAlbum = [artist, title].filter { !$0.isEmpty }.joined(separator: " ")
+        if !withAlbum.isEmpty { queries.append(withAlbum) }
+        if !withoutAlbum.isEmpty, !queries.contains(withoutAlbum) { queries.append(withoutAlbum) }
         let criteria = Criteria(
             title: song.title,
             artist: artist,
@@ -54,34 +61,57 @@ enum AddonSourceResolver {
         }
     }
 
+    /// Races the queries of one addon too: the first lossless answer wins and
+    /// the other query is cancelled.
     private static func bestMatch(
         in installation: MusicAddonInstallation,
         criteria: Criteria
     ) async -> (Match, Int)? {
         guard let client = try? MusicAddonClient(installation: installation) else { return nil }
-        var best: (Match, Int)?
-        for query in criteria.queries {
-            guard let found = try? await client.search(query, limit: 8), !found.isEmpty else { continue }
-            for track in found {
-                guard TextMatch.titlesMatch(track.title, criteria.title) else { continue }
-                if let trackArtist = track.artist, !trackArtist.isEmpty, !criteria.artist.isEmpty,
-                   !TextMatch.artistsMatch(trackArtist, criteria.artist) { continue }
-                if let album = criteria.album, !album.isEmpty, let trackAlbum = track.album, !trackAlbum.isEmpty,
-                   !TextMatch.albumsMatch(trackAlbum, album) { continue }
-                if let duration = criteria.duration, let trackDuration = track.durationSeconds, trackDuration > 0,
-                   abs(trackDuration - duration) > 20 { continue }
-                guard let stream = try? await client.resolveStream(type: track.type, id: track.id) else { continue }
-                let rank: Int
-                switch stream.qualityTier {
-                case "Lossless": rank = 3
-                case "High": rank = 2
-                default: rank = 1
+        return await withTaskGroup(of: (Match, Int)?.self) { group in
+            for query in criteria.queries {
+                group.addTask { await bestMatch(in: client, query: query, criteria: criteria) }
+            }
+            var best: (Match, Int)?
+            for await candidate in group {
+                guard let candidate else { continue }
+                if best == nil || candidate.1 > best!.1 {
+                    best = candidate
                 }
-                if best == nil || rank > best!.1 {
-                    best = (Match(track: track, stream: stream), rank)
+                if candidate.1 == 3 {
+                    group.cancelAll()
+                    break
                 }
             }
-            if best?.1 == 3 { break }
+            return best
+        }
+    }
+
+    private static func bestMatch(
+        in client: MusicAddonClient,
+        query: String,
+        criteria: Criteria
+    ) async -> (Match, Int)? {
+        guard let found = try? await client.search(query, limit: 8), !found.isEmpty else { return nil }
+        var best: (Match, Int)?
+        for track in found {
+            guard TextMatch.titlesMatch(track.title, criteria.title) else { continue }
+            if let trackArtist = track.artist, !trackArtist.isEmpty, !criteria.artist.isEmpty,
+               !TextMatch.artistsMatch(trackArtist, criteria.artist) { continue }
+            if let album = criteria.album, !album.isEmpty, let trackAlbum = track.album, !trackAlbum.isEmpty,
+               !TextMatch.albumsMatch(trackAlbum, album) { continue }
+            if let duration = criteria.duration, let trackDuration = track.durationSeconds, trackDuration > 0,
+               abs(trackDuration - duration) > 20 { continue }
+            guard let stream = try? await client.resolveStream(type: track.type, id: track.id) else { continue }
+            let rank: Int
+            switch stream.qualityTier {
+            case "Lossless": rank = 3
+            case "High": rank = 2
+            default: rank = 1
+            }
+            if best == nil || rank > best!.1 {
+                best = (Match(track: track, stream: stream), rank)
+            }
         }
         return best
     }

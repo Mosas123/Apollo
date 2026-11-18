@@ -291,7 +291,7 @@ extension DownloadManager {
                     let song = songs[next]
                     next += 1
                     group.addTask {
-                        await manager.download(song: song)
+                        await manager.download(song: song, allowLosslessSource: false)
                     }
                 }
                 await group.next()
@@ -299,7 +299,7 @@ extension DownloadManager {
         }
     }
 
-    func download(song: SongItem) async {
+    func download(song: SongItem, allowLosslessSource: Bool = true) async {
         let videoId = song.videoId
         if case .downloading = downloads[videoId] {
             Log.downloadManager.debug("Download already in progress for \(videoId)")
@@ -343,7 +343,7 @@ extension DownloadManager {
 
             setProgress(0.05, for: videoId)
             let resolveStart = CFAbsoluteTimeGetCurrent()
-            let source = try await downloadSource(for: song)
+            let source = try await downloadSource(for: song, allowLossless: allowLosslessSource)
             let resolveElapsed = CFAbsoluteTimeGetCurrent() - resolveStart
             let format = source.format
             Log.downloadManager.debug(
@@ -376,7 +376,8 @@ extension DownloadManager {
             let ffmpegStart = CFAbsoluteTimeGetCurrent()
             switch format {
             case .flac:
-                // Lossless stays bit-perfect: no transcode, metadata only.
+                // Lossless stays bit-perfect: no transcode. Embed the cover when
+                // the FLAC muxer allows it, otherwise keep plain metadata.
                 try validateFLACFile(at: tempDownload)
                 do {
                     try await attachMetadata(
@@ -384,11 +385,23 @@ extension DownloadManager {
                         fileExtension: "flac",
                         title: song.title,
                         artist: artist,
-                        artworkData: nil,
+                        artworkData: artwork,
                         videoId: videoId
                     )
                 } catch {
-                    Log.downloadManager.debug("FLAC tag step skipped: \(error.localizedDescription)")
+                    Log.downloadManager.debug("FLAC artwork skipped: \(error.localizedDescription)")
+                    do {
+                        try await attachMetadata(
+                            to: tempDownload,
+                            fileExtension: "flac",
+                            title: song.title,
+                            artist: artist,
+                            artworkData: nil,
+                            videoId: videoId
+                        )
+                    } catch {
+                        Log.downloadManager.debug("FLAC tags skipped: \(error.localizedDescription)")
+                    }
                 }
                 try fileManager.moveItem(at: tempDownload, to: fileURL)
             case .mp3:
@@ -523,7 +536,7 @@ extension DownloadManager {
     /// Picks what to download: an add-on track resolves its own stream; a
     /// YouTube song tries a lossless add-on match when the user prefers
     /// lossless, and falls back to the YouTube stream.
-    private func downloadSource(for song: SongItem) async throws -> DownloadSource {
+    private func downloadSource(for song: SongItem, allowLossless: Bool = true) async throws -> DownloadSource {
         if let ref = AddonPlaybackID.decode(song.videoId) {
             guard let installation = MusicAddonsStore.shared.installation(key: ref.k) else {
                 throw MusicCatalogError.unavailableTrack
@@ -532,7 +545,11 @@ extension DownloadManager {
             let stream = try await client.resolveStream(type: ref.t, id: ref.i)
             switch stream.kind {
             case .youtube(let youTubeId):
-                let resolved = try await PlaybackManager.shared.resolve(videoId: youTubeId, forDownload: true)
+                let resolved = try await PlaybackManager.shared.resolve(
+                    videoId: youTubeId,
+                    forDownload: true,
+                    song: song
+                )
                 guard let url = URL(string: resolved.streamUrl) else { throw DownloadError.invalidStreamURL }
                 return DownloadSource(
                     url: url,
@@ -548,26 +565,23 @@ extension DownloadManager {
             }
         }
 
-        if SettingsStore.shared.musicQualityMode == .lossless,
-           let pencari = await withTimeout(seconds: 12, { await pencariDownloadSource(for: song) }) {
-            Log.downloadManager.debug("Pencari lossless source for \(song.videoId)")
-            return pencari
+        // Bulk downloads skip the lossless lookup: it can cost seconds per
+        // track and a queue of 50 would stall for minutes.
+        if allowLossless,
+           !MusicPlaybackIdentity.isExternal(song.videoId),
+           SettingsStore.shared.musicQualityMode == .lossless,
+           let lossless = await raceLosslessSource(for: song) {
+            Log.downloadManager.debug("Lossless source for \(song.videoId)")
+            return lossless
         }
 
-        if SettingsStore.shared.musicQualityMode == .lossless,
-           let match = await bestAddonMatch(for: song),
-           match.stream.qualityTier == "Lossless",
-           case .url(let url) = match.stream.kind,
-           await probeAudioURL(url) {
-            Log.downloadManager.debug("Add-on lossless source for \(song.videoId)")
-            return DownloadSource(
-                url: url,
-                mimeType: match.stream.mimeType,
-                format: .flac
-            )
-        }
-
-        let resolved = try await PlaybackManager.shared.resolve(videoId: song.videoId, forDownload: true)
+        // Audius, Qobuz, Pencari and JioSaavn tracks resolve to direct URLs,
+        // so they can be downloaded like everything else.
+        let resolved = try await PlaybackManager.shared.resolve(
+            videoId: song.videoId,
+            forDownload: true,
+            song: song
+        )
         guard let url = URL(string: resolved.streamUrl) else { throw DownloadError.invalidStreamURL }
         return DownloadSource(
             url: url,
@@ -585,6 +599,36 @@ extension DownloadManager {
             return .aac
         }
         return .other
+    }
+
+    /// Pencari and the installed addons race each other; the first lossless
+    /// hit wins and the other lookup is cancelled. YouTube is the fallback.
+    private func raceLosslessSource(for song: SongItem, seconds: Double = 14) async -> DownloadSource? {
+        await withTaskGroup(of: DownloadSource?.self) { group in
+            group.addTask {
+                await self.withTimeout(seconds: seconds) { await self.pencariDownloadSource(for: song) }
+            }
+            group.addTask {
+                await self.withTimeout(seconds: seconds) { await self.addonDownloadSource(for: song) }
+            }
+            var found: DownloadSource?
+            for await candidate in group {
+                guard let candidate else { continue }
+                found = candidate
+                break
+            }
+            group.cancelAll()
+            return found
+        }
+    }
+
+    /// Best lossless addon stream for a YouTube song, probed before use.
+    private func addonDownloadSource(for song: SongItem) async -> DownloadSource? {
+        guard let match = await bestAddonMatch(for: song),
+              match.stream.qualityTier == "Lossless",
+              case .url(let url) = match.stream.kind,
+              await probeAudioURL(url) else { return nil }
+        return DownloadSource(url: url, mimeType: match.stream.mimeType, format: .flac)
     }
 
     /// Same track on the bundled PencariMusic lossless source. Returns nil on
@@ -1120,10 +1164,7 @@ extension DownloadManager {
     ) async throws {
         let tempOutput = fileManager.temporaryDirectory
             .appendingPathComponent("\(UUID().uuidString).\(fileExtension)")
-        // FLAC artwork needs a picture metadata block; the app already shows the
-        // cover from the DB, so keep the lossless file simple and bit-perfect.
-        let canEmbedArtwork = fileExtension == "m4a" || fileExtension == "mp3"
-        let artworkURL = canEmbedArtwork ? try writeTempArtwork(artworkData) : nil
+        let artworkURL = try writeTempArtwork(artworkData)
         defer {
             try? fileManager.removeItem(at: tempOutput)
             if let artworkURL {
