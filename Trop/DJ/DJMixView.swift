@@ -78,11 +78,10 @@ final class DJMixViewModel {
 }
 
 struct DJMixView: View {
-    @State private var model = DJMixViewModel()
+    @Bindable private var model = DJMixViewModel()
     @State private var importing = false
 
     var body: some View {
-        @Bindable var model = model
         List {
             Section {
                 Button("Add audio files") { importing = true }
