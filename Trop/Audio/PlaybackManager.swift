@@ -361,7 +361,7 @@ actor PlaybackManager {
     /// Dispatches the prefetch by the user's quality mode. Lossless falls back
     /// to JioSaavn High so an unreachable FLAC origin doesn't leave the user on
     /// Standard.
-    private func resolvePreferredUpgrade(videoId: String) async -> PlaybackResult? {
+    private func resolvePreferredUpgrade(videoId: String, interactive: Bool = false) async -> PlaybackResult? {
         let cached = upgradeResultCache[videoId].flatMap {
             Date().timeIntervalSince($0.at) < pencariResultTTL ? $0.result : nil
         }
@@ -375,7 +375,7 @@ actor PlaybackManager {
             // Lossless gets priority even when a High result is cached, but it
             // only gets 8 seconds before we fall back to High/best available.
             if let cached, Self.isLosslessResult(cached) { return cached }
-            if let lossless = await losslessWithinBudget(videoId: videoId, seconds: 8) {
+            if let lossless = await losslessWithinBudget(videoId: videoId, seconds: interactive ? 4 : 8) {
                 return lossless
             }
             if let cached { return cached }
@@ -522,7 +522,7 @@ actor PlaybackManager {
                 if needsFetch {
                     await MainActor.run { NowPlaying.shared.isUpgradingQuality = true }
                 }
-                let upgraded = await self.resolvePreferredUpgrade(videoId: videoId)
+                let upgraded = await self.resolvePreferredUpgrade(videoId: videoId, interactive: SettingsStore.shared.upgradeDuringPlayback)
                 await MainActor.run { NowPlaying.shared.isUpgradingQuality = false }
                 if let upgraded {
                     await self.applyUpgradeIfEnabled(upgraded, videoId: videoId)
