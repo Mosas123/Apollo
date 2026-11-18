@@ -246,7 +246,7 @@ struct MusicAddonPackage: Sendable {
               rawPath.utf8.allSatisfy({ byte in
                   (65...90).contains(byte) || (97...122).contains(byte) ||
                   (48...57).contains(byte) || byte == 47 || byte == 95 ||
-                  byte == 45 || byte == 46
+                  byte == 45 || byte == 46 || byte == 61
               }) else { return nil }
         components.scheme = "https"
         components.host = host
