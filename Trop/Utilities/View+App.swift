@@ -27,6 +27,9 @@ extension View {
         self.sheet(item: item) { route in
             NavigationStack {
                 DetailRouteDestinationView(route: route)
+                    // Sheets have their own stack and do not inherit the tab's
+                    // typed destinations. Keep nested detail links navigable.
+                    .detailRouteDestinations()
             }
         }
     }
