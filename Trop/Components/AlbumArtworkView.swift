@@ -20,14 +20,20 @@ struct SongArtworkView: View {
                 resolvedKey = taskKey
                 guard song.contentKind == nil || song.contentKind == .music,
                       !MusicPlaybackIdentity.isExternal(song.videoId) else { return }
+                let identity = TrackIdentity.make(from: song)
                 let metadata = await MetadataResolver.enrich(
-                    title: song.title,
-                    artist: song.artists.map(\.name).joined(separator: ", "),
-                    album: song.album,
-                    duration: song.duration
+                    title: identity.title,
+                    artist: identity.artist,
+                    album: identity.album,
+                    duration: identity.durationSeconds
                 )
                 guard !Task.isCancelled else { return }
-                resolvedURL = metadata?.artworkURL?.absoluteString
+                var coverURL = metadata?.artworkURL
+                if coverURL == nil, let album = identity.album, !album.isEmpty {
+                    coverURL = await MetadataResolver.albumArtwork(title: album, artist: identity.artist)
+                }
+                guard !Task.isCancelled else { return }
+                resolvedURL = coverURL?.absoluteString
                 if let metadata { onMetadataResolved?(metadata) }
             }
     }

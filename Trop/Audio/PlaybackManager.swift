@@ -697,20 +697,9 @@ actor PlaybackManager {
                 }
                 upgradeResultCache[videoId] = nil
             }
-            let queueSong = await queueSong(for: videoId)
-            await PlayerController.shared.play(
-                url: cached.streamUrl,
-                title: cached.title,
-                artist: cached.author,
-                videoId: videoId,
-                duration: cached.duration.flatMap { $0 > 0 ? TimeInterval($0) : nil },
-                artists: queueSong?.artists ?? [],
-                loudnessDb: cached.loudnessDb,
-                thumbnailUrl: queueSong?.thumbnailUrl,
-                losslessLabel: Self.losslessLabel(cached),
-                qualityLabel: Self.qualityLabel(cached)
-            )
-            await publishVideoAvailability(result: cached, videoId: videoId, rowType: queueSong?.musicVideoType)
+            // Cache contains transport metadata, whose author can be an upload
+            // channel. Use the same queue-credit policy as fresh resolutions.
+            await playNetworkResult(cached, videoId: videoId)
             scheduleUpgradePrefetch(videoId: videoId)
             return cached
         }

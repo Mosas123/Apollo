@@ -44,7 +44,7 @@ enum MetadataResolver {
     /// actual album artwork and requires the album and performer to match.
     static func albumArtwork(title: String, artist: String) async -> URL? {
         guard !title.isEmpty, !artist.isEmpty else { return nil }
-        let key = "album|" + cacheKey(title: title, artist: artist)
+        let key = "album-v2|" + cacheKey(title: title, artist: artist)
         if let cached = await MetadataCache.shared.lookup(key) { return cached.value?.artworkURL }
         var components = URLComponents(string: "https://itunes.apple.com/search")
         components?.queryItems = [
@@ -55,7 +55,7 @@ enum MetadataResolver {
         guard let url = components?.url,
               let response: ITunesResponse = try? await decode(url, headers: [:]) else { return nil }
         let match = response.results.first {
-            TextMatch.albumsMatch($0.collectionName ?? "", title)
+            TextMatch.normalizeTitle($0.collectionName ?? "") == TextMatch.normalizeTitle(title)
                 && TextMatch.artistsMatch($0.artistName ?? "", artist)
         }
         let artwork = ArtworkURLs.highRes(match?.artworkUrl100).flatMap(URL.init(string:))

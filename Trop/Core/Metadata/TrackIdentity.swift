@@ -10,20 +10,18 @@ struct TrackIdentity: Sendable, Equatable {
     let durationSeconds: Int?
 
     var cacheKey: String {
-        "\(TextMatch.normalizeTitle(title))|\(TextMatch.normalizeArtist(artist))"
+        "\(TextMatch.normalize(TextMatch.recordingTitle(title)))|\(TextMatch.normalize(TextMatch.queryArtist(artist)))|\(album ?? "")|\(durationSeconds ?? 0)"
     }
 
     static func make(from song: SongItem) -> TrackIdentity {
-        var title = song.title
-        var artist = song.artists.first?.name ?? ""
-        if artist.isEmpty, let separator = title.range(of: " - ") {
-            artist = String(title[..<separator.lowerBound]).trimmingCharacters(in: .whitespaces)
-            title = String(title[separator.upperBound...]).trimmingCharacters(in: .whitespaces)
-        }
+        let query = TextMatch.recordingQuery(
+            title: song.title,
+            artist: song.artists.map(\.name).joined(separator: ", ")
+        )
         return TrackIdentity(
             videoId: song.videoId,
-            title: TextMatch.queryTitle(title),
-            artist: TextMatch.queryArtist(artist),
+            title: query.title,
+            artist: query.artist,
             album: song.album,
             durationSeconds: song.duration > 0 ? song.duration : nil
         )

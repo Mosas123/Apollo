@@ -70,7 +70,7 @@ enum TextMatch {
 
     /// Primary artist name, without channel suffixes or featured acts.
     static func normalizeArtist(_ value: String) -> String {
-        var text = value
+        var text = channelArtistName(value)
         // "Artist - Topic" (YouTube auto-generated channel)
         text = text.replacingOccurrences(
             of: "\\s+-\\s*topic\\s*$", with: "", options: [.regularExpression, .caseInsensitive]
@@ -100,7 +100,7 @@ enum TextMatch {
 
     /// Artist name to use in a catalogue query (keeps casing, strips noise).
     static func queryArtist(_ value: String) -> String {
-        var text = value
+        var text = channelArtistName(value)
         text = text.replacingOccurrences(
             of: "\\s+-\\s*topic\\s*$", with: "", options: [.regularExpression, .caseInsensitive]
         )
@@ -119,6 +119,16 @@ enum TextMatch {
             of: "(?<=[a-z0-9])(vevo|official)$", with: "", options: [.regularExpression, .caseInsensitive]
         )
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// VEVO channel names often join the artist's words. Expand camel case
+    /// only for that explicit suffix, leaving ordinary stage names untouched.
+    static func channelArtistName(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > 4, trimmed.lowercased().hasSuffix("vevo") else { return value }
+        return String(trimmed.dropLast(4))
+            .replacingOccurrences(of: "(?<=[a-z])(?=[A-Z])", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func titlesMatch(_ lhs: String, _ rhs: String) -> Bool {

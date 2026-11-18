@@ -652,11 +652,10 @@ extension DownloadManager {
         ]
 
         try await runFFmpeg(arguments: args, videoId: videoId) { [weak self] size in
-            Task { @MainActor in
-                // Asymptotic map so unknown Content-Length still moves the bar.
-                let fraction = 0.05 + 0.80 * (1 - exp(-Double(size) / 5_000_000))
-                self?.setProgress(fraction, for: videoId)
-            }
+            // The bridge delivers progress on MainActor already.
+            // Asymptotic map so unknown Content-Length still moves the bar.
+            let fraction = 0.05 + 0.80 * (1 - exp(-Double(size) / 5_000_000))
+            self?.setProgress(fraction, for: videoId)
         }
     }
 
@@ -665,69 +664,94 @@ extension DownloadManager {
     private func runFFmpeg(
         arguments: [String],
         videoId: String? = nil,
-        onSize: (@MainActor (Int64) -> Void)? = nil
+        onSize: (@MainActor @Sendable (Int64) -> Void)? = nil
     ) async throws {
         let sessionBox = FFmpegSessionBox()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                let lock = NSLock()
-                var finished = false
-                let finish: (Result<Void, Error>) -> Void = { result in
-                    lock.lock()
-                    defer { lock.unlock() }
-                    guard !finished else { return }
-                    finished = true
-                    continuation.resume(with: result)
-                }
-
-                let session = FFmpegKit.execute(
-                    withArgumentsAsync: arguments,
-                    withCompleteCallback: { [weak self] session in
-                        sessionBox.set(nil)
-                        if let videoId {
-                            Task { @MainActor in
-                                self?.activeFFmpegSessions.removeValue(forKey: videoId)
-                            }
-                        }
-                        let rc = session?.getReturnCode()
-                        if ReturnCode.isSuccess(rc) {
-                            finish(.success(()))
-                        } else if ReturnCode.isCancel(rc) {
-                            finish(.failure(CancellationError()))
-                        } else {
-                            let output = session?.getOutput() ?? "unknown"
-                            Log.downloadManager.debug("FFmpeg output: \(output)")
-                            finish(.failure(NSError(
-                                domain: "DownloadManager",
-                                code: -1,
-                                userInfo: [NSLocalizedDescriptionKey: "FFmpeg processing failed"]
-                            )))
-                        }
-                    },
-                    withLogCallback: nil,
-                    withStatisticsCallback: { statistics in
-                        guard let statistics else { return }
-                        let size = Int64(statistics.getSize())
-                        // ffmpeg calls this on a background queue; state is
-                        // @MainActor, so hop before touching it (Swift 6 traps
-                        // otherwise).
-                        Task { @MainActor in onSize?(size) }
+                let session = Self.startFFmpeg(
+                    arguments: arguments,
+                    continuation: continuation,
+                    sessionBox: sessionBox,
+                    onSize: onSize,
+                    onCompletion: { [weak self] completedID in
+                        guard let self, let videoId, let completedID,
+                              let active = self.activeFFmpegSessions[videoId],
+                              Int(active.getSessionId()) == completedID else { return }
+                        self.activeFFmpegSessions.removeValue(forKey: videoId)
                     }
                 )
-
                 sessionBox.set(session)
-                if Task.isCancelled {
-                    session?.cancel()
-                }
+                // Register synchronously on MainActor, before the completion
+                // task can remove it. A previous session cannot remove its successor.
                 if let videoId, let session {
-                    Task { @MainActor in
-                        self.activeFFmpegSessions[videoId] = session
-                    }
+                    activeFFmpegSessions[videoId] = session
                 }
+                if Task.isCancelled { session?.cancel() }
             }
         } onCancel: {
             sessionBox.current?.cancel()
         }
+    }
+
+    /// Objective-C invokes these blocks on its worker queues. Creating them
+    /// inside the MainActor-isolated method above makes Swift 6 assert actor
+    /// isolation on callback entry, before even an inner Task can hop actors.
+    nonisolated private static func startFFmpeg(
+        arguments: [String],
+        continuation: CheckedContinuation<Void, Error>,
+        sessionBox: FFmpegSessionBox,
+        onSize: (@MainActor @Sendable (Int64) -> Void)?,
+        onCompletion: @escaping @MainActor @Sendable (Int?) -> Void
+    ) -> FFmpegSession? {
+        let lock = NSLock()
+        var finished = false
+        let finish: (Result<Void, Error>) -> Void = { result in
+            lock.lock()
+            guard !finished else { lock.unlock(); return }
+            finished = true
+            lock.unlock()
+            continuation.resume(with: result)
+        }
+
+        let session = FFmpegKit.execute(
+            withArgumentsAsync: arguments,
+            withCompleteCallback: { session in
+                sessionBox.set(nil)
+                let completedID = session.map { Int($0.getSessionId()) }
+                Task { @MainActor in onCompletion(completedID) }
+                let rc = session?.getReturnCode()
+                if ReturnCode.isSuccess(rc) {
+                    finish(.success(Void()))
+                } else if ReturnCode.isCancel(rc) {
+                    finish(.failure(CancellationError()))
+                } else {
+                    let output = session?.getOutput() ?? "unknown"
+                    Log.downloadManager.debug("FFmpeg output: \(output)")
+                    finish(.failure(NSError(
+                        domain: "DownloadManager",
+                        code: -1,
+                        userInfo: [NSLocalizedDescriptionKey: "FFmpeg processing failed"]
+                    )))
+                }
+            },
+            withLogCallback: nil,
+            withStatisticsCallback: { statistics in
+                guard let statistics else { return }
+                let size = Int64(statistics.getSize())
+                // Pass only the numeric snapshot across the actor boundary,
+                // never FFmpeg's non-Sendable Statistics object.
+                Task { @MainActor in onSize?(size) }
+            }
+        )
+        if session == nil {
+            finish(.failure(NSError(
+                domain: "DownloadManager",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Could not start audio processing"]
+            )))
+        }
+        return session
     }
 
 }

@@ -274,7 +274,38 @@ struct FullPlayerView: View {
     // MARK: - Go to album/artist
 
     private var currentSong: SongItem? {
-        np.queueSongs.indices.contains(np.queueIndex) ? np.queueSongs[np.queueIndex] : nil
+        guard let videoID = np.videoId else { return nil }
+        return np.queueSongs.first { $0.videoId == videoID }
+    }
+
+    private var navigationSong: SongItem? {
+        guard np.playbackKind == .music, let videoID = np.videoId else { return nil }
+        var song = currentSong ?? SongItem(
+            videoId: videoID, title: np.title,
+            artists: np.artists.isEmpty ? [YTArtist(name: np.artist)] : np.artists,
+            album: np.albumTitle.isEmpty ? nil : np.albumTitle,
+            duration: np.duration.isFinite ? Int(max(0, np.duration)) : 0,
+            thumbnailUrl: nil, isExplicit: false
+        )
+        if song.artists.isEmpty, !np.artist.isEmpty {
+            song.artists = [YTArtist(name: np.artist)]
+        }
+        if song.album?.isEmpty != false, !np.albumTitle.isEmpty {
+            song.album = np.albumTitle
+        }
+        return song
+    }
+
+    private var canOpenAlbum: Bool {
+        guard let song = navigationSong else { return false }
+        return song.albumId?.isEmpty == false || MusicPlaybackIdentity.isYouTube(song.videoId)
+    }
+
+    private var canOpenArtist: Bool {
+        guard let song = navigationSong else { return false }
+        return song.artists.contains { $0.id?.isEmpty == false }
+            || !np.artist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !song.artistNamesDisplay.isEmpty
     }
 
     private var currentAlbumSubtitle: String? {
@@ -297,8 +328,8 @@ struct FullPlayerView: View {
                         subtitle: currentAlbumSubtitle
                     )
                 }
-                .disabled(currentSong?.albumId?.isEmpty ?? true)
-                .opacity(currentSong?.albumId?.isEmpty ?? true ? 0.4 : 1)
+                .disabled(!canOpenAlbum)
+                .opacity(canOpenAlbum ? 1 : 0.4)
 
                 Divider()
 
@@ -309,8 +340,8 @@ struct FullPlayerView: View {
                         subtitle: np.displayArtist
                     )
                 }
-                .disabled(currentSong?.artists.contains { $0.id != nil } != true)
-                .opacity(currentSong?.artists.contains { $0.id != nil } != true ? 0.4 : 1)
+                .disabled(!canOpenArtist)
+                .opacity(canOpenArtist ? 1 : 0.4)
             }
             .glassEffect(.regular, in: .rect(cornerRadius: 18))
             .padding(.horizontal, 28)
@@ -341,16 +372,24 @@ struct FullPlayerView: View {
     }
 
     private func goToAlbum() {
-        guard let albumId = currentSong?.albumId, !albumId.isEmpty else { return }
+        guard let song = navigationSong, canOpenAlbum else { return }
         showGoToMenu = false
-        pendingRoute = .album(browseId: albumId)
+        if let albumId = song.albumId, !albumId.isEmpty {
+            pendingRoute = .album(browseId: albumId)
+        } else {
+            pendingRoute = .songAlbum(song)
+        }
     }
 
     private func goToArtist() {
-        guard let artist = currentSong?.artists.first(where: { $0.id != nil }),
-              let id = artist.id else { return }
+        guard let song = navigationSong, canOpenArtist else { return }
         showGoToMenu = false
-        pendingRoute = .artist(browseId: id)
+        if let id = song.artists.first(where: { $0.id?.isEmpty == false })?.id {
+            pendingRoute = .artist(browseId: id)
+        } else {
+            let name = np.artist.isEmpty ? song.artistNamesDisplay : np.artist
+            pendingRoute = .songArtist(song, name: name)
+        }
     }
 
     // MARK: - Gestures

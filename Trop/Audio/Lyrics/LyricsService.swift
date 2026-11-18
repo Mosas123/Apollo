@@ -238,10 +238,11 @@ actor LyricsService {
         // Queue metadata is tied to this exact ID. NowPlaying can briefly
         // still contain the previous song's title while the next one resolves.
         if let song = queue.first(where: { $0.videoId == videoId }) {
-            title = song.title
-            artist = song.artists.map(\.name).joined(separator: ", ")
-            album = song.album?.isEmpty == false ? song.album : nil
-            let dur = song.duration > 0 ? song.duration : (DurationCache.get(videoId) ?? 0)
+            let identity = TrackIdentity.make(from: song)
+            title = identity.title
+            artist = identity.artist
+            album = identity.album?.isEmpty == false ? identity.album : nil
+            let dur = identity.durationSeconds ?? DurationCache.get(videoId) ?? 0
             duration = dur > 0 ? TimeInterval(dur) : (currentId == videoId ? npDuration : 0)
         } else if currentId == videoId, !npTitle.isEmpty, !npArtist.isEmpty {
             title = npTitle
@@ -260,7 +261,7 @@ actor LyricsService {
             artist: cleaned.artist,
             album: cleaned.album,
             duration: duration > 0 ? duration : 0,
-            videoId: NowPlaying.shared.videoId
+            videoId: videoId
         )
     }
 
