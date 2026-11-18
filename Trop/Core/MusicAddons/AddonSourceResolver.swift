@@ -13,11 +13,12 @@ enum AddonSourceResolver {
         artist: String,
         duration: Int?,
         requireCD: Bool,
-        preferAtmos: Bool
+        preferAtmos: Bool,
+        preferHiRes: Bool
     ) -> String {
         // Duration bucket: copies differ by a second or two, versions don't.
         let bucket = (duration ?? 0) / 5
-        return "\(title.lowercased())|\(artist.lowercased())|\(bucket)|\(requireCD ? "cd" : "any")|\(preferAtmos ? "atmos" : "")"
+        return "\(title.lowercased())|\(artist.lowercased())|\(bucket)|\(requireCD ? "cd" : "any")|\(preferAtmos ? "atmos" : "")|\(preferHiRes ? "hires" : "")"
     }
 
     private struct Criteria: Sendable {
@@ -35,7 +36,8 @@ enum AddonSourceResolver {
     static func bestMatch(
         for song: SongItem,
         requireCD: Bool = false,
-        preferAtmos: Bool = false
+        preferAtmos: Bool = false,
+        preferHiRes: Bool = false
     ) async -> Match? {
         let installations = Array(MusicAddonsStore.shared.enabledStremioInstallations.prefix(4))
         guard !installations.isEmpty else { return nil }
@@ -64,7 +66,8 @@ enum AddonSourceResolver {
             artist: artist,
             duration: criteria.duration,
             requireCD: requireCD,
-            preferAtmos: preferAtmos
+            preferAtmos: preferAtmos,
+            preferHiRes: preferHiRes
         )
         if let cached = await AddonMatchCache.shared.get(cacheKey) {
             return cached
@@ -87,7 +90,8 @@ enum AddonSourceResolver {
                 batch,
                 criteria: criteria,
                 requireCD: requireCD,
-                preferAtmos: preferAtmos
+                preferAtmos: preferAtmos,
+                preferHiRes: preferHiRes
             ) {
                 await AddonMatchCache.shared.store(match, for: cacheKey)
                 return match
@@ -100,9 +104,10 @@ enum AddonSourceResolver {
         _ installations: [MusicAddonInstallation],
         criteria: Criteria,
         requireCD: Bool,
-        preferAtmos: Bool
+        preferAtmos: Bool,
+        preferHiRes: Bool
     ) async -> Match? {
-        let maxRank = preferAtmos ? 4 : 3
+        let maxRank = preferAtmos ? 5 : (preferHiRes ? 4 : 3)
         guard !installations.isEmpty else { return nil }
         return await withTaskGroup(of: (String, (Match, Int)?, Double).self) { group in
             for installation in installations {
@@ -112,7 +117,8 @@ enum AddonSourceResolver {
                         in: installation,
                         criteria: criteria,
                         requireCD: requireCD,
-                        preferAtmos: preferAtmos
+                        preferAtmos: preferAtmos,
+                        preferHiRes: preferHiRes
                     )
                     return (installation.key, result, CFAbsoluteTimeGetCurrent() - started)
                 }
@@ -142,7 +148,8 @@ enum AddonSourceResolver {
         in installation: MusicAddonInstallation,
         criteria: Criteria,
         requireCD: Bool,
-        preferAtmos: Bool
+        preferAtmos: Bool,
+        preferHiRes: Bool
     ) async -> (Match, Int)? {
         guard let client = try? MusicAddonClient(installation: installation) else { return nil }
         let hasAlbum = !(criteria.album ?? "").isEmpty
@@ -192,7 +199,8 @@ enum AddonSourceResolver {
             ranked,
             in: client,
             requireCD: requireCD,
-            preferAtmos: preferAtmos
+            preferAtmos: preferAtmos,
+            preferHiRes: preferHiRes
         )
     }
 
@@ -275,7 +283,8 @@ enum AddonSourceResolver {
         _ tracks: C,
         in client: MusicAddonClient,
         requireCD: Bool,
-        preferAtmos: Bool
+        preferAtmos: Bool,
+        preferHiRes: Bool
     ) async -> (Match, Int)? where C.Element == AddonTrack {
         var best: (Match, Int)?
         for track in tracks {

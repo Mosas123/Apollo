@@ -147,7 +147,7 @@ struct CoreCoverageTests {
 
     @Test("Quality enums")
     func quality() {
-        #expect(AudioQuality.allCases.count == 4)
+        #expect(AudioQuality.allCases.count == 5)
         #expect(DownloadQuality.allCases.count == 3)
         #expect(AudioQuality.high.rawValue == "high")
         #expect(DownloadQuality.standard.rawValue == "standard")

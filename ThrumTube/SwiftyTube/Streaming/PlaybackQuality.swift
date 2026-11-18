@@ -11,6 +11,7 @@ import Foundation
 public enum AudioQuality: String, Sendable, Hashable, Identifiable, CaseIterable, Codable {
     case auto
     case high
+    case jiosaavn
     case medium
     case low
 

@@ -161,6 +161,7 @@ final class MusicAddonsStore {
 
     private init() {
         restoreValidatedEntries()
+        syncAddonAvailability()
     }
 
     func install(_ data: Data, from url: URL) throws {
@@ -200,6 +201,14 @@ final class MusicAddonsStore {
     private func save() {
         guard let encoded = try? JSONEncoder().encode(registry.installations) else { return }
         UserDefaults.standard.set(encoded, forKey: storageKey)
+        syncAddonAvailability()
+    }
+
+    private func syncAddonAvailability() {
+        let hasAddons = installations.contains { $0.isEnabled && $0.manifest.protocolKind == .stremio }
+        if SettingsStore.shared.hasMusicAddons != hasAddons {
+            SettingsStore.shared.hasMusicAddons = hasAddons
+        }
     }
 
     private func restoreValidatedEntries() {

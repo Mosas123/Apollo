@@ -9,6 +9,7 @@ import Foundation
 ///
 /// Upgrades happen at track boundaries (prefetched), so playback never waits.
 enum MusicQualityMode: String, CaseIterable, Identifiable, Sendable, Hashable {
+    case off
     case auto
     case high
     case cd
@@ -22,6 +23,7 @@ enum MusicQualityMode: String, CaseIterable, Identifiable, Sendable, Hashable {
 
     var displayName: String {
         switch self {
+        case .off: return "Off (no upgrades)"
         case .auto: return "Auto"
         case .high: return "High (320 kbps)"
         case .cd: return "CD (FLAC 16/44)"

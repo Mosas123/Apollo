@@ -533,7 +533,8 @@ struct SongDetailsView: View {
     private var streamSection: some View {
         section("Stream") {
             if let s = stream {
-                row("Source", MusicPlaybackIdentity.sourceLabel(song.videoId))
+                row("Source", NowPlaying.shared.currentSourceName
+                    ?? MusicPlaybackIdentity.sourceLabel(song.videoId))
                 row("Client", s.clientName)
                 row("ITAG", "\(s.itag)", monospaced: true)
                 row("Bitrate", "\(s.bitrate / 1000) kbps")
@@ -543,12 +544,14 @@ struct SongDetailsView: View {
                 }
                 row("Expires in", "\(s.expiresInSeconds)s")
             } else if let f = formatEntity {
-                row("Source", "Cached format")
+                row("Source", NowPlaying.shared.currentSourceName ?? "YouTube · cached")
                 row("ITAG", "\(f.itag)", monospaced: true)
                 row("Bitrate", "\(f.bitrate / 1000) kbps")
                 if f.contentLength > 0 {
                     row("Size", ByteCountFormatter.string(fromByteCount: f.contentLength, countStyle: .file))
                 }
+            } else if let sourceName = NowPlaying.shared.currentSourceName {
+                row("Source", sourceName)
             } else {
                 row("Status", "Not resolved yet")
             }

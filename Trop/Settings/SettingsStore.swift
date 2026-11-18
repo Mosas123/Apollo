@@ -88,6 +88,7 @@ extension AudioQuality: SettingsOption {
         switch self {
         case .auto: return "Auto"
         case .high: return "High"
+        case .jiosaavn: return "JioSaavn (320 kbps)"
         case .medium: return "Medium"
         case .low: return "Low"
         }
@@ -225,19 +226,19 @@ final class SettingsStore: @unchecked Sendable {
         didSet { Self.defaults.set(podcastIndexSecret, forKey: Keys.podcastIndexSecret) }
     }
 
-    // MARK: - PencariMusic (Stremio/Eclipse music addon)
-
-    /// Tokenized addon base, e.g.
-    /// `https://stream.pencarimovie.com/<token>`. Empty disables the source.
-    /// Search lives at `/music/search`, streams at `/music/stream/<id>`.
-    var pencariMusicBaseURL: String {
-        didSet { Self.defaults.set(pencariMusicBaseURL, forKey: Keys.pencariMusicBaseURL) }
-    }
-
     /// Source preference for a track: Auto / High / Lossless. Upgrades are
     /// prefetched at track boundaries and never block playback.
     var musicQualityMode: MusicQualityMode {
         didSet { Self.defaults.set(musicQualityMode.rawValue, forKey: Keys.musicQualityMode) }
+    }
+
+    /// Mirrors whether any music add-on is enabled. FLAC/CD/Atmos need one as
+    /// their search engine, so they are hidden and ignored without it.
+    var hasMusicAddons: Bool = false
+
+    /// In Auto, prefer a hi-res FLAC over the CD copy when both exist.
+    var preferLossless: Bool {
+        didSet { Self.defaults.set(preferLossless, forKey: Keys.preferLossless) }
     }
 
     /// Take the Dolby Atmos copy (E-AC3 5.1, downmixed to stereo by iOS) when an
@@ -388,7 +389,7 @@ final class SettingsStore: @unchecked Sendable {
         didSet { Self.defaults.set(downloadQuality.rawValue, forKey: Keys.downloadQuality) }
     }
 
-    /// Try Pencari/add-ons before the YouTube stream so downloads can be FLAC.
+    /// Try the installed add-ons before the YouTube stream so downloads can be FLAC.
     var losslessDownloads: Bool {
         didSet { Self.defaults.set(losslessDownloads, forKey: Keys.losslessDownloads) }
     }
@@ -454,9 +455,9 @@ final class SettingsStore: @unchecked Sendable {
         static let showExploreTab = "settings.showExploreTab"
         static let glassStyle = "settings.glassStyle"
         static let podcastIndexKey = "settings.podcastIndexKey"
-        static let pencariMusicBaseURL = "settings.pencariMusicBaseURL"
         static let musicQualityMode = "settings.musicQualityMode"
         static let preferAtmos = "settings.preferAtmos"
+        static let preferLossless = "settings.preferLossless"
         static let upgradeDuringPlayback = "settings.upgradeDuringPlayback"
         static let aiProvider = "settings.aiProvider"
         static let aiKey = "settings.aiKey"
@@ -537,9 +538,9 @@ final class SettingsStore: @unchecked Sendable {
         showExploreTab = Self.load(Keys.showExploreTab, default: false)
         glassStyle = Self.loadEnum(Keys.glassStyle, default: .regular)
         podcastIndexKey = Self.loadString(Keys.podcastIndexKey, default: "")
-        pencariMusicBaseURL = Self.loadString(Keys.pencariMusicBaseURL, default: PencariMusicClient.defaultBase)
         musicQualityMode = Self.loadEnum(Keys.musicQualityMode, default: .auto)
         preferAtmos = Self.load(Keys.preferAtmos, default: false)
+        preferLossless = Self.load(Keys.preferLossless, default: false)
         upgradeDuringPlayback = Self.load(Keys.upgradeDuringPlayback, default: false)
         aiProvider = Self.loadString(Keys.aiProvider, default: AIProvider.off.rawValue)
         aiKey = Self.loadString(Keys.aiKey, default: "")

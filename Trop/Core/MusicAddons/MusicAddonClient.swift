@@ -118,7 +118,7 @@ actor MusicAddonClient {
     private let catalogTypes: [String]
     private let searchCatalogs: [StremioDescriptor.Catalog]
     /// Eclipse-style addons expose a `search` resource and `/search?q=` +
-    /// `/stream/<id>` (Nebula, Pencari native) instead of Stremio catalogs.
+    /// `/stream/<id>` (Nebula, NullBeat) instead of Stremio catalogs.
     private let eclipseMode: Bool
 
     init(installation: MusicAddonInstallation) throws {
@@ -232,7 +232,7 @@ actor MusicAddonClient {
             resolvingAgainstBaseURL: false
         )
         var items = [URLQueryItem(name: "q", value: term)]
-        if SettingsStore.shared.musicQualityMode.prefersLossless {
+        if SettingsStore.shared.musicQualityMode.prefersLossless || SettingsStore.shared.preferLossless {
             items.append(URLQueryItem(name: "quality", value: "lossless"))
         }
         components?.queryItems = items

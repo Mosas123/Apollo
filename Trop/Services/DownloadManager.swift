@@ -47,11 +47,41 @@ final class DownloadManager: ObservableObject {
 
     @Published var largeDownloadRequest: LargeDownloadRequest?
     private var pendingLargeDownload: (song: SongItem, source: DownloadSource)?
-    private var pencariCoolingUntil: Date?
+
+    private struct AddonQualityPreference {
+        let requireCD: Bool
+        let preferHiRes: Bool
+        let preferAtmos: Bool
+    }
+
+    private var addonPreference: AddonQualityPreference? {
+        guard SettingsStore.shared.hasMusicAddons else { return nil }
+        switch SettingsStore.shared.musicQualityMode {
+        case .off:
+            // Downloads are independent from the playback source preference:
+            // the "Lossless When Available" toggle decides, so Off behaves as
+            // Auto here instead of disabling FLAC downloads.
+            return AddonQualityPreference(
+                requireCD: false,
+                preferHiRes: SettingsStore.shared.preferLossless,
+                preferAtmos: SettingsStore.shared.preferAtmos
+            )
+        case .cd:
+            return AddonQualityPreference(requireCD: true, preferHiRes: false, preferAtmos: false)
+        case .lossless:
+            return AddonQualityPreference(requireCD: false, preferHiRes: true, preferAtmos: false)
+        case .auto, .high:
+            return AddonQualityPreference(
+                requireCD: false,
+                preferHiRes: SettingsStore.shared.preferLossless,
+                preferAtmos: SettingsStore.shared.preferAtmos
+            )
+        }
+    }
 
     enum DownloadState: Equatable {
         case notStarted
-        /// Looking for a lossless source (Pencari/add-ons) before downloading.
+        /// Looking for a lossless source on the installed add-ons before downloading.
         case preparing
         case downloading(Double)
         case completed
@@ -368,6 +398,7 @@ extension DownloadManager {
             && allowLosslessSource
             && !MusicPlaybackIdentity.isExternal(videoId)
             && SettingsStore.shared.losslessDownloads
+            && SettingsStore.shared.hasMusicAddons
         if willTryLossless {
             downloads[videoId] = .preparing
         }
@@ -659,8 +690,7 @@ extension DownloadManager {
     /// YouTube song tries a lossless add-on match when the user prefers
     /// lossless, and falls back to the YouTube stream.
     private func downloadSource(for song: SongItem, allowLossless: Bool = true) async throws -> DownloadSource {
-        let requireCD = SettingsStore.shared.musicQualityMode == .cd
-        let preferAtmos = SettingsStore.shared.preferAtmos && !requireCD
+        let preference = addonPreference
         if let ref = AddonPlaybackID.decode(song.videoId) {
             guard let installation = MusicAddonsStore.shared.installation(key: ref.k) else {
                 throw MusicCatalogError.unavailableTrack
@@ -700,16 +730,18 @@ extension DownloadManager {
         if allowLossless,
            !MusicPlaybackIdentity.isExternal(song.videoId),
            SettingsStore.shared.losslessDownloads,
+           let preference,
            let lossless = await raceLosslessSource(
                for: song,
-               requireCD: requireCD,
-               preferAtmos: preferAtmos
+               requireCD: preference.requireCD,
+               preferAtmos: preference.preferAtmos,
+               preferHiRes: preference.preferHiRes
            ) {
             Log.downloadManager.debug("Lossless source for \(song.videoId)")
             return lossless
         }
 
-        // Audius, Qobuz, Pencari and JioSaavn tracks resolve to direct URLs,
+        // Audius, Qobuz and JioSaavn tracks resolve to direct URLs,
         // so they can be downloaded like everything else.
         let resolved = try await PlaybackManager.shared.resolve(
             videoId: song.videoId,
@@ -766,38 +798,23 @@ extension DownloadManager {
         return .other
     }
 
-    /// Pencari and the installed addons race each other; the first lossless
+    /// Asks the installed addons for a lossless source; the first answer wins.
     /// hit wins and the other lookup is cancelled. YouTube is the fallback.
     private func raceLosslessSource(
         for song: SongItem,
         seconds: Double = 45,
         requireCD: Bool = false,
-        preferAtmos: Bool = false
+        preferAtmos: Bool = false,
+        preferHiRes: Bool = false
     ) async -> DownloadSource? {
-        await withTaskGroup(of: DownloadSource?.self) { group in
-            group.addTask {
-                await self.withTimeout(seconds: seconds) {
-                    await self.pencariDownloadSource(for: song, requireCD: requireCD)
-                }
-            }
-            group.addTask {
-                await self.withTimeout(seconds: seconds) {
-                    await self.addonDownloadSource(
-                        for: song,
-                        seconds: seconds,
-                        requireCD: requireCD,
-                        preferAtmos: preferAtmos
-                    )
-                }
-            }
-            var found: DownloadSource?
-            for await candidate in group {
-                guard let candidate else { continue }
-                found = candidate
-                break
-            }
-            group.cancelAll()
-            return found
+        await withTimeout(seconds: seconds) {
+            await self.addonDownloadSource(
+                for: song,
+                seconds: seconds,
+                requireCD: requireCD,
+                preferAtmos: preferAtmos,
+                preferHiRes: preferHiRes
+            )
         }
     }
 
@@ -806,18 +823,19 @@ extension DownloadManager {
         for song: SongItem,
         seconds: Double = 45,
         requireCD: Bool = false,
-        preferAtmos: Bool = false
+        preferAtmos: Bool = false,
+        preferHiRes: Bool = false
     ) async -> DownloadSource? {
         guard let match = await bestAddonMatch(
                   for: song,
                   seconds: seconds,
                   requireCD: requireCD,
-                  preferAtmos: preferAtmos
+                  preferAtmos: preferAtmos,
+                  preferHiRes: preferHiRes
               ),
               match.stream.qualityTier == "Lossless" || match.stream.qualityTier == "Atmos",
               case .url(let url) = match.stream.kind else { return nil }
-        // Addons that report a size (PencariMusic) often answer HEAD badly;
-        // the stream endpoint already vouched for the URL.
+        // Some addons report a size but answer HEAD badly; trust the size.
         // Atmos is lossy (E-AC3): it's only taken when the user asked for it.
         if match.stream.qualityTier == "Atmos", !preferAtmos { return nil }
         if match.stream.sizeBytes == nil, !(await probeAudioURL(url)) {
@@ -836,58 +854,21 @@ extension DownloadManager {
         )
     }
 
-    /// Same track on the bundled PencariMusic lossless source. Returns nil on
-    /// any miss so the addon/YouTube paths still run.
-    private func pencariDownloadSource(for song: SongItem, requireCD: Bool = false) async -> DownloadSource? {
-        guard !MusicPlaybackIdentity.isExternal(song.videoId) else { return nil }
-        guard let client = PencariMusicClient.configured() else { return nil }
-        let title = song.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return nil }
-        let artist = song.artists.first?.name ?? ""
-        let query = artist.isEmpty ? title : "\(artist) \(title)"
-        if let until = pencariCoolingUntil, until > Date() { return nil }
-        guard let tracks = try? await client.searchTracks(query: query, limit: 8),
-              let best = tracks.first(where: {
-                  TextMatch.titlesMatch($0.title, title)
-                      && (artist.isEmpty || TextMatch.artistsMatch($0.artist, artist))
-              }) else { return nil }
-        guard let info = try? await client.resolveStreamInfoFast(for: best.id.rawValue) else {
-            // Dead/saturated origin: stop paying the lookup on every download.
-            pencariCoolingUntil = Date().addingTimeInterval(120)
-            return nil
-        }
-        // CD mode: this copy is hi-res, so don't count it as a bad origin.
-        if requireCD, info.isHiRes { return nil }
-        var playable = info.sizeBytes != nil
-        if !playable { playable = await probeAudioURL(info.url) }
-        guard playable else {
-            pencariCoolingUntil = Date().addingTimeInterval(120)
-            return nil
-        }
-        return DownloadSource(
-            url: info.url,
-            mimeType: "audio/flac",
-            format: .flac,
-            album: nil,
-            artworkURL: best.artworkURL,
-            qualityLabel: info.qualityLabel,
-            knownSizeBytes: info.sizeBytes
-        )
-    }
-
     /// Bounded add-on lookup so a slow addon can't stall the download; without
     /// a match the YouTube stream is used.
     private func bestAddonMatch(
         for song: SongItem,
         seconds: Double = 12,
         requireCD: Bool = false,
-        preferAtmos: Bool = false
+        preferAtmos: Bool = false,
+        preferHiRes: Bool = false
     ) async -> AddonSourceResolver.Match? {
         await withTimeout(seconds: seconds) {
             await AddonSourceResolver.bestMatch(
                 for: song,
                 requireCD: requireCD,
-                preferAtmos: preferAtmos
+                preferAtmos: preferAtmos,
+                preferHiRes: preferHiRes
             )
         }
     }

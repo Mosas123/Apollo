@@ -56,6 +56,9 @@ final class NowPlaying {
     /// Current stream URL + lossless label, kept to roll back a failed upgrade.
     var currentStreamURL: String?
     var currentLosslessLabel: String?
+    /// Human name of the source currently feeding the player (add-on name,
+    /// "Qobuz", "Downloaded"…), used by the details sheet.
+    var currentSourceName: String?
     var currentTime: TimeInterval = 0
     var duration: TimeInterval = 0
     var progress: Float {

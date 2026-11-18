@@ -83,6 +83,10 @@ struct ContentView: View {
                 Text("\(request.artist) — \(request.title)\n\(request.quality ?? "FLAC") · ~\(request.megabytes) MB")
             }
         }
+        .task {
+            // Load installed add-ons early: FLAC/CD/Atmos settings depend on it.
+            _ = MusicAddonsStore.shared
+        }
         .simultaneousGesture(backSwipeGesture)
     }
 

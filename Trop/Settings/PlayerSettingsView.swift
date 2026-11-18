@@ -26,15 +26,36 @@ struct PlayerSettingsView: View {
 
             Section {
                 SettingsPickerRow("Audio Quality", icon: "waveform", selection: $settings.audioQuality)
-                SettingsPickerRow("Preferred Source", icon: "opticaldisc", selection: $settings.musicQualityMode)
-                SettingsToggleRow("Prefer Dolby Atmos when available", icon: "spatial.audio", isOn: $settings.preferAtmos)
+                SettingsPickerRow(
+                    "Preferred Source",
+                    icon: "opticaldisc",
+                    options: settings.hasMusicAddons ? [.off, .auto, .cd, .lossless] : [.off, .auto],
+                    isEnabled: true,
+                    selection: Binding(
+                        get: {
+                            let mode = settings.musicQualityMode
+                            if mode == .high { return .auto }
+                            if !settings.hasMusicAddons, mode == .cd || mode == .lossless {
+                                return .auto
+                            }
+                            return mode
+                        },
+                        set: { settings.musicQualityMode = $0 }
+                    )
+                )
+                if settings.hasMusicAddons, settings.musicQualityMode == .auto {
+                    SettingsToggleRow("Prefer lossless over CD", icon: "waveform.path.ecg", isOn: $settings.preferLossless)
+                    SettingsToggleRow("Prefer Dolby Atmos when available", icon: "spatial.audio", isOn: $settings.preferAtmos)
+                }
                 SettingsToggleRow("Upgrade to best quality during playback", icon: "arrow.up.circle", isOn: $settings.upgradeDuringPlayback)
                 SettingsToggleRow("Audio Normalization", icon: "speaker.wave.2", isOn: $settings.audioNormalization)
                 SettingsToggleRow("Gapless Playback", icon: "arrow.right.arrow.left", isOn: $settings.gaplessPlayback)
             } header: {
                 Text("Audio")
             } footer: {
-                Text("Preferred Source picks which stream to use. CD keeps 16-bit / 44.1 kHz FLAC and skips hi-res (much smaller files); Lossless takes the best FLAC available. \"Prefer Dolby Atmos\" plays the addon's E-AC3 5.1 copy when it exists; iOS downmixes it to stereo, so it is a taste choice, not an upgrade over FLAC. If \"Upgrade to best quality during playback\" is on, the app may switch to a better source mid-song; you'll hear a very short fade (about 0.3s) while the new stream loads, then playback continues at the same position.")
+                Text(settings.hasMusicAddons
+                     ? "Auto picks the best FLAC copy the add-ons offer; CD forces 16-bit / 44.1 kHz and Lossless prefers the highest FLAC. The toggles only refine Auto: prefer lossless when both CD and hi-res exist, or prefer Dolby Atmos (E-AC3 5.1, downmixed to stereo by iOS). If \"Upgrade to best quality during playback\" is on, the app may switch mid-song with a short fade."
+                     : "Off and Auto work with YouTube alone. CD, Lossless and Dolby Atmos need an installed music add-on, because the add-on is the search engine for those qualities. Add one in Settings → Integrations → Music Addons to unlock them.")
             }
 
             Section {
