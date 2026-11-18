@@ -379,7 +379,12 @@ extension DownloadManager {
 
             setProgress(0.05, for: videoId)
             let resolveStart = CFAbsoluteTimeGetCurrent()
-            let source = preResolved ?? (try await downloadSource(for: song, allowLossless: allowLosslessSource))
+            let source: DownloadSource
+            if let preResolved {
+                source = preResolved
+            } else {
+                source = try await downloadSource(for: song, allowLossless: allowLosslessSource)
+            }
             let knownBytes: Int64?
             if let known = source.knownSizeBytes {
                 knownBytes = Int64(known)
@@ -614,7 +619,7 @@ extension DownloadManager {
 
     // MARK: - Source selection
 
-    private enum DownloadFormat {
+    enum DownloadFormat {
         case flac
         case mp3
         case aac
