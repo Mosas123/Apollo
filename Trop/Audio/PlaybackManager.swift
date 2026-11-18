@@ -349,6 +349,7 @@ actor PlaybackManager {
 
         // Never cut the current audio for a stream that can't even serve bytes.
         guard await Self.verifyStream(result.streamUrl) else {
+            upgradeResultCache[videoId] = nil
             if result.audioQuality.lowercased().contains("pencari") { markPencariCooldown() }
             return
         }
@@ -376,6 +377,7 @@ actor PlaybackManager {
         let advanced = await MainActor.run { NowPlaying.shared.currentTime }
         let currentId = await MainActor.run { NowPlaying.shared.videoId }
         if currentId == videoId, advanced <= position + 0.05, let oldURL {
+            upgradeResultCache[videoId] = nil
             if result.audioQuality.lowercased().contains("pencari") { markPencariCooldown() }
             await PlayerController.shared.play(
                 url: oldURL,
@@ -576,9 +578,12 @@ actor PlaybackManager {
             // A prefetched upgrade can still be better than the cached stream.
             if let upgrade = prefetchedUpgrade(videoId: videoId),
                Self.shouldPreferUpgrade(upgrade, over: cached) {
-                await playNetworkResult(upgrade, videoId: videoId)
-                scheduleUpgradePrefetch(videoId: videoId)
-                return upgrade
+                if await Self.verifyStream(upgrade.streamUrl) {
+                    await playNetworkResult(upgrade, videoId: videoId)
+                    scheduleUpgradePrefetch(videoId: videoId)
+                    return upgrade
+                }
+                upgradeResultCache[videoId] = nil
             }
             let queueSong = await queueSong(for: videoId)
             await PlayerController.shared.play(
@@ -626,8 +631,12 @@ actor PlaybackManager {
         // result is local, so this comparison adds no wait.
         if let upgrade = prefetchedUpgrade(videoId: videoId),
            Self.shouldPreferUpgrade(upgrade, over: result) {
-            await playNetworkResult(upgrade, videoId: videoId)
-            return upgrade
+            if await Self.verifyStream(upgrade.streamUrl) {
+                await playNetworkResult(upgrade, videoId: videoId)
+                return upgrade
+            }
+            // Dead cached URL (origin rotated/expired): drop it, use YouTube.
+            upgradeResultCache[videoId] = nil
         }
         await playNetworkResult(result, videoId: videoId)
         // Warm this track (for replays) and the next one while it plays. Off the
