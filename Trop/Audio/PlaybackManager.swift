@@ -239,6 +239,59 @@ actor PlaybackManager {
         return result
     }
 
+    /// Best-quality rule: search enabled addons for the same song and return
+    /// their best stream (FLAC/320) so it can compete with the other sources.
+    private func resolveAddonUpgrade(videoId: String) async -> PlaybackResult? {
+        guard let song = await queueSong(for: videoId) else { return nil }
+        let installations = await MainActor.run { MusicAddonsStore.shared.enabledStremioInstallations }
+        guard !installations.isEmpty else { return nil }
+        let title = TextMatch.queryTitle(song.title)
+        let artist = TextMatch.queryArtist(song.artists.first?.name ?? "")
+        let query = artist.isEmpty ? title : "\(artist) \(title)"
+        var best: (PlaybackResult, Int)?
+        for installation in installations.prefix(4) {
+            guard let client = try? MusicAddonClient(installation: installation),
+                  let found = try? await client.search(query, limit: 8) else { continue }
+            guard let match = found.first(where: {
+                TextMatch.titlesMatch($0.title, song.title)
+                    && ($0.artist.map { TextMatch.artistsMatch($0, artist) } ?? true)
+            }) else { continue }
+            guard let stream = try? await client.resolveStream(type: match.type, id: match.id) else { continue }
+            guard case .url(let url) = stream.kind else { continue }
+            let rank: Int
+            switch stream.qualityTier {
+            case "Lossless": rank = 3
+            case "High": rank = 2
+            default: rank = 1
+            }
+            if best == nil || rank > best!.1 {
+                let result = PlaybackResult(
+                    streamUrl: url.absoluteString,
+                    itag: 0,
+                    mimeType: stream.mimeType,
+                    bitrate: stream.bitrate,
+                    audioQuality: "addon-\(stream.qualityTier.lowercased())",
+                    videoId: videoId,
+                    title: song.title,
+                    author: song.artistNamesDisplay,
+                    duration: song.duration,
+                    expiresInSeconds: 0,
+                    clientName: "addon",
+                    musicVideoType: nil,
+                    hasVideoContent: false,
+                    muxedStreamUrl: nil,
+                    loudnessDb: nil
+                )
+                best = (result, rank)
+            }
+        }
+        if let best {
+            if upgradeResultCache.count >= 100 { upgradeResultCache.removeAll(keepingCapacity: true) }
+            upgradeResultCache[videoId] = (best.0, Date())
+        }
+        return best?.0
+    }
+
     // MARK: - Automatic lossless upgrade
 
     private let pencariCooldownKey = "pencari.cooldownUntil"
@@ -395,6 +448,7 @@ actor PlaybackManager {
             return nil
         case .high:
             if let cached { return cached }
+            if let addon = await resolveAddonUpgrade(videoId: videoId) { return addon }
             return await resolveHighQualityUpgrade(videoId: videoId)
         case .lossless:
             // Lossless gets priority even when a High result is cached, but it
@@ -403,7 +457,12 @@ actor PlaybackManager {
             if let lossless = await losslessWithinBudget(videoId: videoId, seconds: interactive ? 4 : 8) {
                 return lossless
             }
+            if let addon = await resolveAddonUpgrade(videoId: videoId),
+               Self.isLosslessResult(addon) {
+                return addon
+            }
             if let cached { return cached }
+            if let addon = await resolveAddonUpgrade(videoId: videoId) { return addon }
             return await resolveHighQualityUpgrade(videoId: videoId)
         }
     }
