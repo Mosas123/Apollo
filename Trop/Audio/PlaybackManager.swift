@@ -362,19 +362,26 @@ actor PlaybackManager {
     /// to JioSaavn High so an unreachable FLAC origin doesn't leave the user on
     /// Standard.
     private func resolvePreferredUpgrade(videoId: String) async -> PlaybackResult? {
-        if let cached = upgradeResultCache[videoId],
-           Date().timeIntervalSince(cached.at) < pencariResultTTL {
-            return cached.result
+        let cached = upgradeResultCache[videoId].flatMap {
+            Date().timeIntervalSince($0.at) < pencariResultTTL ? $0.result : nil
         }
         switch upgradeMode {
         case .auto:
             return nil
-        case .lossless:
-            if let lossless = await resolveLosslessUpgrade(videoId: videoId) { return lossless }
-            return await resolveHighQualityUpgrade(videoId: videoId)
         case .high:
+            if let cached { return cached }
+            return await resolveHighQualityUpgrade(videoId: videoId)
+        case .lossless:
+            // Lossless gets priority even when a High result is cached.
+            if let cached, Self.isLosslessResult(cached) { return cached }
+            if let lossless = await resolveLosslessUpgrade(videoId: videoId) { return lossless }
+            if let cached { return cached }
             return await resolveHighQualityUpgrade(videoId: videoId)
         }
+    }
+
+    private static func isLosslessResult(_ result: PlaybackResult) -> Bool {
+        losslessLabel(result) != nil
     }
 
     /// With "Upgrade during playback" on and Preferred Source = Auto, treat it
