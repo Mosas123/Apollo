@@ -87,7 +87,7 @@ struct DJMixView: View {
                 Button("Add audio files") { importing = true }
                 Toggle("AI plan (uses your AI key)", isOn: $model.useAI)
                 if model.isWorking { ProgressView() }
-                ForEach(model.items) { item in
+                ForEach(Array(model.items.enumerated()), id: \.offset) { _, item in
                     VStack(alignment: .leading) {
                         Text(item.track.title).lineLimit(1)
                         if let analysis = item.analysis {
