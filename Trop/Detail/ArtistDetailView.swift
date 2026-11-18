@@ -1076,6 +1076,7 @@ struct ArtistDetailView: View {
                 entity.channelId = channelId
                 do {
                     try await DatabaseService.shared.save(entity)
+                    NotificationCenter.default.post(name: Notification.Name("trop.libraryChanged"), object: nil)
                     // Guest favorites belong to this device, not a Google account.
                     if await CookieStore().isLoggedIn() {
                         failureStage = "YouTube Music sync"

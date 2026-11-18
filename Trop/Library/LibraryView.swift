@@ -157,6 +157,9 @@ struct LibraryView: View {
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("trop.likeChanged"))) { _ in
             Task { await loadContent() }
         }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("trop.libraryChanged"))) { _ in
+            Task { await loadContent() }
+        }
     }
 
     /// Coalesces scroll-offset writes into ~8pt steps so the list isn't
