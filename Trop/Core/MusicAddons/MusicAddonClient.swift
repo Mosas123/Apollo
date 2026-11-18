@@ -75,11 +75,12 @@ actor MusicAddonClient {
         let preferred = ["track", "song", "music", "audio"]
         let available = Set(descriptor.types.map { $0.lowercased() })
         let types = preferred.filter { available.contains($0) }
-        self.catalogTypes = types.isEmpty ? descriptor.types.map { $0.lowercased() } : types
+        let finalTypes = types.isEmpty ? descriptor.types.map { $0.lowercased() } : types
+        self.catalogTypes = finalTypes
         let searchable = descriptor.catalogs.filter { catalog in
             catalog.extra?.contains { $0.name.lowercased() == "search" } == true
         }
-        let preferredCatalogs = searchable.filter { catalogTypes.contains($0.type.lowercased()) }
+        let preferredCatalogs = searchable.filter { finalTypes.contains($0.type.lowercased()) }
         self.searchCatalogs = preferredCatalogs.isEmpty ? searchable : preferredCatalogs
     }
 
