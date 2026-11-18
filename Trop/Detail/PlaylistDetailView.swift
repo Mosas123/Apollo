@@ -656,9 +656,8 @@ struct PlaylistDetailView: View {
     @ViewBuilder
     private func songList(for playlist: PlaylistDetailInfo) -> some View {
         // Direct LazyVStack children → rows build lazily.
-        ForEach(Array(playlist.songs.enumerated()), id: \.element.videoId) { index, song in
+        ForEach(Array(playlist.songs.enumerated()), id: \.offset) { index, song in
             SongRowView(song: song, onTap: { playSong(song, in: playlist) }, onNavigate: { pendingRoute = $0 })
-                .id(song.videoId)
                 .contextMenu {
                     if isEditable {
                         Button(role: .destructive) {

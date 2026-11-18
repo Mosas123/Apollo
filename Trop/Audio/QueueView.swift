@@ -66,9 +66,9 @@ struct QueueView<ProgressSlider: View>: View {
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                     } else {
-                        ForEach(Array(np.queueSongs.enumerated()), id: \.element.videoId) { index, song in
+                        ForEach(Array(np.queueSongs.enumerated()), id: \.offset) { index, song in
                             queueRow(song: song, index: index)
-                                .id(song.videoId)
+                                .id(index)
                         }
                         .onMove(perform: np.moveQueueSongs)
                     }
@@ -80,7 +80,7 @@ struct QueueView<ProgressSlider: View>: View {
                 .layoutPriority(1)
                 .onAppear {
                     if np.queueSongs.indices.contains(np.queueIndex) {
-                        proxy.scrollTo(np.queueSongs[np.queueIndex].videoId, anchor: .center)
+                        proxy.scrollTo(np.queueIndex, anchor: .center)
                     }
                 }
             }

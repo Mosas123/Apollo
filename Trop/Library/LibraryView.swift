@@ -500,7 +500,7 @@ struct LibraryView: View {
                 )
                 .map { ($0["playlist_id"] as String, $0["cnt"] as Int) }
             }
-            playlistSongCounts = Dictionary(uniqueKeysWithValues: rows)
+            playlistSongCounts = Dictionary(rows, uniquingKeysWith: { first, _ in first })
 
             isLoading = false
         } catch {

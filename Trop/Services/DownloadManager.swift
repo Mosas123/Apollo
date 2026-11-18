@@ -665,7 +665,7 @@ extension DownloadManager {
     private func runFFmpeg(
         arguments: [String],
         videoId: String? = nil,
-        onSize: ((Int64) -> Void)? = nil
+        onSize: (@MainActor (Int64) -> Void)? = nil
     ) async throws {
         let sessionBox = FFmpegSessionBox()
         try await withTaskCancellationHandler {
@@ -706,8 +706,12 @@ extension DownloadManager {
                     },
                     withLogCallback: nil,
                     withStatisticsCallback: { statistics in
-                        guard let statistics, let onSize else { return }
-                        onSize(Int64(statistics.getSize()))
+                        guard let statistics else { return }
+                        let size = Int64(statistics.getSize())
+                        // ffmpeg calls this on a background queue; state is
+                        // @MainActor, so hop before touching it (Swift 6 traps
+                        // otherwise).
+                        Task { @MainActor in onSize?(size) }
                     }
                 )
 

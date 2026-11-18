@@ -183,7 +183,7 @@ extension DatabaseService {
             sql: "SELECT * FROM song WHERE id IN (\(placeholders(count: ids.count)))",
             arguments: StatementArguments(ids)
         )
-        return Dictionary(uniqueKeysWithValues: fetched.map { ($0.id, $0) })
+        return Dictionary(fetched.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     }
 }
 
