@@ -162,7 +162,11 @@ enum AddonSourceResolver {
            let cached = await AddonAlbumCache.shared.get(
                Self.albumKey(installationKey: installation.key, artist: criteria.artist, album: album)
            ), !cached.isEmpty {
-            let filtered = Self.filterAlbumTracks(cached, criteria: criteria)
+            let filtered = Self.filterAlbumTracks(
+                cached,
+                criteria: criteria,
+                preferAtmos: preferAtmos
+            )
             if !filtered.isEmpty {
                 collected = filtered
                 usedAlbumIndex = true
@@ -272,10 +276,14 @@ enum AddonSourceResolver {
               !tracks.isEmpty else { return [] }
 
         await AddonAlbumCache.shared.store(tracks, for: key)
-        return Self.filterAlbumTracks(tracks, criteria: criteria)
+        return Self.filterAlbumTracks(tracks, criteria: criteria, preferAtmos: preferAtmos)
     }
 
-    private static func filterAlbumTracks(_ tracks: [AddonTrack], criteria: Criteria) -> [AddonTrack] {
+    private static func filterAlbumTracks(
+        _ tracks: [AddonTrack],
+        criteria: Criteria,
+        preferAtmos: Bool
+    ) -> [AddonTrack] {
         var matches = tracks.filter { track in
             guard !(track.isAtmosOnly && !preferAtmos) else { return false }
             return TextMatch.titlesMatch(track.title, criteria.title)
