@@ -58,12 +58,13 @@ struct MenuRow: View {
     let icon: String
     let title: String
     var subtitle: String?
+    var subtitleIsContent = false
     var destructive: Bool = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            MenuRowLabel(icon: icon, title: title, subtitle: subtitle, destructive: destructive)
+            MenuRowLabel(icon: icon, title: title, subtitle: subtitle, subtitleIsContent: subtitleIsContent, destructive: destructive)
         }
         .buttonStyle(.plain)
     }
@@ -76,6 +77,7 @@ struct MenuRowLabel: View {
     let icon: String
     let title: String
     var subtitle: String?
+    var subtitleIsContent = false
     var destructive: Bool = false
 
     var body: some View {
@@ -89,7 +91,13 @@ struct MenuRowLabel: View {
                     .font(.body)
                     .foregroundStyle(destructive ? Color.red : Color.primary)
                 if let subtitle, !subtitle.isEmpty {
-                    Text(LocalizedStringKey(subtitle))
+                    Group {
+                        if subtitleIsContent {
+                            Text(verbatim: subtitle)
+                        } else {
+                            Text(LocalizedStringKey(subtitle))
+                        }
+                    }
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)

@@ -135,16 +135,16 @@ enum MusicAddonError: Error, Equatable, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .insecureManifestURL: return "Addons must use a public HTTPS manifest URL."
-        case .invalidManifest: return "This is not a valid Trop Music Addon manifest. Check that the provider supports the Trop v1 music protocol."
-        case .unsupportedSchema: return "This addon requires an unsupported manifest version."
-        case .invalidIdentity: return "The addon name, identifier or version is invalid."
-        case .invalidCapabilities: return "The addon declares invalid capabilities."
-        case .unsafeEndpoint: return "An addon endpoint is invalid or unsafe."
-        case .alreadyInstalled: return "This addon is already installed."
-        case .notInstalled: return "This addon is not installed."
-        case .requiresCapabilityApproval: return "The addon update requires approval for new permissions."
-        case .tooManyAddons: return "The addon limit has been reached."
+        case .insecureManifestURL: return String(localized: "Addons must use a public HTTPS manifest URL.")
+        case .invalidManifest: return String(localized: "This is not a valid Trop Music Addon manifest. Check that the provider supports the Trop v1 music protocol.")
+        case .unsupportedSchema: return String(localized: "This addon requires an unsupported manifest version.")
+        case .invalidIdentity: return String(localized: "The addon name, identifier or version is invalid.")
+        case .invalidCapabilities: return String(localized: "The addon declares invalid capabilities.")
+        case .unsafeEndpoint: return String(localized: "An addon endpoint is invalid or unsafe.")
+        case .alreadyInstalled: return String(localized: "This addon is already installed.")
+        case .notInstalled: return String(localized: "This addon is not installed.")
+        case .requiresCapabilityApproval: return String(localized: "The addon update requires approval for new permissions.")
+        case .tooManyAddons: return String(localized: "The addon limit has been reached.")
         }
     }
 }

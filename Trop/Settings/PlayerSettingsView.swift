@@ -67,9 +67,9 @@ struct PlayerSettingsView: View {
             } header: {
                 Text("Audio")
             } footer: {
-                Text(settings.hasMusicAddons
+                Text(LocalizedStringKey(settings.hasMusicAddons
                      ? "Add-on Quality picks which copy to look for in your add-ons: Auto takes the best FLAC available and falls back to JioSaavn/AAC 320 then YouTube; CD forces 16-bit / 44.1 kHz; Best FLAC keeps FLAC only (no 320 fallback). \"Allow Hi-Res\" unlocks 24-bit copies; with it off they are neither downloaded nor played (the iPhone DAC tops out at 24/48 and hi-res needs an external DAC). Dolby Atmos (E-AC3 5.1) is downmixed to stereo by iOS. Audio Quality picks the lossy pool: with Auto or High it races YouTube, JioSaavn and add-on AAC 320 and keeps the best; Standard and Low stay on YouTube and only use JioSaavn/AAC if YouTube has no stream. If \"Upgrade to best quality during playback\" is on, the app may switch mid-song with a short fade."
-                     : "Off and Auto work with YouTube alone. CD, Best FLAC and Dolby Atmos need an installed music add-on, because the add-on is the search engine for those qualities. Add one in Settings → Integrations → Music Addons to unlock them.")
+                     : "Off and Auto work with YouTube alone. CD, Best FLAC and Dolby Atmos need an installed music add-on, because the add-on is the search engine for those qualities. Add one in Settings → Integrations → Music Addons to unlock them."))
             }
 
             Section {

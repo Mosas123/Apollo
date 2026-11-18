@@ -62,7 +62,7 @@ struct PlayerPlayPauseButton: View {
                 .contentTransition(.symbolEffect(.replace))
         }
         .frame(width: 80, height: 80)
-        .accessibilityLabel(isPlaying ? "Pause" : "Play")
+        .accessibilityLabel(LocalizedStringKey(isPlaying ? "Pause" : "Play"))
         .sensoryFeedback(.impact(weight: .light), trigger: isPlaying)
     }
 }
@@ -191,7 +191,7 @@ struct SecondaryActionsRow: View {
                             .padding(4)
                     }
                     .offset(x: 2, y: -2)
-                    .accessibilityLabel(isRepeatOn ? "Repeat one" : "Repeat all")
+                    .accessibilityLabel(LocalizedStringKey(isRepeatOn ? "Repeat one" : "Repeat all"))
                 }
             }
             .frame(maxWidth: .infinity)

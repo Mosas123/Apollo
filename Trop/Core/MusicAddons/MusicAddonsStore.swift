@@ -9,10 +9,10 @@ enum MusicAddonDownloadError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidURL: return "Enter a valid HTTPS addon manifest URL."
-        case .invalidResponse: return "The server did not return a valid manifest response."
-        case .oversizedManifest: return "The manifest exceeds the 64 KB size limit."
-        case .requestFailed: return "The manifest could not be fetched. Check the URL and connection."
+        case .invalidURL: return String(localized: "Enter a valid HTTPS addon manifest URL.")
+        case .invalidResponse: return String(localized: "The server did not return a valid manifest response.")
+        case .oversizedManifest: return String(localized: "The manifest exceeds the 64 KB size limit.")
+        case .requestFailed: return String(localized: "The manifest could not be fetched. Check the URL and connection.")
         }
     }
 }

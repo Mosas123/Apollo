@@ -210,7 +210,7 @@ struct MiniPlayerBarView: View {
                 .contentShape(Rectangle())
         })
         .buttonStyle(.plain)
-        .accessibilityLabel(np.isPlaying ? "Pause" : "Play")
+        .accessibilityLabel(LocalizedStringKey(np.isPlaying ? "Pause" : "Play"))
         .sensoryFeedback(.impact(weight: .light), trigger: np.isPlaying)
     }
 

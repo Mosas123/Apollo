@@ -20,17 +20,6 @@ struct AboutSettingsView: View {
                     }
                 }
             }
-
-            Section {
-                Link(destination: URL(string: "https://github.com/Mosas123/Trop")!) {
-                    Text("GitHub")
-                }
-                Link(destination: URL(string: "https://discord.gg/QrMwZAfU97")!) {
-                    Text("Discord")
-                }
-            } header: {
-                Text("Links")
-            }
         }
         .navigationTitle("About")
         .navigationBarTitleDisplayMode(.inline)

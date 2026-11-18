@@ -72,13 +72,15 @@ struct SongMenuSheet: View {
                         MenuRow(
                             icon: "music.mic",
                             title: "View Artist",
-                            subtitle: playbackMetadata?.artist ?? song.artistNamesDisplay
+                            subtitle: playbackMetadata?.artist ?? song.artistNamesDisplay,
+                            subtitleIsContent: true
                         ) { handleViewArtist() }
                         Divider()
                         MenuRow(
                             icon: "record.circle",
                             title: "View Album",
-                                subtitle: playbackMetadata?.album ?? song.album
+                                subtitle: playbackMetadata?.album ?? song.album,
+                                subtitleIsContent: true
                         ) {
                             if let albumId = song.firstAlbumBrowseId, !albumId.isEmpty {
                                 navigate(.album(browseId: albumId))
@@ -107,7 +109,7 @@ struct SongMenuSheet: View {
                             MenuRowLabel(
                                 icon: "dot.radiowaves.left.and.right",
                                 title: "Similar to this song",
-                                subtitle: "More like “\(song.title)”"
+                                subtitle: AppStrings.format("More like “%@”", song.title)
                             )
                         }
                         .buttonStyle(.plain)

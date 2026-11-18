@@ -67,7 +67,7 @@ struct MusicAddonsSettingsView: View {
         .alert("Music Addons", isPresented: $showMessage) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(message ?? "Unable to complete this action.")
+            Text(message ?? String(localized: "Unable to complete this action."))
         }
     }
 
@@ -78,12 +78,12 @@ struct MusicAddonsSettingsView: View {
                 Section("Provider") {
                     LabeledContent("Name", value: manifest.name)
                     LabeledContent("Version", value: manifest.version)
-                    Text(manifest.description ?? "No description provided.")
+                    Text(manifest.description ?? String(localized: "No description provided."))
                         .foregroundStyle(.secondary)
                 }
                 Section {
                     ForEach(manifest.capabilities, id: \.self) { capability in
-                        Label(capabilityTitle(capability), systemImage: capabilityIcon(capability))
+                        Label(LocalizedStringKey(capabilityTitle(capability)), systemImage: capabilityIcon(capability))
                     }
                 } header: {
                     Text("Requested capabilities")
@@ -193,7 +193,7 @@ struct MusicAddonsSettingsView: View {
                         } else {
                             Image(systemName: "plus.circle.fill")
                         }
-                        Text(isChecking ? "Checking Manifest…" : "Review & Install")
+                        Text(LocalizedStringKey(isChecking ? "Checking Manifest…" : "Review & Install"))
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -267,13 +267,13 @@ struct MusicAddonsSettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(entry.manifest.name)
                         .font(.headline)
-                    Text("Version \(entry.manifest.version)")
+                    Text(AppStrings.format("Version %@", entry.manifest.version))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 8)
                 Toggle(
-                    "Enable \(entry.manifest.name)",
+                    AppStrings.format("Enable %@", entry.manifest.name),
                     isOn: Binding(
                         get: {
                             addonStore.installations.first(where: { $0.key == entry.key })?.isEnabled ?? false
@@ -295,7 +295,7 @@ struct MusicAddonsSettingsView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            Text(entry.manifest.capabilities.map(capabilityTitle).joined(separator: " · "))
+            Text(entry.manifest.capabilities.map { NSLocalizedString(capabilityTitle($0), comment: "Music add-on capability") }.joined(separator: " · "))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text(audioQualitySummary(entry.audioCapabilities))
@@ -311,7 +311,7 @@ struct MusicAddonsSettingsView: View {
                     Image(systemName: "arrow.up")
                 }
                 .disabled(position == 0)
-                .accessibilityLabel("Move \(entry.manifest.name) up")
+                .accessibilityLabel(AppStrings.format("Move %@ up", entry.manifest.name))
 
                 Button {
                     addonStore.move(from: position, to: position + 1)
@@ -319,7 +319,7 @@ struct MusicAddonsSettingsView: View {
                     Image(systemName: "arrow.down")
                 }
                 .disabled(position >= addonStore.installations.count - 1)
-                .accessibilityLabel("Move \(entry.manifest.name) down")
+                .accessibilityLabel(AppStrings.format("Move %@ down", entry.manifest.name))
 
                 Button {
                     refresh(entry.key)
@@ -350,13 +350,9 @@ struct MusicAddonsSettingsView: View {
 
     private var limitationsCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Provider management preview", systemImage: "info.circle")
+            Label("Music sources", systemImage: "info.circle")
                 .font(.subheadline.bold())
-            Text(
-                "YouTube Music remains the default. This phase stores and manages addon manifests; " +
-                "it does not query addon catalogs or route audio through them yet. " +
-                "Fast playback fallback will be enabled only after network, ownership and audio checks."
-            )
+            Text("YouTube Music is the main catalog. Enabled add-ons can provide additional search results and playback sources.")
             .font(.footnote)
             .foregroundStyle(.secondary)
         }
@@ -364,7 +360,8 @@ struct MusicAddonsSettingsView: View {
     }
 
     private func sectionHeading(_ title: String) -> some View {
-        Text(title.uppercased())
+        Text(LocalizedStringKey(title))
+            .textCase(.uppercase)
             .font(.caption.bold())
             .foregroundStyle(.secondary)
             .padding(.leading, 5)
@@ -375,7 +372,7 @@ struct MusicAddonsSettingsView: View {
             Text(count.formatted())
                 .font(.title2.bold())
                 .monospacedDigit()
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

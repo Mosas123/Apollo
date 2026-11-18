@@ -994,21 +994,21 @@ extension DownloadManager {
         if let urlError = error as? URLError {
             switch urlError.code {
             case .notConnectedToInternet, .networkConnectionLost:
-                return "No internet connection."
+                return String(localized: "No internet connection.")
             case .timedOut:
-                return "The download timed out."
+                return String(localized: "The download timed out.")
             default:
                 break
             }
         }
         if let downloadError = error as? DownloadError {
-            return downloadError.errorDescription ?? "Download failed. Try again."
+            return downloadError.errorDescription ?? String(localized: "Download failed. Try again.")
         }
         let nsError = error as NSError
         if nsError.domain == AVFoundationErrorDomain {
-            return "Could not process this track for offline playback. Try again."
+            return String(localized: "Could not process this track for offline playback. Try again.")
         }
-        return "Download failed. Try again."
+        return String(localized: "Download failed. Try again.")
     }
 
     // MARK: - State
@@ -1489,11 +1489,11 @@ enum DownloadError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidStreamURL:
-            return "The stream URL returned by the server was invalid"
+            return String(localized: "The stream URL returned by the server was invalid")
         case .transcodeFailed:
-            return "Could not convert this track for offline playback."
+            return String(localized: "Could not convert this track for offline playback.")
         case .incompleteTransfer:
-            return "The server closed the download early. Try again."
+            return String(localized: "The server closed the download early. Try again.")
         }
     }
 }

@@ -505,7 +505,7 @@ struct PodcastDetailView: View {
             }
 
             if !podcast.episodes.isEmpty {
-                Text("\(podcast.episodes.count) episode\(podcast.episodes.count != 1 ? "s" : "")")
+                Text(AppStrings.episodes(podcast.episodes.count))
                     .font(.subheadline)
                     .foregroundStyle(.tertiary)
             }
@@ -535,7 +535,7 @@ struct PodcastDetailView: View {
                     )
                 })
                 .buttonStyle(.plain)
-                .accessibilityLabel(viewModel.isSubscribed ? "Unsubscribe from podcast" : "Subscribe to podcast")
+                .accessibilityLabel(LocalizedStringKey(viewModel.isSubscribed ? "Unsubscribe from podcast" : "Subscribe to podcast"))
 
                 Button(action: { showMoreSheet = true }, label: {
                     Text("⋮")
@@ -729,7 +729,7 @@ private struct ExpandableDescriptionText: View {
                     onInactiveTap?()
                 }
             }
-            .accessibilityLabel(isTruncated ? (expanded ? "Show less" : "Show more") : "Description")
+            .accessibilityLabel(LocalizedStringKey(isTruncated ? (expanded ? "Show less" : "Show more") : "Description"))
     }
 
     private var styledText: AttributedString {

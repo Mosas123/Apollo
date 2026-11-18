@@ -42,7 +42,7 @@ struct PlayerMenuSheet: View {
                     MenuCard {
                         viewArtistRow
                         Divider()
-                        MenuRow(icon: "record.circle", title: "View Album", subtitle: song.album) {
+                        MenuRow(icon: "record.circle", title: "View Album", subtitle: song.album, subtitleIsContent: true) {
                             if let albumId = song.firstAlbumBrowseId, !albumId.isEmpty {
                                 navigate(.album(browseId: albumId))
                             } else {
@@ -390,7 +390,7 @@ struct AddSongToPlaylistSheet: View {
                                     Text(playlist.name)
                                         .foregroundStyle(.primary)
                                     if let count = playlist.remoteSongCount {
-                                        Text("\(count) songs")
+                                        Text(AppStrings.songs(count))
                                             .font(.footnote)
                                             .foregroundStyle(.secondary)
                                     }
@@ -427,7 +427,7 @@ struct AddSongToPlaylistSheet: View {
                 placeholder: "Playlist name",
                 text: $newPlaylistTitle,
                 okTitle: "Create",
-                message: Text("Adds “\(song.title)” once created.")
+                message: Text(AppStrings.format("Adds “%@” once created.", song.title))
             ) {
                 Task { await createAndAdd() }
             }
@@ -572,7 +572,7 @@ struct SongDetailsView: View {
                 }
                 row("Expires in", "\(s.expiresInSeconds)s")
             } else if let f = formatEntity {
-                row("Source", NowPlaying.shared.currentSourceName ?? "YouTube · cached")
+                row("Source", NowPlaying.shared.currentSourceName ?? String(localized: "YouTube · cached"))
                 row("ITAG", "\(f.itag)", monospaced: true)
                 row("Bitrate", "\(f.bitrate / 1000) kbps")
                 if f.contentLength > 0 {
@@ -581,14 +581,14 @@ struct SongDetailsView: View {
             } else if let sourceName = NowPlaying.shared.currentSourceName {
                 row("Source", sourceName)
             } else {
-                row("Status", "Not resolved yet")
+                row("Status", String(localized: "Not resolved yet"))
             }
         }
     }
 
     private var statsSection: some View {
         section("Stats") {
-            row("Views", viewCountText ?? "Loading…")
+            row("Views", viewCountText ?? String(localized: "Loading…"))
         }
     }
 
@@ -630,7 +630,7 @@ struct SongDetailsView: View {
 
     private func loadMetadata() async {
         guard MusicPlaybackIdentity.isYouTube(song.videoId) else {
-            viewCountText = "Unavailable"
+            viewCountText = String(localized: "Unavailable")
             return
         }
         if song.duration <= 0 {
@@ -645,7 +645,7 @@ struct SongDetailsView: View {
            let count = Int(raw) {
             viewCountText = count.formattedViews()
         } else {
-            viewCountText = "Unavailable"
+            viewCountText = String(localized: "Unavailable")
         }
     }
 }

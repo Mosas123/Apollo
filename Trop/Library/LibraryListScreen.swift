@@ -77,7 +77,7 @@ struct LibraryListScreen: View {
                         artworkRow(
                             image: album.thumbnailUrl,
                             title: album.title,
-                            subtitle: album.songCount > 0 ? "\(album.songCount) songs" : nil
+                            subtitle: album.songCount > 0 ? AppStrings.songs(album.songCount) : nil
                         )
                     }
                 }
@@ -127,7 +127,7 @@ struct LibraryListScreen: View {
                 get: { playlistToDelete != nil },
                 set: { if !$0 { playlistToDelete = nil } }
             ),
-            message: Text("Are you sure you want to delete \"\(playlistToDelete?.name ?? "")\"?"),
+            message: Text(AppStrings.format("Delete “%@”?", playlistToDelete?.name ?? "")),
             confirmTitle: "Delete"
         ) {
             if let playlist = playlistToDelete {

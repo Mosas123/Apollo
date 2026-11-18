@@ -9,7 +9,7 @@ enum RadioLiveSaver {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: " ")
-        guard !query.isEmpty else { return "No song detected." }
+        guard !query.isEmpty else { return String(localized: "No song detected.") }
 
         do {
             let raw = try await SearchService.shared.search(query: query)
@@ -22,11 +22,11 @@ enum RadioLiveSaver {
                     return nil
                 }
                 .first
-            guard let song else { return "Song not found on YouTube Music." }
+            guard let song else { return String(localized: "Song not found on YouTube Music.") }
             await DownloadManager.shared.download(song: song)
-            return "Saving “\(song.title)”…"
+            return String.localizedStringWithFormat(NSLocalizedString("Saving “%@”…", comment: "Radio song being saved"), song.title)
         } catch {
-            return "Could not save: \(error.localizedDescription)"
+            return String.localizedStringWithFormat(NSLocalizedString("Could not save: %@", comment: "Radio download error"), error.localizedDescription)
         }
     }
 }

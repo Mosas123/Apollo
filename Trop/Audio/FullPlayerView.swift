@@ -99,7 +99,7 @@ struct FullPlayerView: View {
                                 showLyrics = false
                             }
                         }
-                        .accessibilityLabel(showLyrics ? "Close lyrics" : "Collapse player")
+                        .accessibilityLabel(LocalizedStringKey(showLyrics ? "Close lyrics" : "Collapse player"))
 
                     if showLyrics {
                         LyricsView(
@@ -355,7 +355,7 @@ struct FullPlayerView: View {
                 .foregroundStyle(.primary)
                 .frame(width: 30)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.body)
                 if let subtitle, !subtitle.isEmpty {
                     Text(subtitle)
@@ -485,7 +485,7 @@ struct FullPlayerView: View {
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(liveSaveStatus ?? "EN RADIO AHORA")
+                Text(liveSaveStatus ?? String(localized: "On Air Now"))
                     .font(.system(size: 9, weight: .bold))
                     .tracking(1)
                     .foregroundStyle(.white.opacity(0.55))
@@ -517,7 +517,7 @@ struct FullPlayerView: View {
     }
 
     private func saveLive(_ live: LiveSongInfo) async {
-        liveSaveStatus = "GUARDANDO…"
+        liveSaveStatus = String(localized: "Saving…")
         liveSaveStatus = await RadioLiveSaver.download(artist: live.artist, title: live.title)
         try? await Task.sleep(for: .seconds(3))
         liveSaveStatus = nil
@@ -562,7 +562,7 @@ struct FullPlayerView: View {
                         .frame(width: 36, height: 36)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(isLiked ? "Favorited" : "Favorite")
+                .accessibilityLabel(LocalizedStringKey(isLiked ? "Favorited" : "Favorite"))
 
                 if np.queueSongs.indices.contains(np.queueIndex) {
                     PlayerOptionsButton {

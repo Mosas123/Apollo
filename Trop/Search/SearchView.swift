@@ -522,7 +522,7 @@ struct SearchView: View {
         ContentUnavailableView(
             "No Results",
             systemImage: "magnifyingglass",
-            description: Text("No results found for \"\(viewModel.submittedQuery)\"")
+            description: Text(AppStrings.format("No results found for “%@”", viewModel.submittedQuery))
         )
     }
 
@@ -538,7 +538,7 @@ struct SearchView: View {
         ContentUnavailableView(
             "Search failed",
             systemImage: "exclamationmark.triangle",
-            description: Text(error?.localizedDescription ?? "Something went wrong.")
+            description: Text(error?.localizedDescription ?? String(localized: "Something went wrong."))
         )
     }
 
