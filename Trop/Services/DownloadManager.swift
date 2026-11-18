@@ -696,7 +696,11 @@ extension DownloadManager {
                 throw MusicCatalogError.unavailableTrack
             }
             let client = try MusicAddonClient(installation: installation)
-            let stream = try await client.resolveStream(type: ref.t, id: ref.i)
+            let stream = try await client.resolveStream(
+                type: ref.t,
+                id: ref.i,
+                preferAtmos: preference?.preferAtmos ?? false
+            )
             guard !stream.isEncrypted else { throw MusicCatalogError.unavailableTrack }
             switch stream.kind {
             case .youtube(let youTubeId):

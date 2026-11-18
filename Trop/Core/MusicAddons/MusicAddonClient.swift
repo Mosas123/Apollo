@@ -46,6 +46,9 @@ struct AddonTrack: Sendable, Equatable {
     var artist: String? = nil
     var album: String? = nil
     var durationSeconds: Int? = nil
+    var isAtmos: Bool = false
+    var isHiRes: Bool = false
+    var isAtmosOnly: Bool = false
 }
 
 struct AddonAlbum: Sendable, Equatable {
@@ -335,23 +338,40 @@ actor MusicAddonClient {
                 detail: track["album"] as? String,
                 artist: track["artist"] as? String,
                 album: track["album"] as? String,
-                durationSeconds: Self.parseDurationSeconds(track["duration"])
+                durationSeconds: Self.parseDurationSeconds(track["duration"]),
+                isAtmos: (track["isAtmos"] as? Bool) ?? false,
+                isHiRes: (track["isHiRes"] as? Bool) ?? false,
+                isAtmosOnly: (track["isAtmosOnly"] as? Bool) ?? false
             )
         }
     }
 
-    func resolveStream(type: String, id: String) async throws -> AddonStream {
+    func resolveStream(
+        type: String,
+        id: String,
+        preferAtmos: Bool = false
+    ) async throws -> AddonStream {
         if eclipseMode {
-            return try await eclipseStream(id: id)
+            return try await eclipseStream(id: id, preferAtmos: preferAtmos)
         }
         return try await stremioStream(type: type, id: id)
     }
 
-    private func eclipseStream(id: String) async throws -> AddonStream {
+    private func eclipseStream(id: String, preferAtmos: Bool) async throws -> AddonStream {
         guard let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
             throw MusicAddonClientError.invalidURL
         }
-        let url = baseURL.appendingPathComponent("stream").appendingPathComponent(encoded)
+        // Addons that carry Dolby Atmos copies (NullBeat) switch between the
+        // Atmos and the plain FLAC master with this flag.
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("stream").appendingPathComponent(encoded),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: "atmos", value: preferAtmos ? "on" : "off")
+        ]
+        let url = components?.url
+            ?? baseURL.appendingPathComponent("stream").appendingPathComponent(encoded)
         guard let data = await fetch(url),
               let object = try? JSONSerialization.jsonObject(with: data),
               let root = object as? [String: Any],

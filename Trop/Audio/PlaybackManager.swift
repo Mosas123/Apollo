@@ -202,7 +202,9 @@ actor PlaybackManager {
             throw MusicCatalogError.unavailableTrack
         }
         let client = try MusicAddonClient(installation: installation)
-        let stream = try await client.resolveStream(type: ref.t, id: ref.i)
+        let atmos = SettingsStore.shared.musicQualityMode == .auto
+            && SettingsStore.shared.preferAtmos
+        let stream = try await client.resolveStream(type: ref.t, id: ref.i, preferAtmos: atmos)
         guard !stream.isEncrypted else { throw MusicCatalogError.unavailableTrack }
         resolvedSourceNames[videoId] = installation.manifest.name
 

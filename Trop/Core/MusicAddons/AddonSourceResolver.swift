@@ -172,14 +172,22 @@ enum AddonSourceResolver {
         if !usedAlbumIndex {
             await withTaskGroup(of: [AddonTrack].self) { group in
                 for query in criteria.queries {
-                    group.addTask { await candidates(in: client, query: query, criteria: criteria) }
+                    group.addTask {
+                        await candidates(
+                            in: client,
+                            query: query,
+                            criteria: criteria,
+                            preferAtmos: preferAtmos
+                        )
+                    }
                 }
                 if hasAlbum {
                     group.addTask {
                         await albumCandidates(
                             in: client,
                             installationKey: installation.key,
-                            criteria: criteria
+                            criteria: criteria,
+                            preferAtmos: preferAtmos
                         )
                     }
                 }
@@ -193,7 +201,10 @@ enum AddonSourceResolver {
         let unique = collected.filter { seen.insert($0.id).inserted }
         guard !unique.isEmpty else { return nil }
         let ranked = unique
-            .sorted { score($0, criteria: criteria) > score($1, criteria: criteria) }
+            .sorted {
+                score($0, criteria: criteria, preferAtmos: preferAtmos, preferHiRes: preferHiRes)
+                    > score($1, criteria: criteria, preferAtmos: preferAtmos, preferHiRes: preferHiRes)
+            }
             .prefix(2)
         return await resolveBest(
             ranked,
@@ -208,10 +219,12 @@ enum AddonSourceResolver {
     private static func candidates(
         in client: MusicAddonClient,
         query: String,
-        criteria: Criteria
+        criteria: Criteria,
+        preferAtmos: Bool
     ) async -> [AddonTrack] {
         guard let found = try? await client.search(query, limit: 20) else { return [] }
         return found.filter { track in
+            if track.isAtmosOnly, !preferAtmos { return false }
             guard TextMatch.titlesMatch(track.title, criteria.title) else { return false }
             if let trackArtist = track.artist, !trackArtist.isEmpty, !criteria.artist.isEmpty,
                !TextMatch.artistsMatch(trackArtist, criteria.artist) { return false }
@@ -228,7 +241,8 @@ enum AddonSourceResolver {
     private static func albumCandidates(
         in client: MusicAddonClient,
         installationKey: String,
-        criteria: Criteria
+        criteria: Criteria,
+        preferAtmos: Bool
     ) async -> [AddonTrack] {
         guard let albumName = criteria.album, !albumName.isEmpty else { return [] }
         let key = Self.albumKey(
@@ -262,7 +276,10 @@ enum AddonSourceResolver {
     }
 
     private static func filterAlbumTracks(_ tracks: [AddonTrack], criteria: Criteria) -> [AddonTrack] {
-        var matches = tracks.filter { TextMatch.titlesMatch($0.title, criteria.title) }
+        var matches = tracks.filter { track in
+            guard !(track.isAtmosOnly && !preferAtmos) else { return false }
+            return TextMatch.titlesMatch(track.title, criteria.title)
+        }
         if let duration = criteria.duration {
             let tight = matches.filter { track in
                 guard let seconds = track.durationSeconds, seconds > 0 else { return false }
@@ -288,8 +305,13 @@ enum AddonSourceResolver {
     ) async -> (Match, Int)? where C.Element == AddonTrack {
         var best: (Match, Int)?
         for track in tracks {
-            guard let stream = try? await client.resolveStream(type: track.type, id: track.id),
+            guard let stream = try? await client.resolveStream(
+                      type: track.type,
+                      id: track.id,
+                      preferAtmos: preferAtmos
+                  ),
                   !stream.isEncrypted else { continue }
+            if stream.qualityTier == "Atmos", !preferAtmos { continue }
             if requireCD, stream.isHiRes { continue }
             let rank: Int
             switch stream.qualityTier {
@@ -308,8 +330,15 @@ enum AddonSourceResolver {
 
     /// Higher is a better metadata match: exact title, album, duration and
     /// artist. Used to decide which candidates are worth resolving.
-    private static func score(_ track: AddonTrack, criteria: Criteria) -> Int {
+    private static func score(
+        _ track: AddonTrack,
+        criteria: Criteria,
+        preferAtmos: Bool,
+        preferHiRes: Bool
+    ) -> Int {
         var score = 0
+        if preferAtmos, track.isAtmos { score += 10 }
+        if preferHiRes, track.isHiRes { score += 8 }
         let wanted = TextMatch.normalizeTitle(criteria.title)
         let found = TextMatch.normalizeTitle(track.title)
         if !wanted.isEmpty, wanted == found { score += 60 }
