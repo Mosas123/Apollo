@@ -43,6 +43,9 @@ struct AddonTrack: Sendable, Equatable {
     let title: String
     let poster: URL?
     let detail: String?
+    var artist: String? = nil
+    var album: String? = nil
+    var durationSeconds: Int? = nil
 }
 
 struct AddonStream: Sendable {
@@ -64,6 +67,9 @@ actor MusicAddonClient {
     private let baseURL: URL
     private let catalogTypes: [String]
     private let searchCatalogs: [StremioDescriptor.Catalog]
+    /// Eclipse-style addons expose a `search` resource and `/search?q=` +
+    /// `/stream/<id>` (Nebula, Pencari native) instead of Stremio catalogs.
+    private let eclipseMode: Bool
 
     init(installation: MusicAddonInstallation) throws {
         guard installation.manifest.protocolKind == .stremio,
@@ -82,6 +88,8 @@ actor MusicAddonClient {
         }
         let preferredCatalogs = searchable.filter { finalTypes.contains($0.type.lowercased()) }
         self.searchCatalogs = preferredCatalogs.isEmpty ? searchable : preferredCatalogs
+        self.eclipseMode = descriptor.resources.contains { $0.name == "search" }
+            && descriptor.catalogs.isEmpty
     }
 
     var installationKey: String { installation.key }
@@ -89,7 +97,11 @@ actor MusicAddonClient {
 
     func search(_ query: String, limit: Int = 20) async throws -> [AddonTrack] {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !term.isEmpty, !searchCatalogs.isEmpty else { return [] }
+        guard !term.isEmpty else { return [] }
+        if eclipseMode {
+            return try await eclipseSearch(term, limit: limit)
+        }
+        guard !searchCatalogs.isEmpty else { return [] }
         var tracks: [AddonTrack] = []
         var seen = Set<String>()
 
@@ -130,7 +142,70 @@ actor MusicAddonClient {
         return tracks
     }
 
+    private func eclipseSearch(_ term: String, limit: Int) async throws -> [AddonTrack] {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("search"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "q", value: term)]
+        guard let url = components?.url, let data = await fetch(url),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let root = object as? [String: Any],
+              let tracks = root["tracks"] as? [[String: Any]] else { return [] }
+        return tracks.prefix(limit).compactMap { track in
+            guard let id = track["id"] as? String,
+                  let title = track["title"] as? String else { return nil }
+            let artist = track["artist"] as? String
+            let album = track["album"] as? String
+            let duration = track["duration"] as? Int ?? (track["duration"] as? Double).map(Int.init)
+            let artwork = (track["artworkURL"] as? String) ?? (track["coverURL"] as? String)
+            return AddonTrack(
+                installationKey: installation.key,
+                type: "track",
+                id: id,
+                title: title,
+                poster: artwork.flatMap(URL.init(string:)),
+                detail: album,
+                artist: artist,
+                album: album,
+                durationSeconds: duration
+            )
+        }
+    }
+
     func resolveStream(type: String, id: String) async throws -> AddonStream {
+        if eclipseMode {
+            return try await eclipseStream(id: id)
+        }
+        return try await stremioStream(type: type, id: id)
+    }
+
+    private func eclipseStream(id: String) async throws -> AddonStream {
+        guard let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+            throw MusicAddonClientError.invalidURL
+        }
+        let url = baseURL.appendingPathComponent("stream").appendingPathComponent(encoded)
+        guard let data = await fetch(url),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let root = object as? [String: Any],
+              let raw = root["url"] as? String,
+              let streamURL = URL(string: raw) else {
+            throw MusicAddonClientError.noStream
+        }
+        let format = ((root["format"] as? String) ?? (root["codec"] as? String) ?? "")
+            .lowercased()
+        let quality = ((root["quality"] as? String) ?? "").lowercased()
+        let haystack = format + " " + quality
+        if haystack.contains("flac") || haystack.contains("lossless") || haystack.contains("hires") || haystack.contains("hi-res") {
+            return AddonStream(kind: .url(streamURL), mimeType: "audio/flac", bitrate: 0, qualityTier: "Lossless")
+        }
+        if haystack.contains("320") {
+            return AddonStream(kind: .url(streamURL), mimeType: "audio/mp4", bitrate: 320_000, qualityTier: "High")
+        }
+        return AddonStream(kind: .url(streamURL), mimeType: "audio/mpeg", bitrate: 0, qualityTier: "Standard")
+    }
+
+    private func stremioStream(type: String, id: String) async throws -> AddonStream {
         let url = baseURL
             .appendingPathComponent("stream")
             .appendingPathComponent(type)

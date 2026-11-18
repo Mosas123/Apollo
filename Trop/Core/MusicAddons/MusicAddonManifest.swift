@@ -153,13 +153,14 @@ struct MusicAddonPackage: Sendable {
             let version: String
             let description: String?
             let resources: [RawResource]
-            let types: [String]
-            let catalogs: [StremioDescriptor.Catalog]
+            let types: [String]?
+            let catalogs: [StremioDescriptor.Catalog]?
         }
         guard let raw = try? JSONDecoder().decode(RawManifest.self, from: data) else { return nil }
         let resources = raw.resources.map { StremioDescriptor.Resource(name: $0.name.lowercased()) }
         let names = Set(resources.map(\.name))
-        let hasSearch = raw.catalogs.contains { catalog in
+        let catalogs = raw.catalogs ?? []
+        let hasSearch = names.contains("search") || catalogs.contains { catalog in
             catalog.extra?.contains { $0.name.lowercased() == "search" } == true
         }
         var capabilities: [MusicAddonCapability] = []
@@ -178,8 +179,8 @@ struct MusicAddonPackage: Sendable {
             protocolKind: .stremio,
             stremio: StremioDescriptor(
                 resources: resources,
-                types: raw.types,
-                catalogs: raw.catalogs
+                types: raw.types ?? [],
+                catalogs: catalogs
             )
         )
         return MusicAddonPackage(manifestURL: url, manifest: manifest)

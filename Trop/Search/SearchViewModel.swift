@@ -403,8 +403,8 @@ final class SearchViewModel {
                   let found = try? await client.search(query, limit: 10) else { continue }
             for item in found {
                 var title = item.title
-                var artist = ""
-                if let separator = title.range(of: " - ") {
+                var artist = item.artist ?? ""
+                if artist.isEmpty, let separator = title.range(of: " - ") {
                     artist = String(title[..<separator.lowerBound]).trimmingCharacters(in: .whitespaces)
                     title = String(title[separator.upperBound...]).trimmingCharacters(in: .whitespaces)
                 }
@@ -414,7 +414,7 @@ final class SearchViewModel {
                     id: MusicCatalogID(source: .addon, rawValue: raw),
                     title: title.isEmpty ? item.title : title,
                     artist: artist,
-                    durationSeconds: 0,
+                    durationSeconds: item.durationSeconds ?? 0,
                     artworkURL: item.poster,
                     permalinkURL: nil,
                     isStreamable: true
