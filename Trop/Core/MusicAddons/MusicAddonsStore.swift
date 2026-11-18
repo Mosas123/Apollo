@@ -118,6 +118,14 @@ final class MusicAddonsStore {
     private let storageKey = "trop.musicAddons.declarative.v1"
 
     var installations: [MusicAddonInstallation] { registry.installations }
+
+    var enabledStremioInstallations: [MusicAddonInstallation] {
+        installations.filter { $0.isEnabled && $0.manifest.protocolKind == .stremio }
+    }
+
+    func installation(key: String) -> MusicAddonInstallation? {
+        installations.first { $0.key == key && $0.isEnabled }
+    }
     var enabledCount: Int { installations.filter(\.isEnabled).count }
     var streamCapabilityCount: Int {
         installations.filter { $0.manifest.capabilities.contains(.stream) }.count

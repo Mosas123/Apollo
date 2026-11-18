@@ -1,5 +1,34 @@
 import Foundation
 
+struct AddonPlaybackRef: Codable, Sendable, Equatable {
+    let k: String
+    let t: String
+    let i: String
+}
+
+enum AddonPlaybackID {
+    static let prefix = "addon:"
+
+    static func encode(key: String, type: String, id: String) -> String {
+        let ref = AddonPlaybackRef(k: key, t: type, i: id)
+        let data = (try? JSONEncoder().encode(ref)) ?? Data()
+        return prefix + data.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
+    static func decode(_ raw: String) -> AddonPlaybackRef? {
+        guard raw.hasPrefix(prefix) else { return nil }
+        var base = String(raw.dropFirst(prefix.count))
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        while base.count % 4 != 0 { base += "=" }
+        guard let data = Data(base64Encoded: base) else { return nil }
+        return try? JSONDecoder().decode(AddonPlaybackRef.self, from: data)
+    }
+}
+
 enum MusicAddonClientError: Error, Equatable {
     case unsupportedProtocol
     case invalidURL

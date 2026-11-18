@@ -162,6 +162,67 @@ actor PlaybackManager {
         )
     }
 
+    /// Reads a Stremio music addon: resolves the stream URL and maps its
+    /// declared quality into the player badge.
+    private func resolveAddon(videoId: String) async throws -> PlaybackResult {
+        guard let ref = AddonPlaybackID.decode(videoId),
+              let installation = await MainActor.run(body: {
+                  MusicAddonsStore.shared.installation(key: ref.k)
+              }),
+              let song = await queueSong(for: videoId) else {
+            throw MusicCatalogError.unavailableTrack
+        }
+        let client = try MusicAddonClient(installation: installation)
+        let stream = try await client.resolveStream(type: ref.t, id: ref.i)
+
+        if case .youtube(let youTubeId) = stream.kind {
+            var request = StreamResolveRequest.playback(videoId: youTubeId)
+            request.options.audioQuality = SettingsStore.shared.audioQuality
+            let resolved = try await StreamFallback.resolveFirstValid(
+                request, using: InnerTubeClient.tropShared, providers: .tropLive
+            )
+            return PlaybackResult(
+                streamUrl: resolved.streamUrl,
+                itag: resolved.itag,
+                mimeType: resolved.mimeType,
+                bitrate: resolved.bitrate,
+                audioQuality: resolved.audioQuality,
+                videoId: videoId,
+                title: song.title,
+                author: song.artistNamesDisplay,
+                duration: song.duration,
+                expiresInSeconds: resolved.expiresInSeconds,
+                clientName: "addon",
+                musicVideoType: nil,
+                hasVideoContent: false,
+                muxedStreamUrl: nil,
+                loudnessDb: nil
+            )
+        }
+
+        guard case .url(let url) = stream.kind else {
+            throw MusicCatalogError.unavailableTrack
+        }
+        let quality = stream.qualityTier.lowercased()
+        return PlaybackResult(
+            streamUrl: url.absoluteString,
+            itag: 0,
+            mimeType: stream.mimeType,
+            bitrate: stream.bitrate,
+            audioQuality: "addon-\(quality)",
+            videoId: videoId,
+            title: song.title,
+            author: song.artistNamesDisplay,
+            duration: song.duration,
+            expiresInSeconds: 0,
+            clientName: "addon",
+            musicVideoType: nil,
+            hasVideoContent: false,
+            muxedStreamUrl: nil,
+            loudnessDb: nil
+        )
+    }
+
     // MARK: - Automatic lossless upgrade
 
     private let pencariCooldownKey = "pencari.cooldownUntil"
@@ -542,6 +603,8 @@ actor PlaybackManager {
                 result = try await resolvePencari(videoId: videoId)
             } else if MusicPlaybackIdentity.isJioSaavn(videoId) {
                 result = try await resolveJioSaavn(videoId: videoId)
+            } else if MusicPlaybackIdentity.isAddon(videoId) {
+                result = try await resolveAddon(videoId: videoId)
             } else {
                 result = try await resolveAudius(videoId: videoId)
             }
@@ -794,6 +857,9 @@ actor PlaybackManager {
             }
             if MusicPlaybackIdentity.isJioSaavn(videoId) {
                 return try await resolveJioSaavn(videoId: videoId)
+            }
+            if MusicPlaybackIdentity.isAddon(videoId) {
+                return try await resolveAddon(videoId: videoId)
             }
             return try await resolveAudius(videoId: videoId)
         }

@@ -311,6 +311,13 @@ struct SearchView: View {
                         externalTrackRow(track, from: viewModel.jiosaavnTracks)
                     }
                 }
+
+                if viewModel.showsAddonResults && !viewModel.addonTracks.isEmpty {
+                    sectionHeader("Add-ons")
+                    ForEach(viewModel.addonTracks, id: \.id) { track in
+                        externalTrackRow(track, from: viewModel.addonTracks)
+                    }
+                }
             }
             .padding(.bottom, 16)
         }
