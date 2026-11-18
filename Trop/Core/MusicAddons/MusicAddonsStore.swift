@@ -17,7 +17,13 @@ enum MusicAddonDownloadError: Error, LocalizedError {
     }
 }
 
-private final class MusicAddonNoRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+private final class MusicAddonRedirectPolicy: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let baseDomain: String
+
+    init(baseDomain: String) {
+        self.baseDomain = baseDomain
+    }
+
     func urlSession(
         _ session: URLSession,
         task: URLSessionTask,
@@ -25,9 +31,15 @@ private final class MusicAddonNoRedirects: NSObject, URLSessionTaskDelegate, @un
         newRequest request: URLRequest,
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
-        // Never silently follow an untrusted manifest URL to another host,
-        // a LAN service or an HTTP endpoint.
-        completionHandler(nil)
+        // Follow only HTTPS redirects inside the same registrable domain
+        // (e.g. stream -> stream1). Never jump to another host or HTTP.
+        guard let target = request.url,
+              target.scheme?.lowercased() == "https",
+              MusicAddonManifestDownloader.registrableDomain(target.host) == baseDomain else {
+            completionHandler(nil)
+            return
+        }
+        completionHandler(request)
     }
 }
 
@@ -40,6 +52,9 @@ struct MusicAddonManifestDownloader: Sendable {
             throw MusicAddonDownloadError.invalidURL
         }
 
+        guard let baseDomain = Self.registrableDomain(url.host) else {
+            throw MusicAddonDownloadError.invalidURL
+        }
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpShouldSetCookies = false
         configuration.httpCookieAcceptPolicy = .never
@@ -57,14 +72,15 @@ struct MusicAddonManifestDownloader: Sendable {
         let response: URLResponse
         do {
             (stream, response) = try await session.bytes(
-                for: request, delegate: MusicAddonNoRedirects()
+                for: request, delegate: MusicAddonRedirectPolicy(baseDomain: baseDomain)
             )
         } catch {
             throw MusicAddonDownloadError.requestFailed
         }
         guard let http = response as? HTTPURLResponse,
               http.statusCode == 200,
-              http.url?.host == url.host else {
+              let finalURL = http.url,
+              Self.registrableDomain(finalURL.host) == baseDomain else {
             throw MusicAddonDownloadError.invalidResponse
         }
         if http.expectedContentLength > 64 * 1024 {
@@ -84,7 +100,19 @@ struct MusicAddonManifestDownloader: Sendable {
             throw MusicAddonDownloadError.requestFailed
         }
         guard !data.isEmpty else { throw MusicAddonDownloadError.invalidResponse }
-        return (data, url)
+        return (data, finalURL)
+    }
+
+    static func registrableDomain(_ host: String?) -> String? {
+        guard let host = host?.lowercased(), !host.isEmpty else { return nil }
+        let labels = host.split(separator: ".").map(String.init)
+        guard labels.count >= 2 else { return host }
+        let twoPartSuffixes: Set<String> = ["co.uk", "com.br", "com.au", "co.jp", "co.nz", "com.mx", "co.in"]
+        let suffix = labels.suffix(2).joined(separator: ".")
+        if twoPartSuffixes.contains(suffix), labels.count >= 3 {
+            return labels.suffix(3).joined(separator: ".")
+        }
+        return labels.suffix(2).joined(separator: ".")
     }
 }
 
@@ -118,6 +146,14 @@ final class MusicAddonsStore {
     private let storageKey = "trop.musicAddons.declarative.v1"
 
     var installations: [MusicAddonInstallation] { registry.installations }
+
+    var enabledStremioInstallations: [MusicAddonInstallation] {
+        installations.filter { $0.isEnabled && $0.manifest.protocolKind == .stremio }
+    }
+
+    func installation(key: String) -> MusicAddonInstallation? {
+        installations.first { $0.key == key && $0.isEnabled }
+    }
     var enabledCount: Int { installations.filter(\.isEnabled).count }
     var streamCapabilityCount: Int {
         installations.filter { $0.manifest.capabilities.contains(.stream) }.count
@@ -171,11 +207,11 @@ final class MusicAddonsStore {
               let cached = try? JSONDecoder().decode([MusicAddonInstallation].self, from: data) else { return }
         var restored = MusicAddonRegistry()
         for entry in cached.prefix(MusicAddonRegistry.maxInstalled) {
-            guard let encoded = try? JSONEncoder().encode(entry.manifest),
-                  (try? restored.install(data: encoded, from: entry.manifestURL)) != nil else { continue }
+            let before = restored.installations.count
+            restored.restore(entry)
+            guard restored.installations.count > before else { continue }
             if entry.isEnabled {
-                let key = "\(entry.manifestURL.absoluteString)#\(entry.manifest.id)"
-                try? restored.setEnabled(true, for: key)
+                try? restored.setEnabled(true, for: entry.key)
             }
         }
         registry = restored

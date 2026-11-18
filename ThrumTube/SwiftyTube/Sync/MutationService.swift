@@ -266,41 +266,30 @@ public actor MutationService {
     }
 
     public func subscribeArtist(channelId: String, artistId: String) async throws {
-        var entity: SyncArtist?
-        if var existing = try await store.fetchArtist(id: artistId) {
-            existing.bookmarkedAt = Date()
-            existing.channelId = channelId
-            entity = existing
-            try await store.saveArtist(existing)
+        let previous = try await store.fetchArtist(id: artistId)
+        if var updated = previous {
+            updated.bookmarkedAt = Date()
+            updated.channelId = channelId
+            try await store.saveArtist(updated)
         }
-        let applied = entity
         try await OptimisticMutation.attemptingRemote(
             { _ = try await self.client.subscribe(channelId: channelId) },
             rollback: {
-                if var restored = applied {
-                    restored.bookmarkedAt = nil
-                    restored.channelId = nil
-                    try? await self.store.saveArtist(restored)
-                }
+                if let previous { try? await self.store.saveArtist(previous) }
             }
         )
     }
 
     public func unsubscribeArtist(channelId: String, artistId: String) async throws {
-        var entity: SyncArtist?
-        if var existing = try await store.fetchArtist(id: artistId) {
-            existing.bookmarkedAt = nil
-            entity = existing
-            try await store.saveArtist(existing)
+        let previous = try await store.fetchArtist(id: artistId)
+        if var updated = previous {
+            updated.bookmarkedAt = nil
+            try await store.saveArtist(updated)
         }
-        let applied = entity
         try await OptimisticMutation.attemptingRemote(
             { _ = try await self.client.unsubscribe(channelId: channelId) },
             rollback: {
-                if var restored = applied {
-                    restored.bookmarkedAt = restored.bookmarkedAt ?? Date()
-                    try? await self.store.saveArtist(restored)
-                }
+                if let previous { try? await self.store.saveArtist(previous) }
             }
         )
     }

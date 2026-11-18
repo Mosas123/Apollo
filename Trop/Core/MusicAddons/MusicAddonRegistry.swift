@@ -12,6 +12,17 @@ struct MusicAddonInstallation: Sendable, Codable, Equatable {
 /// may use it, but an addon can never execute code or make network requests here.
 struct MusicAddonRegistry: Sendable {
     private(set) var installations: [MusicAddonInstallation] = []
+
+    /// Re-adds a previously validated installation without re-parsing it
+    /// (Stremio manifests don't round-trip through a JSON re-encode).
+    mutating func restore(_ installation: MusicAddonInstallation) {
+        guard installations.count < Self.maxInstalled,
+              !installation.manifest.capabilities.isEmpty,
+              !installation.manifest.id.isEmpty,
+              !installation.manifest.name.isEmpty,
+              !installations.contains(where: { $0.key == installation.key }) else { return }
+        installations.append(installation)
+    }
     static let maxInstalled = 30
 
     mutating func install(data: Data, from url: URL) throws {

@@ -139,12 +139,14 @@ struct HistoryScreenView: View {
     }
 
     private var localList: some View {
-        List {
+        // Computed once per list render, not once per row (was O(N²)).
+        let allItems = allDisplayableSongs
+        return List {
             ForEach(displayableSections.indices, id: \.self) { sectionIndex in
                 let section = displayableSections[sectionIndex]
                 Section {
                     ForEach(section.entries, id: \.event) { entry in
-                        localRow(entry)
+                        localRow(entry, allItems: allItems)
                             .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
                             .listRowSeparator(.hidden)
                     }
@@ -163,7 +165,7 @@ struct HistoryScreenView: View {
     }
 
     @ViewBuilder
-    private func localRow(_ entry: DatabaseService.HistoryEntry) -> some View {
+    private func localRow(_ entry: DatabaseService.HistoryEntry, allItems: [SongItem]) -> some View {
         let song: SongItem = {
             if let entity = entry.song {
                 return SongItem(entity: entity)
@@ -181,7 +183,6 @@ struct HistoryScreenView: View {
                 )
             }
         }()
-        let allItems = allDisplayableSongs
         let isSelected = selectedEvents.contains(entry.event)
         HStack(spacing: 0) {
             if isSelecting {

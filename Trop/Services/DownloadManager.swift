@@ -11,9 +11,18 @@ import Foundation
 import GRDB
 import Network
 import Nuke
+import QuartzCore
 import SwiftUI
 import UIKit
 @preconcurrency import ffmpegkit
+
+/// Per-download progress cell. Isolating the high-frequency 0–99% updates in
+/// a per-id object means only that row re-renders, not every row observing
+/// the manager.
+@MainActor
+final class DownloadProgressBox: ObservableObject {
+    @Published var fraction: Double = 0
+}
 
 @MainActor
 final class DownloadManager: ObservableObject {
@@ -39,6 +48,8 @@ final class DownloadManager: ObservableObject {
     private var isReloading = false
     private var cancelledDownloadIds: Set<String> = []
     private var lastReportedProgress: [String: Double] = [:]
+    private var lastProgressTime: [String: CFTimeInterval] = [:]
+    private var progressBoxes: [String: DownloadProgressBox] = [:]
     private var activeFFmpegSessions: [String: FFmpegSession] = [:]
 
     private var tracksById: [String: DownloadedTrackEntity] = [:]
@@ -79,19 +90,21 @@ final class DownloadManager: ObservableObject {
 
     // MARK: - Paths
 
-    func fileURL(for song: SongItem) async -> URL {
+    func fileURL(for song: SongItem, quality: DownloadQuality? = nil) async -> URL {
         await displayDestinationURL(
             title: song.title,
             artist: song.artists.map(\.name).joined(separator: ", "),
-            videoId: song.videoId
+            videoId: song.videoId,
+            quality: quality
         )
     }
 
-    func displayDestinationURL(title: String, artist: String, videoId: String) async -> URL {
+    func displayDestinationURL(title: String, artist: String, videoId: String, quality: DownloadQuality? = nil) async -> URL {
         ensureDirectories()
         let rawStem = title.isEmpty ? videoId : (artist.isEmpty ? title : "\(artist) - \(title)")
         let stem = Self.sanitizeFileName(rawStem)
-        return downloadsDir.appendingPathComponent("\(stem) [\(videoId)].m4a")
+        let ext = (quality ?? SettingsStore.shared.downloadQuality) == .lossless ? "flac" : "m4a"
+        return downloadsDir.appendingPathComponent("\(stem) [\(videoId)].\(ext)")
     }
 
     /// Strips characters illegal on filesystems, trims whitespace/dots and
@@ -107,8 +120,9 @@ final class DownloadManager: ObservableObject {
     }
 
     /// AAC transcode bitrate for the download quality preference.
-    nonisolated static func transcodeBitrate(for quality: DownloadQuality) -> Int {
+    nonisolated static func transcodeBitrate(for quality: DownloadQuality) -> Int? {
         switch quality {
+        case .lossless: return nil
         case .auto, .high: return 192_000
         case .standard: return 96_000
         }
@@ -221,7 +235,7 @@ final class DownloadManager: ObservableObject {
         var found: [String: URL] = [:]
         var dates: [String: Date] = [:]
 
-        for url in urls where url.pathExtension.lowercased() == "m4a" {
+        for url in urls where ["m4a", "flac"].contains(url.pathExtension.lowercased()) {
             let values = try? url.resourceValues(forKeys: Set(keys))
             guard (values?.fileSize ?? 0) >= minimumAudioBytes else { continue }
             guard let videoId = Self.videoId(from: url.lastPathComponent) else { continue }
@@ -284,12 +298,15 @@ extension DownloadManager {
 
     func download(song: SongItem) async {
         let videoId = song.videoId
+        let quality = SettingsStore.shared.downloadQuality
+        let previousURL = await localURL(for: videoId)
         if case .downloading = downloads[videoId] {
             Log.downloadManager.debug("Download already in progress for \(videoId)")
             return
         }
 
-        if let existing = await localURL(for: videoId),
+        if let existing = previousURL,
+           quality != .lossless || existing.pathExtension.lowercased() == "flac",
            let size = try? existing.resourceValues(forKeys: [.fileSizeKey]).fileSize,
            size >= Self.minimumAudioBytes {
             downloads[videoId] = .completed
@@ -309,7 +326,7 @@ extension DownloadManager {
         }
 
         cancelledDownloadIds.remove(videoId)
-        lastReportedProgress.removeValue(forKey: videoId)
+        clearProgress(for: videoId)
         let artist = song.artists.map(\.name).joined(separator: ", ")
         let downloadStart = CFAbsoluteTimeGetCurrent()
         Log.downloadManager.debug("Starting download: \(artist) - \(song.title) (\(videoId))")
@@ -321,7 +338,7 @@ extension DownloadManager {
 
         setProgress(0.02, for: videoId)
 
-        let fileURL = await fileURL(for: song)
+        let fileURL = await fileURL(for: song, quality: quality)
         do {
             if fileManager.fileExists(atPath: fileURL.path) {
                 try? fileManager.removeItem(at: fileURL)
@@ -331,10 +348,16 @@ extension DownloadManager {
 
             setProgress(0.05, for: videoId)
             let resolveStart = CFAbsoluteTimeGetCurrent()
-            let result = try await PlaybackManager.shared.resolve(
-                videoId: videoId,
-                forDownload: true
-            )
+            let result: PlaybackResult
+            if quality == .lossless {
+                result = try await PlaybackManager.shared.resolveLosslessDownload(song: song)
+            } else {
+                result = try await PlaybackManager.shared.resolve(videoId: videoId, forDownload: true, downloadQuality: quality)
+            }
+            let isFLAC = quality == .lossless
+            guard !isFLAC || result.mimeType.lowercased() == "audio/flac" else {
+                throw DownloadError.losslessUnavailable
+            }
             let resolveElapsed = CFAbsoluteTimeGetCurrent() - resolveStart
             let streamURL = result.streamUrl
             let isAACStream = result.mimeType.lowercased().contains("mp4a")
@@ -346,7 +369,7 @@ extension DownloadManager {
             }
 
             let tempDownload = fileManager.temporaryDirectory
-                .appendingPathComponent("\(UUID().uuidString).\(isAACStream ? "m4a" : "webm")")
+                .appendingPathComponent("\(UUID().uuidString).\(isFLAC ? "flac" : (isAACStream ? "m4a" : "webm"))")
             defer { try? fileManager.removeItem(at: tempDownload) }
             let dlStart = CFAbsoluteTimeGetCurrent()
             try await downloadToFile(
@@ -363,7 +386,16 @@ extension DownloadManager {
             ensureDirectories()
             setProgress(0.88, for: videoId)
             let ffmpegStart = CFAbsoluteTimeGetCurrent()
-            if isAACStream {
+            if isFLAC {
+                try await validateDownloadedFile(at: tempDownload, expectedDuration: song.duration)
+                // FLAC container + copied audio preserves original samples.
+                try await attachMetadata(
+                    to: tempDownload, title: song.title, artist: artist,
+                    artworkData: artwork, videoId: videoId
+                )
+                try await validateDownloadedFile(at: tempDownload, expectedDuration: song.duration)
+                try fileManager.moveItem(at: tempDownload, to: fileURL)
+            } else if isAACStream {
                 // AVFoundation can open AAC/MP4; validate before remux.
                 let validateStart = CFAbsoluteTimeGetCurrent()
                 try await validateDownloadedFile(at: tempDownload)
@@ -390,7 +422,8 @@ extension DownloadManager {
                         artist: artist,
                         artworkData: artwork
                     ),
-                    videoId: videoId
+                    videoId: videoId,
+                    quality: quality
                 )
                 let validateStart = CFAbsoluteTimeGetCurrent()
                 do {
@@ -405,7 +438,7 @@ extension DownloadManager {
 
             if cancelledDownloadIds.contains(videoId) {
                 cancelledDownloadIds.remove(videoId)
-                lastReportedProgress.removeValue(forKey: videoId)
+                clearProgress(for: videoId)
                 try? fileManager.removeItem(at: fileURL)
                 downloads[videoId] = .notStarted
                 return
@@ -420,21 +453,25 @@ extension DownloadManager {
                 localPath: storedPath(for: fileURL),
                 downloadedAt: Date()
             )
-            await register(entity)
+            let registered = await register(entity)
+            if registered, let previousURL, previousURL != fileURL,
+               tracksById[videoId]?.localPath == storedPath(for: fileURL) {
+                try? fileManager.removeItem(at: previousURL)
+            }
 
             downloads[videoId] = .completed
-            lastReportedProgress.removeValue(forKey: videoId)
+            clearProgress(for: videoId)
             let totalElapsed = CFAbsoluteTimeGetCurrent() - downloadStart
             Log.downloadManager.debug("DONE \(String(format: "%.1f", totalElapsed))s total: \(artist) - \(song.title)")
         } catch is CancellationError {
             cancelledDownloadIds.remove(videoId)
-            lastReportedProgress.removeValue(forKey: videoId)
+            clearProgress(for: videoId)
             try? fileManager.removeItem(at: fileURL)
             downloads[videoId] = .notStarted
         } catch {
             if cancelledDownloadIds.contains(videoId) || (error as? URLError)?.code == .cancelled {
                 cancelledDownloadIds.remove(videoId)
-                lastReportedProgress.removeValue(forKey: videoId)
+                clearProgress(for: videoId)
                 try? fileManager.removeItem(at: fileURL)
                 downloads[videoId] = .notStarted
                 return
@@ -443,7 +480,7 @@ extension DownloadManager {
                 try? fileManager.removeItem(at: fileURL)
             }
             downloads[videoId] = .failed(userFacingDownloadError(error))
-            lastReportedProgress.removeValue(forKey: videoId)
+            clearProgress(for: videoId)
             Log.downloadManager.error("Failed download \(videoId): \(error.localizedDescription)")
         }
     }
@@ -462,19 +499,22 @@ extension DownloadManager {
         await register(entity)
     }
 
-    private func register(_ entity: DownloadedTrackEntity) async {
+    @discardableResult
+    private func register(_ entity: DownloadedTrackEntity) async -> Bool {
         tracksById[entity.id] = entity
         apply(tracksById)
         do {
             try await DatabaseService.shared.insertOrReplace(entity)
+            return true
         } catch {
             Log.downloadManager.error("Failed to persist download \(entity.id): \(error)")
+            return false
         }
     }
 
     // MARK: - Validation & Errors
 
-    private func validateDownloadedFile(at url: URL) async throws {
+    private func validateDownloadedFile(at url: URL, expectedDuration: Int? = nil) async throws {
         let values = try url.resourceValues(forKeys: [.fileSizeKey])
         let size = values.fileSize ?? 0
         // Real audio streams are well above this; error/HTML bodies are not.
@@ -483,6 +523,13 @@ extension DownloadManager {
             throw DownloadError.invalidStreamURL
         }
 
+        if url.pathExtension.lowercased() == "flac" {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            guard try handle.read(upToCount: 4) == Data("fLaC".utf8) else {
+                throw DownloadError.losslessUnavailable
+            }
+        }
         let asset = AVURLAsset(url: url)
         let audioTracks: [AVAssetTrack]
         do {
@@ -494,6 +541,13 @@ extension DownloadManager {
         guard !audioTracks.isEmpty else {
             Log.downloadManager.error("Downloaded file has no audio track — rejecting as invalid stream")
             throw DownloadError.invalidStreamURL
+        }
+        if let expectedDuration, expectedDuration > 0 {
+            let duration = try await asset.load(.duration).seconds
+            guard duration.isFinite, duration > 0,
+                  abs(duration - Double(expectedDuration)) <= 15 else {
+                throw DownloadError.invalidStreamURL
+            }
         }
     }
 
@@ -555,12 +609,37 @@ extension DownloadManager {
         activeFFmpegSessions.removeAll()
     }
 
+    func progressBox(for videoId: String) -> DownloadProgressBox {
+        if let box = progressBoxes[videoId] { return box }
+        let box = DownloadProgressBox()
+        progressBoxes[videoId] = box
+        return box
+    }
+
+    private func clearProgress(for videoId: String) {
+        lastReportedProgress.removeValue(forKey: videoId)
+        lastProgressTime.removeValue(forKey: videoId)
+        progressBoxes[videoId]?.fraction = 0
+    }
+
     private func setProgress(_ fraction: Double, for videoId: String) {
         let clamped = min(0.99, max(0, fraction))
         let last = lastReportedProgress[videoId] ?? -1
         guard clamped >= 0.99 || last < 0 || clamped - last >= 0.02 else { return }
+        // Cap the published bar to ~5 Hz; the per-id box re-renders only the
+        // one row, while the coarse `.downloading` state stays in `downloads`.
+        if clamped < 0.99 {
+            let now = CACurrentMediaTime()
+            if now - (lastProgressTime[videoId] ?? 0) < 0.2 { return }
+            lastProgressTime[videoId] = now
+        }
         lastReportedProgress[videoId] = clamped
-        downloads[videoId] = .downloading(clamped)
+        if case .downloading = (downloads[videoId] ?? .notStarted) {
+            // already flagged as downloading
+        } else {
+            downloads[videoId] = .downloading(0)
+        }
+        progressBox(for: videoId).fraction = clamped
     }
 
     private func prefetchArtwork(for song: SongItem) async -> Data? {
@@ -616,11 +695,10 @@ extension DownloadManager {
         ]
 
         try await runFFmpeg(arguments: args, videoId: videoId) { [weak self] size in
-            Task { @MainActor in
-                // Asymptotic map so unknown Content-Length still moves the bar.
-                let fraction = 0.05 + 0.80 * (1 - exp(-Double(size) / 5_000_000))
-                self?.setProgress(fraction, for: videoId)
-            }
+            // The bridge delivers progress on MainActor already.
+            // Asymptotic map so unknown Content-Length still moves the bar.
+            let fraction = 0.05 + 0.80 * (1 - exp(-Double(size) / 5_000_000))
+            self?.setProgress(fraction, for: videoId)
         }
     }
 
@@ -629,65 +707,91 @@ extension DownloadManager {
     private func runFFmpeg(
         arguments: [String],
         videoId: String? = nil,
-        onSize: ((Int64) -> Void)? = nil
+        onSize: (@MainActor @Sendable (Int64) -> Void)? = nil
     ) async throws {
         let sessionBox = FFmpegSessionBox()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                let lock = NSLock()
-                var finished = false
-                let finish: (Result<Void, Error>) -> Void = { result in
-                    lock.lock()
-                    defer { lock.unlock() }
-                    guard !finished else { return }
-                    finished = true
-                    continuation.resume(with: result)
-                }
-
-                let session = FFmpegKit.execute(
-                    withArgumentsAsync: arguments,
-                    withCompleteCallback: { [weak self] session in
-                        sessionBox.set(nil)
-                        if let videoId {
-                            Task { @MainActor in
-                                self?.activeFFmpegSessions.removeValue(forKey: videoId)
-                            }
-                        }
-                        let rc = session?.getReturnCode()
-                        if ReturnCode.isSuccess(rc) {
-                            finish(.success(()))
-                        } else if ReturnCode.isCancel(rc) {
-                            finish(.failure(CancellationError()))
-                        } else {
-                            let output = session?.getOutput() ?? "unknown"
-                            Log.downloadManager.debug("FFmpeg output: \(output)")
-                            finish(.failure(NSError(
-                                domain: "DownloadManager",
-                                code: -1,
-                                userInfo: [NSLocalizedDescriptionKey: "FFmpeg processing failed"]
-                            )))
-                        }
-                    },
-                    withLogCallback: nil,
-                    withStatisticsCallback: { statistics in
-                        guard let statistics, let onSize else { return }
-                        onSize(Int64(statistics.getSize()))
+                let session = Self.startFFmpeg(
+                    arguments: arguments,
+                    continuation: continuation,
+                    sessionBox: sessionBox,
+                    onSize: onSize,
+                    onCompletion: { [weak self] _ in
+                        guard let self, let videoId else { return }
+                        self.activeFFmpegSessions.removeValue(forKey: videoId)
                     }
                 )
-
                 sessionBox.set(session)
-                if Task.isCancelled {
-                    session?.cancel()
-                }
+                // Register synchronously on MainActor, before the completion
+                // task can remove it. A previous session cannot remove its successor.
                 if let videoId, let session {
-                    Task { @MainActor in
-                        self.activeFFmpegSessions[videoId] = session
-                    }
+                    activeFFmpegSessions[videoId] = session
                 }
+                if Task.isCancelled { session?.cancel() }
             }
         } onCancel: {
             sessionBox.current?.cancel()
         }
+    }
+
+    /// Objective-C invokes these blocks on its worker queues. Creating them
+    /// inside the MainActor-isolated method above makes Swift 6 assert actor
+    /// isolation on callback entry, before even an inner Task can hop actors.
+    nonisolated private static func startFFmpeg(
+        arguments: [String],
+        continuation: CheckedContinuation<Void, Error>,
+        sessionBox: FFmpegSessionBox,
+        onSize: (@MainActor @Sendable (Int64) -> Void)?,
+        onCompletion: @escaping @MainActor @Sendable (Int?) -> Void
+    ) -> FFmpegSession? {
+        let lock = NSLock()
+        var finished = false
+        let finish: (Result<Void, Error>) -> Void = { result in
+            lock.lock()
+            guard !finished else { lock.unlock(); return }
+            finished = true
+            lock.unlock()
+            continuation.resume(with: result)
+        }
+
+        let session = FFmpegKit.execute(
+            withArgumentsAsync: arguments,
+            withCompleteCallback: { session in
+                sessionBox.set(nil)
+                Task { @MainActor in onCompletion(nil) }
+                let rc = session?.getReturnCode()
+                if ReturnCode.isSuccess(rc) {
+                    finish(.success(Void()))
+                } else if ReturnCode.isCancel(rc) {
+                    finish(.failure(CancellationError()))
+                } else {
+                    let output = session?.getOutput() ?? "unknown"
+                    Log.downloadManager.debug("FFmpeg output: \(output)")
+                    finish(.failure(NSError(
+                        domain: "DownloadManager",
+                        code: -1,
+                        userInfo: [NSLocalizedDescriptionKey: "FFmpeg processing failed"]
+                    )))
+                }
+            },
+            withLogCallback: nil,
+            withStatisticsCallback: { statistics in
+                guard let statistics else { return }
+                let size = Int64(statistics.getSize())
+                // Pass only the numeric snapshot across the actor boundary,
+                // never FFmpeg's non-Sendable Statistics object.
+                Task { @MainActor in onSize?(size) }
+            }
+        )
+        if session == nil {
+            finish(.failure(NSError(
+                domain: "DownloadManager",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Could not start audio processing"]
+            )))
+        }
+        return session
     }
 
 }
@@ -700,7 +804,7 @@ extension DownloadManager {
         if let session = activeFFmpegSessions.removeValue(forKey: videoId) {
             session.cancel()
         }
-        lastReportedProgress.removeValue(forKey: videoId)
+        clearProgress(for: videoId)
         downloads[videoId] = .notStarted
         tracksById.removeValue(forKey: videoId)
 
@@ -802,8 +906,8 @@ extension DownloadManager {
 
     var activeDownloads: [(videoId: String, progress: Double)] {
         downloads.compactMap { videoId, state in
-            if case .downloading(let progress) = state {
-                return (videoId, progress)
+            if case .downloading = state {
+                return (videoId, progressBoxes[videoId]?.fraction ?? 0)
             }
             return nil
         }
@@ -854,7 +958,8 @@ extension DownloadManager {
         artworkData: Data?,
         videoId: String
     ) async throws {
-        let tempOutput = fileManager.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).m4a")
+        let ext = fileURL.pathExtension.lowercased() == "flac" ? "flac" : "m4a"
+        let tempOutput = fileManager.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).\(ext)")
         let artworkURL = try writeTempArtwork(artworkData)
         defer {
             try? fileManager.removeItem(at: tempOutput)
@@ -885,8 +990,10 @@ extension DownloadManager {
     }
 
     /// Transcodes a non-AAC stream (Opus, etc.) to AAC with metadata using ffmpeg.
-    private func processAudio(_ request: TranscodeRequest, videoId: String) async throws {
-        let bitrate = Self.transcodeBitrate(for: SettingsStore.shared.downloadQuality)
+    private func processAudio(_ request: TranscodeRequest, videoId: String, quality: DownloadQuality) async throws {
+        guard let bitrate = Self.transcodeBitrate(for: quality) else {
+            throw DownloadError.losslessUnavailable
+        }
         let tempOutput = fileManager.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).m4a")
         let artworkURL = try writeTempArtwork(request.artworkData)
         defer {
@@ -930,6 +1037,7 @@ extension DownloadManager {
 enum DownloadError: Error, LocalizedError {
     case invalidStreamURL
     case transcodeFailed
+    case losslessUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -937,6 +1045,8 @@ enum DownloadError: Error, LocalizedError {
             return "The stream URL returned by the server was invalid"
         case .transcodeFailed:
             return "Could not convert this track for offline playback."
+        case .losslessUnavailable:
+            return "Lossless is unavailable for this track from your configured sources. Try another download quality."
         }
     }
 }

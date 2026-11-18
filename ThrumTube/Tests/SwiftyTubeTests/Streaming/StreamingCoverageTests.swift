@@ -87,6 +87,7 @@ struct StreamingCoverageTests {
         #expect(FormatSelector.bestDownloadFormat(from: all)?.itag == 141)
         // Standard: capped near 96k, smallest wins.
         #expect(FormatSelector.bestDownloadFormat(from: all, downloadQuality: .standard)?.itag == 140)
+        #expect(FormatSelector.bestDownloadFormat(from: all, downloadQuality: .lossless) == nil)
         #expect(FormatSelector.bestDownloadFormat(from: []) == nil)
     }
 

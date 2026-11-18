@@ -66,9 +66,9 @@ struct QueueView<ProgressSlider: View>: View {
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                     } else {
-                        ForEach(Array(np.queueSongs.enumerated()), id: \.element.videoId) { index, song in
+                        ForEach(Array(np.queueSongs.enumerated()), id: \.offset) { index, song in
                             queueRow(song: song, index: index)
-                                .id(song.videoId)
+                                .id(index)
                         }
                         .onMove(perform: np.moveQueueSongs)
                     }
@@ -80,7 +80,7 @@ struct QueueView<ProgressSlider: View>: View {
                 .layoutPriority(1)
                 .onAppear {
                     if np.queueSongs.indices.contains(np.queueIndex) {
-                        proxy.scrollTo(np.queueSongs[np.queueIndex].videoId, anchor: .center)
+                        proxy.scrollTo(np.queueIndex, anchor: .center)
                     }
                 }
             }
@@ -138,7 +138,7 @@ struct QueueView<ProgressSlider: View>: View {
                     .frame(width: 64, height: 64)
             }
 
-            PlayerTitleBlock(title: np.title, artist: np.displayArtist)
+            PlayerTitleBlock(title: np.displayTitle, artist: np.displayArtist)
 
             Spacer()
 
@@ -335,23 +335,36 @@ struct QueueSongRow: View {
     let song: SongItem
     var isCurrent = false
     var isPlayed = false
+    @State private var canonicalMetadata: ResolvedMetadata?
+    @State private var canonicalVideoID: String?
+
+    private var displayMetadata: ResolvedMetadata? {
+        canonicalVideoID == song.videoId ? canonicalMetadata : nil
+    }
+
+    private var playbackMetadata: PlaybackMetadataSnapshot? {
+        NowPlaying.shared.metadataSnapshot(for: song.videoId)
+    }
 
     var body: some View {
         HStack(spacing: 12) {
-            AsyncImageView(url: song.thumbnailUrl)
+            SongArtworkView(song: song) { metadata in
+                canonicalVideoID = song.videoId
+                canonicalMetadata = metadata
+            }
                 .frame(width: 44, height: 44)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .opacity(isPlayed ? 0.5 : 1)
 
             VStack(alignment: .leading, spacing: 2) {
                 MarqueeText(
-                    text: song.title,
+                    text: playbackMetadata?.title ?? displayMetadata?.title ?? song.title,
                     font: .subheadline.weight(isCurrent ? .semibold : .medium),
                     frameHeight: 20,
                     textColor: titleColor
                 )
 
-                let artistStr = song.artists.map(\.name).joined(separator: ", ")
+                let artistStr = playbackMetadata?.artist ?? displayMetadata?.artist ?? song.artists.map(\.name).joined(separator: ", ")
                 if !artistStr.isEmpty {
                     Text(artistStr)
                         .font(.caption)

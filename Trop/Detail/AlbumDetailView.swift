@@ -481,7 +481,7 @@ struct AlbumDetailView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 24)
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 14) {
+                LazyHStack(alignment: .top, spacing: 14) {
                     content()
                 }
                 .padding(.horizontal, 20)

@@ -38,6 +38,12 @@ struct ArtistDetailInfo {
     var videos: [SongItem] = []
     var playlists: [PlaylistItem] = []
     var relatedArtists: [ArtistItem] = []
+    /// Higher-quality profile photo (Apple/Deezer/Wikimedia), when resolved.
+    var heroImageURL: String? = nil
+    /// False while the profile photo is still being resolved (shows placeholder).
+    var heroImageResolved: Bool = false
+    /// Actual channel targeted by the header subscription action.
+    var subscriptionChannelId: String? = nil
 }
 
 /// Parsed detail data for a playlist page.

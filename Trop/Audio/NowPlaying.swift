@@ -27,6 +27,17 @@ enum PlaybackKind: Sendable {
     case radio
 }
 
+/// Display metadata for one playback identity. Original SongItem artist/album
+/// IDs remain untouched and continue to be used for navigation.
+struct PlaybackMetadataSnapshot: Sendable {
+    let videoId: String
+    let title: String
+    let artist: String
+    let album: String?
+    let artworkURL: String?
+    let source: String?
+}
+
 @MainActor
 @Observable
 final class NowPlaying {
@@ -43,7 +54,22 @@ final class NowPlaying {
     var albumTitle = ""
     var videoId: String?
     var artists: [YTArtist] = []
+    private var confirmedMetadata: (videoId: String, value: ResolvedMetadata)?
+    private var publishedArtwork: (videoId: String, url: String)?
+    private var displayedArtworkVideoId: String?
     var isPlaying = false
+    /// True while the current stream is lossless (FLAC / Qobuz CD). Drives the
+    /// player's "Lossless" badge.
+    var isLosslessStream = false
+    /// Codec/quality label for the badge, e.g. "FLAC" or "FLAC · CD".
+    var losslessFormatLabel: String?
+    /// Detected quality of whatever is currently playing (tier label).
+    var qualityBadgeLabel: String?
+    /// True while a better source is being resolved for the current track.
+    var isUpgradingQuality = false
+    /// Current stream URL + lossless label, kept to roll back a failed upgrade.
+    var currentStreamURL: String?
+    var currentLosslessLabel: String?
     var currentTime: TimeInterval = 0
     var duration: TimeInterval = 0
     var progress: Float {
@@ -120,6 +146,9 @@ final class NowPlaying {
     private static let queueIndexKey = "nowPlaying.queueIndex"
     private static let shuffleKey = "nowPlaying.shuffle"
     private static let repeatKey = "nowPlaying.repeat"
+    /// Last queue snapshot encoded to disk; lets `persistQueueState` skip the
+    /// JSON encode when only index/shuffle/repeat changed.
+    private var lastPersistedQueue: [SongItem]?
 
     private init() {
         restoreQueueIfNeeded()
@@ -148,6 +177,7 @@ final class NowPlaying {
         isShuffleOn = UserDefaults.standard.bool(forKey: Self.shuffleKey)
         isRepeatOn = UserDefaults.standard.bool(forKey: Self.repeatKey)
         queueIndex = max(0, queueIndex)
+        lastPersistedQueue = songs
     }
 
     func persistQueueState() {
@@ -157,10 +187,15 @@ final class NowPlaying {
             UserDefaults.standard.removeObject(forKey: Self.queueIndexKey)
             UserDefaults.standard.removeObject(forKey: Self.shuffleKey)
             UserDefaults.standard.removeObject(forKey: Self.repeatKey)
+            lastPersistedQueue = []
             return
         }
-        if let data = try? JSONEncoder().encode(queueSongs) {
-            UserDefaults.standard.set(data, forKey: Self.queueKey)
+        // Only re-encode the (potentially large) array when it actually changed.
+        if queueSongs != lastPersistedQueue {
+            if let data = try? JSONEncoder().encode(queueSongs) {
+                UserDefaults.standard.set(data, forKey: Self.queueKey)
+                lastPersistedQueue = queueSongs
+            }
         }
         UserDefaults.standard.set(queueIndex, forKey: Self.queueIndexKey)
         UserDefaults.standard.set(isShuffleOn, forKey: Self.shuffleKey)
@@ -316,6 +351,10 @@ final class NowPlaying {
         thumbnailUrl: String? = nil,
         preserveMissingArtist: Bool = false
     ) {
+        if self.videoId != videoId {
+            confirmedMetadata = nil
+            publishedArtwork = nil
+        }
         self.isPlaying = true
         enrichTask?.cancel()
         liveResolveTask?.cancel()
@@ -392,11 +431,54 @@ final class NowPlaying {
         Task { await ImagePreloader.shared.append(urls) }
     }
 
-    /// Artist string from `artists`, falling back to `artist`.
+    /// All playback surfaces, including the lock screen, read this snapshot.
+    /// Resolved credits take precedence over the original navigable credits.
+    var currentMetadata: PlaybackMetadataSnapshot? {
+        guard let videoId else { return nil }
+        let confirmed = confirmedMetadata.flatMap { $0.videoId == videoId ? $0.value : nil }
+        let resolvedArtist = confirmed?.artist ?? ""
+        let resolvedTitle = confirmed?.title ?? ""
+        let resolvedAlbum = confirmed?.album ?? ""
+        let name = resolvedArtist.isEmpty ? artist : resolvedArtist
+        let trackTitle = resolvedTitle.isEmpty ? title : resolvedTitle
+        let album = resolvedAlbum.isEmpty ? (albumTitle.isEmpty ? nil : albumTitle) : resolvedAlbum
+        return PlaybackMetadataSnapshot(
+            videoId: videoId, title: trackTitle,
+            artist: name.isEmpty ? artistDisplayString(from: artists) : name,
+            album: album, artworkURL: publishedArtwork.flatMap { $0.videoId == videoId ? $0.url : nil },
+            source: confirmed?.source
+        )
+    }
+
+    func metadataSnapshot(for videoId: String) -> PlaybackMetadataSnapshot? {
+        guard self.videoId == videoId else { return nil }
+        return currentMetadata
+    }
+
+    func artwork(for videoId: String) -> UIImage? {
+        guard self.videoId == videoId, displayedArtworkVideoId == videoId else { return nil }
+        return thumbnailUIImage
+    }
+
+    var displayTitle: String { currentMetadata?.title ?? title }
+    var displayAlbumTitle: String { currentMetadata?.album ?? albumTitle }
+
     var displayArtist: String {
-        let fromArray = artistDisplayString(from: artists)
-        if !fromArray.isEmpty { return fromArray }
-        return artist
+        currentMetadata?.artist ?? artist
+    }
+
+    /// The caller supplies a verified catalogue result for this exact video.
+    /// A late response must never replace the newly selected song's metadata.
+    func acceptResolvedMetadata(_ metadata: ResolvedMetadata, videoId: String, replaceExisting: Bool = false) {
+        guard self.videoId == videoId else { return }
+        // Visible rows may supply an initial result; playback's own verified
+        // lookup is authoritative. A later row must not change the release.
+        guard replaceExisting || confirmedMetadata?.videoId != videoId else { return }
+        confirmedMetadata = (videoId, metadata)
+        if !metadata.title.isEmpty { title = metadata.title }
+        if !metadata.artist.isEmpty { artist = metadata.artist }
+        if let album = metadata.album, !album.isEmpty { albumTitle = album }
+        PlayerController.shared.setNowPlayingMetadata()
     }
 
     func stopped(videoId: String?, isEof: Bool = true) {
@@ -580,23 +662,113 @@ final class NowPlaying {
             thumb = queueSongs.first { $0.videoId == videoId }?.thumbnailUrl
         }
 
+        let kind = queueSongs.first { $0.videoId == videoId }?.contentKind
+        let isPodcast = kind == .episode || kind == .podcast
+        let isMusic = !isPodcast
+            && playbackKind != .radio
+            && !MusicPlaybackIdentity.isExternal(videoId)
         artworkLoadTask?.cancel()
         artworkLoadTask = Task {
-            // Catalogue artwork takes priority; embedded/CDN art is the fallback.
-            enrichArtwork(videoId: videoId, replaceArtwork: true)
-            // For downloaded songs, try to extract embedded artwork from the local file first.
+            // For downloaded songs, try embedded artwork first.
             if !MusicPlaybackIdentity.isExternal(videoId),
                let localURL = await DownloadManager.shared.localURL(for: videoId) {
                 loadArtworkFromLocalFile(localURL, videoId: videoId)
                 return
             }
-            loadThumbnailFromCDN(videoId: videoId, thumbnailUrl: thumb)
+            guard !Task.isCancelled, lastLoadedVideoId == videoId else { return }
+            if isMusic {
+                // Do not enlarge a tiny source thumbnail or a 16px bitmap.
+                // Resolve the catalogue cover first, then use the same full-size
+                // CDN ladder as the rest of the player on a catalogue miss.
+                thumbnailUIImage = nil
+                thumbnailImage = nil
+                thumbnailVersion &+= 1
+                let resolved = await resolveCanonicalArtwork(videoId: videoId)
+                guard !Task.isCancelled, lastLoadedVideoId == videoId else { return }
+                if !resolved {
+                    loadThumbnailFromCDN(videoId: videoId, thumbnailUrl: thumb)
+                }
+            } else {
+                enrichArtwork(videoId: videoId, replaceArtwork: true)
+                loadThumbnailFromCDN(videoId: videoId, thumbnailUrl: thumb)
+            }
         }
     }
 
-    /// Background metadata enrichment: fetch a canonical cover (iTunes first,
-    /// then MusicBrainz / Cover Art Archive) and swap it in if the track is
-    /// still current. Keeps the player showing clean, consistent album art.
+    /// Resolves the canonical cover (Apple → Deezer → CAA) with a hard timeout
+    /// and publishes it if it clearly matches. Returns whether it published.
+    private func resolveCanonicalArtwork(videoId: String, minimumArtworkSide: CGFloat = 0) async -> Bool {
+        guard !MusicPlaybackIdentity.isExternal(videoId) else { return false }
+        let song = queueSongs.first { $0.videoId == videoId }
+        let fallbackQuery = TextMatch.recordingQuery(title: title, artist: artist)
+        let identity = song.map(TrackIdentity.make(from:)) ?? TrackIdentity(
+            videoId: videoId,
+            title: fallbackQuery.title,
+            artist: fallbackQuery.artist,
+            album: nil,
+            durationSeconds: nil
+        )
+        let title = identity.title
+        let artist = identity.artist
+        let album = identity.album
+        let duration = identity.durationSeconds
+        guard !title.isEmpty else { return false }
+        let resolved = await Self.resolveMetadataWithTimeout(
+            title: title, artist: artist, album: album, duration: duration, seconds: 2.5
+        )
+        guard !Task.isCancelled, lastLoadedVideoId == videoId else { return false }
+        var coverURL = resolved?.artworkURL
+        if let resolved {
+            guard TextMatch.recordingsMatch(resolved.title, title),
+                  TextMatch.artistsMatch(resolved.artist, artist) else { return false }
+            acceptResolvedMetadata(resolved, videoId: videoId, replaceExisting: true)
+        }
+        // A remaster/live qualifier may prevent a verified track match. Its
+        // known release can still supply artwork, without rewriting recording
+        // metadata or accepting another recording with a similar title.
+        if coverURL == nil, let album, !album.isEmpty {
+            coverURL = await MetadataResolver.albumArtwork(title: album, artist: artist)
+        }
+        guard !Task.isCancelled, lastLoadedVideoId == videoId,
+              let artworkString = ArtworkURLs.highRes(coverURL?.absoluteString),
+              let artworkURL = URL(string: artworkString),
+              let image = try? await ArtworkLoader.image(for: artworkURL) else { return false }
+        guard !Task.isCancelled, lastLoadedVideoId == videoId,
+              Self.artworkSide(image) > minimumArtworkSide else { return false }
+        resolvedArtworkVideoId = videoId
+        publishedArtwork = (videoId, artworkURL.absoluteString)
+        publishArtwork(image)
+        PlayerController.shared.setNowPlayingMetadata()
+        return true
+    }
+
+    private static func resolveMetadataWithTimeout(
+        title: String,
+        artist: String,
+        album: String?,
+        duration: Int?,
+        seconds: Double
+    ) async -> ResolvedMetadata? {
+        await withTaskGroup(of: ResolvedMetadata?.self) { group in
+            group.addTask {
+                await MetadataResolver.enrich(
+                    title: title, artist: artist, album: album, duration: duration
+                )
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(seconds))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+    }
+
+    /// Background metadata enrichment. Apple/iTunes is the primary catalogue
+    /// (matching the app's design), with MusicBrainz/Deezer as fallback inside
+    /// `MetadataResolver`. On a strict title+artist match it updates the
+    /// canonical text and cover for the currently playing track.
     private func enrichArtwork(videoId: String, replaceArtwork: Bool) {
         // Radio stations already carry their own name and favicon; never match
         // them against music/podcast catalogues.
@@ -605,8 +777,9 @@ final class NowPlaying {
         guard replaceArtwork else { return }
         let title = title
         let artist = artist
-        let kind = queueSongs.first { $0.videoId == videoId }?.contentKind
-        guard !title.isEmpty, !artist.isEmpty else { return }
+        let song = queueSongs.first { $0.videoId == videoId }
+        let kind = song?.contentKind
+        guard !title.isEmpty else { return }
         enrichTask?.cancel()
         enrichTask = Task {
             guard !Task.isCancelled else { return }
@@ -614,26 +787,34 @@ final class NowPlaying {
             if kind == .episode || kind == .podcast {
                 resolved = await PodcastMetadataResolver.enrich(title: title, author: artist)
             } else {
-                resolved = await MetadataResolver.enrich(title: title, artist: artist)
+                resolved = await MetadataResolver.enrich(title: title, artist: artist, album: song?.album, duration: song?.duration)
             }
-            guard let resolved,
-                  let artworkString = ArtworkURLs.highRes(resolved.artworkURL?.absoluteString),
-                  let artworkURL = URL(string: artworkString),
-                  let image = try? await ArtworkLoader.image(for: artworkURL) else { return }
+            guard let resolved else { return }
             guard !Task.isCancelled, lastLoadedVideoId == videoId else { return }
-            // Do not replace a music cover with another release/version.
+
             if kind != .episode && kind != .podcast {
-                func identity(_ text: String) -> String {
-                    text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-                        .components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
+                let query = TextMatch.recordingQuery(title: title, artist: artist)
+                guard TextMatch.recordingsMatch(resolved.title, query.title) else { return }
+                if !artist.isEmpty {
+                    guard TextMatch.artistsMatch(resolved.artist, query.artist) else { return }
                 }
-                guard identity(resolved.title) == identity(title),
-                      identity(resolved.artist) == identity(cleanArtistDisplay(artist)) else { return }
             }
+            self.acceptResolvedMetadata(resolved, videoId: videoId, replaceExisting: true)
+
+            guard let artworkString = ArtworkURLs.highRes(resolved.artworkURL?.absoluteString),
+                  let artworkURL = URL(string: artworkString),
+                  let image = try? await ArtworkLoader.image(for: artworkURL) else {
+                PlayerController.shared.setNowPlayingMetadata()
+                return
+            }
+            guard lastLoadedVideoId == videoId else { return }
             resolvedArtworkVideoId = videoId
+            publishedArtwork = (videoId, artworkURL.absoluteString)
             publishArtwork(image)
+            PlayerController.shared.setNowPlayingMetadata()
         }
     }
+
 
     private func loadArtworkFromLocalFile(_ fileURL: URL, videoId: String) {
         Task {
@@ -650,13 +831,24 @@ final class NowPlaying {
                 }
             }
 
-            await MainActor.run {
-                guard lastLoadedVideoId == videoId, resolvedArtworkVideoId != videoId else { return }
-                if let artworkImage {
-                    publishArtwork(artworkImage)
-                } else {
-                    loadThumbnailFromCDN(videoId: videoId)
-                }
+            guard !Task.isCancelled, lastLoadedVideoId == videoId,
+                  resolvedArtworkVideoId != videoId else { return }
+            if let artworkImage { publishArtwork(artworkImage) }
+            // Embedded artwork is often a small thumbnail. Keep it available
+            // offline, but allow a genuinely larger image to replace it.
+            guard artworkImage.map({ Self.artworkSide($0) < 600 }) ?? true else { return }
+            let resolved = playbackKind == .music
+                ? await resolveCanonicalArtwork(
+                    videoId: videoId,
+                    minimumArtworkSide: artworkImage.map(Self.artworkSide) ?? 0
+                ) : false
+            guard !Task.isCancelled, lastLoadedVideoId == videoId else { return }
+            if !resolved {
+                loadThumbnailFromCDN(
+                    videoId: videoId,
+                    thumbnailUrl: queueSongs.first { $0.videoId == videoId }?.thumbnailUrl,
+                    fallbackImage: artworkImage
+                )
             }
         }
     }
@@ -665,6 +857,7 @@ final class NowPlaying {
     private func publishArtwork(_ image: UIImage) {
         let cropped = image.centerCroppedSquare()
         thumbnailUIImage = cropped
+        displayedArtworkVideoId = videoId
         thumbnailImage = Image(uiImage: cropped)
         thumbnailVersion &+= 1
         updateDominantColors(from: cropped)
@@ -680,7 +873,12 @@ final class NowPlaying {
         return width > 120 && height > 90
     }
 
-    private func loadThumbnailFromCDN(videoId: String, thumbnailUrl: String? = nil) {
+    private static func artworkSide(_ image: UIImage) -> CGFloat {
+        if let cgImage = image.cgImage { return CGFloat(min(cgImage.width, cgImage.height)) }
+        return min(image.size.width, image.size.height) * image.scale
+    }
+
+    private func loadThumbnailFromCDN(videoId: String, thumbnailUrl: String? = nil, fallbackImage: UIImage? = nil) {
         // Best source first: the track's own artwork upgraded to full
         // resolution, then ytimg step-downs, then the guaranteed hqdefault.
         var candidates: [String] = []
@@ -705,6 +903,7 @@ final class NowPlaying {
         }
         let urls = candidates.compactMap(URL.init(string:))
         guard !urls.isEmpty else {
+            if let fallbackImage { publishArtwork(fallbackImage); return }
             thumbnailUIImage = nil
             thumbnailImage = Image(systemName: "music.note")
             thumbnailVersion &+= 1
@@ -716,8 +915,10 @@ final class NowPlaying {
         // cached variant must not shadow a better one — Phase 2 upgrades.
         var paintedIndex: Int?
         for (index, url) in urls.enumerated() {
-            if let cached = ArtworkLoader.cachedImage(for: url), Self.isUsableArtwork(cached, for: url) {
+            if let cached = ArtworkLoader.cachedImage(for: url), Self.isUsableArtwork(cached, for: url),
+               fallbackImage.map({ Self.artworkSide(cached) > Self.artworkSide($0) }) ?? true {
                 publishArtwork(cached)
+                publishedArtwork = (videoId, url.absoluteString)
                 paintedIndex = index
                 break
             }
@@ -729,7 +930,7 @@ final class NowPlaying {
         if fetchCount == 0 {
             return
         }
-        if paintedIndex == nil {
+        if paintedIndex == nil, fallbackImage == nil {
             thumbnailImage = nil
         }
         Task {
@@ -737,10 +938,12 @@ final class NowPlaying {
                 guard lastLoadedVideoId == videoId, resolvedArtworkVideoId != videoId else { return }
                 do {
                     let platformImage = try await ArtworkLoader.image(for: url)
-                    guard Self.isUsableArtwork(platformImage, for: url) else { continue }
+                    guard Self.isUsableArtwork(platformImage, for: url),
+                          fallbackImage.map({ Self.artworkSide(platformImage) > Self.artworkSide($0) }) ?? true else { continue }
                     await MainActor.run {
                         guard self.lastLoadedVideoId == videoId, self.resolvedArtworkVideoId != videoId else { return }
                         self.publishArtwork(platformImage)
+                        self.publishedArtwork = (videoId, url.absoluteString)
                     }
                     return
                 } catch {
@@ -750,9 +953,13 @@ final class NowPlaying {
             if paintedIndex == nil {
                 await MainActor.run {
                     guard self.lastLoadedVideoId == videoId, self.resolvedArtworkVideoId != videoId else { return }
-                    thumbnailImage = Image(systemName: "music.note")
-                    thumbnailVersion &+= 1
-                    updateDominantColors(from: nil)
+                    if let fallbackImage {
+                        publishArtwork(fallbackImage)
+                    } else {
+                        thumbnailImage = Image(systemName: "music.note")
+                        thumbnailVersion &+= 1
+                        updateDominantColors(from: nil)
+                    }
                 }
             }
         }
@@ -926,6 +1133,7 @@ func cleanArtistDisplay(_ name: String) -> String {
     let parts = tempName
         .components(separatedBy: separatorSet)
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .map(TextMatch.channelArtistName)
         .filter { !$0.isEmpty }
 
     let cleanParts = parts.filter { !_isJunkArtistSegment($0) }

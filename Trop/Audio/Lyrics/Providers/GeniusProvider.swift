@@ -17,7 +17,7 @@ struct GeniusProvider: LyricsProvider {
 
     func fetch(query: LyricsQuery) async throws -> [LyricLine] {
         for title in titleVariants(query.title) {
-            if let lines = try? await fetchOnce(artist: query.artist, title: title), !lines.isEmpty {
+            if let lines = try? await fetchOnce(artist: query.artist, title: title, expected: query), !lines.isEmpty {
                 return lines
             }
         }
@@ -26,7 +26,7 @@ struct GeniusProvider: LyricsProvider {
 
     // MARK: - Search + scrape
 
-    private func fetchOnce(artist: String, title: String) async throws -> [LyricLine] {
+    private func fetchOnce(artist: String, title: String, expected: LyricsQuery) async throws -> [LyricLine] {
         let url = try searchURL(artist: artist, title: title)
         var request = URLRequest(url: url)
         applyHeaders(to: &request)
@@ -36,7 +36,10 @@ struct GeniusProvider: LyricsProvider {
         let hits = decoded.response.sections
             .compactMap { $0.hits }
             .flatMap { $0 }
-        guard let first = hits.first else {
+        guard let first = hits.first(where: {
+            LyricsMatch.accepts(expected, title: $0.result.title,
+                                artists: [$0.result.primary_artist?.name ?? ""])
+        }) else {
             throw LyricsError.notFound
         }
 
@@ -176,5 +179,8 @@ private struct GeniusSearchResponse: Decodable {
 
     struct Result: Decodable {
         let url: String
+        let title: String?
+        let primary_artist: Artist?
     }
+    struct Artist: Decodable { let name: String? }
 }

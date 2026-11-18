@@ -128,6 +128,9 @@ final class PlayerController {
     let playState = CurrentValueSubject<State, Never>(.stopped)
     var pendingResumeAt: TimeInterval = 0
     var nowPlayingInfo = [String: Any]()
+    /// Temporary volume (0…1) used to mask the lossless hot-swap. `nil` means
+    /// follow the user setting.
+    private var volumeOverride: Double?
     private var pendingSeek: (target: TimeInterval, deadline: Date)?
     private var metadataDebounceTask: Task<Void, Never>?
 
@@ -220,9 +223,17 @@ extension PlayerController {
         duration: TimeInterval? = nil,
         artists: [YTArtist] = [],
         loudnessDb: Double? = nil,
-        thumbnailUrl: String? = nil
+        thumbnailUrl: String? = nil,
+        losslessLabel: String? = nil,
+        qualityLabel: String? = nil,
+        startAt: TimeInterval = 0
     ) async {
         currentLoudnessDb = loudnessDb
+        NowPlaying.shared.losslessFormatLabel = losslessLabel
+        NowPlaying.shared.isLosslessStream = losslessLabel != nil
+        NowPlaying.shared.qualityBadgeLabel = qualityLabel ?? losslessLabel
+        NowPlaying.shared.currentStreamURL = url
+        NowPlaying.shared.currentLosslessLabel = losslessLabel
         guard let url = URL(string: url) else {
             Log.player.error("Invalid URL: \(url)")
             return
@@ -234,7 +245,7 @@ extension PlayerController {
         }
 
         var skipStart: Double = 0
-        if MusicPlaybackIdentity.isYouTube(videoId) {
+        if SponsorBlock.skipsIntroAtStart, MusicPlaybackIdentity.isYouTube(videoId) {
             skipStart = await SponsorBlockIntegration.shared.preloadedStartOffset(for: videoId)
         }
         guard NowPlaying.shared.videoId == videoId else {
@@ -270,7 +281,10 @@ extension PlayerController {
         setVideoCrop(.none)
 
         sharedState.withLock { $0.pendingVideoId = videoId }
-        let loadStart = skipStart > 0 ? Int(skipStart.rounded(.up)) : 0
+        // `startAt` lets an in-place quality upgrade resume at the same
+        // position instead of restarting the track.
+        let playbackStart = startAt > 0 ? startAt : skipStart
+        let loadStart = playbackStart > 0 ? Int(playbackStart.rounded(.up)) : 0
         let loadArguments = loadStart > 0
             ? ["loadfile", url.absoluteString, "replace", "-1", "start=\(loadStart)"]
             : ["loadfile", url.absoluteString, "replace"]
@@ -299,9 +313,19 @@ extension PlayerController {
         if let videoId { await PlaybackStateService.shared.startTracking(videoId: videoId) }
         playState.send(.playing)
         NowPlaying.shared.isPlaying = true
-        NowPlaying.shared.currentTime = 0
+        NowPlaying.shared.currentTime = playbackStart
         NowPlaying.shared.duration = max(0, duration ?? 0)
         setNowPlayingMetadata()
+        if startAt == 0, losslessLabel == nil {
+            volumeOverride = 0
+            applyPlayerVolume()
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(120))
+                guard let self else { return }
+                await self.fadeVolume(to: SettingsStore.shared.playerVolume, duration: 0.3)
+                self.setVolumeOverride(nil)
+            }
+        }
     }
 
     func seek(to time: TimeInterval) {
@@ -335,11 +359,27 @@ extension PlayerController {
         setPaused(playState.value == .playing)
     }
 
+    func setVolumeOverride(_ value: Double?) {
+        volumeOverride = value
+        applyPlayerVolume()
+    }
+
     func applyPlayerVolume() {
-        let vol = SettingsStore.shared.playerVolume
+        let vol = volumeOverride ?? SettingsStore.shared.playerVolume
         withMpv { mpv in
             var val = Double(vol * 100)
             mpv_set_property(mpv, "volume", MPV_FORMAT_DOUBLE, &val)
+        }
+    }
+
+    /// Short volume ramp so a stream swap doesn't click or pop.
+    func fadeVolume(to fraction: Double, duration: TimeInterval) async {
+        let start = volumeOverride ?? SettingsStore.shared.playerVolume
+        let steps = 6
+        for step in 1...steps {
+            let progress = Double(step) / Double(steps)
+            setVolumeOverride(start + (fraction - start) * progress)
+            try? await Task.sleep(for: .seconds(duration / Double(steps)))
         }
     }
 
@@ -1105,9 +1145,9 @@ extension PlayerController {
         } ?? 0
         let elapsed = livePos > 0 ? livePos : np.currentTime
 
-        nowPlayingInfo[MPMediaItemPropertyTitle] = np.title
-        nowPlayingInfo[MPMediaItemPropertyArtist] = np.artist
-        nowPlayingInfo[MPMediaItemPropertyAlbumTitle] = np.albumTitle
+        nowPlayingInfo[MPMediaItemPropertyTitle] = np.displayTitle
+        nowPlayingInfo[MPMediaItemPropertyArtist] = np.displayArtist
+        nowPlayingInfo[MPMediaItemPropertyAlbumTitle] = np.displayAlbumTitle
         nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = np.isPlaying ? 1 : 0
         nowPlayingInfo[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.audio.rawValue
         nowPlayingInfo[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1
@@ -1121,7 +1161,7 @@ extension PlayerController {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
         MPNowPlayingInfoCenter.default().playbackState = np.isPlaying ? .playing : .paused
         Log.player.info(
-            "NOW_PLAYING_PUBLISH title='\(np.title)' artist='\(np.artist)' " +
+            "NOW_PLAYING_PUBLISH title='\(np.displayTitle)' artist='\(np.displayArtist)' " +
             "duration=\(duration) rate=\(nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] ?? 0) " +
             "artwork=\(np.thumbnailUIImage != nil) keys=\(nowPlayingInfo.keys.count)"
         )

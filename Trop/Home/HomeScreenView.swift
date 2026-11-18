@@ -15,6 +15,18 @@ struct HomeScreenView: View {
 
     @State private var pendingRoute: DetailRoute?
     @State private var headerOffset: CGFloat = 0
+
+    /// Coalesces scroll-offset writes into ~8pt steps so the whole feed isn't
+    /// re-evaluated on every scroll frame (0→1→2…). The header/mini-player
+    /// animation resolves the small steps.
+    private var quantizedHeaderOffset: Binding<CGFloat> {
+        Binding(
+            get: { headerOffset },
+            set: { newValue in
+                if abs(newValue - headerOffset) >= 8 { headerOffset = newValue }
+            }
+        )
+    }
     @State private var headerHeight: CGFloat = 60
     @State private var speedDialEntries: [SpeedDialEntry] = []
     @State private var selectedCategory: ContentCategory = .all
@@ -112,7 +124,7 @@ struct HomeScreenView: View {
             }
         }
         .scrollIndicators(.automatic)
-        .miniPlayerTracksScroll(headerOffset: $headerOffset).scrollEdgeEffectHidden(true, for: .bottom)
+        .miniPlayerTracksScroll(headerOffset: quantizedHeaderOffset).scrollEdgeEffectHidden(true, for: .bottom)
         .task(id: selectedCategory) {
             await viewModel.loadCategoryFeed(selectedCategory)
         }
@@ -276,17 +288,18 @@ struct HomeScreenView: View {
     }
 
     private func quickPickCell(_ song: SongItem, queue: [SongItem]) -> some View {
-        HStack(spacing: 16) {
-            AsyncImageView(url: song.thumbnailUrl)
+        let metadata = NowPlaying.shared.metadataSnapshot(for: song.videoId)
+        return HStack(spacing: 16) {
+            SongArtworkView(song: song)
                 .frame(width: 56, height: 56)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(song.title)
+                Text(metadata?.title ?? song.title)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                Text(quickPickSubtitle(song))
+                Text(metadata?.artist ?? quickPickSubtitle(song))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -319,7 +332,8 @@ struct HomeScreenView: View {
     private func mixedSection(_ section: HomeSection) -> some View {
         let queue = section.items.compactMap { if case .song(let s) = $0 { return s } else { return nil } }
         return HorizontalSection(title: section.displayTitle, vSpacing: 8, contentVerticalPadding: 0) {
-            HStack(spacing: 12) {
+            // Lazy so off-screen cards (and their image loads) build on approach.
+            LazyHStack(spacing: 12) {
                 ForEach(section.items, id: \.id) { item in
                     if case .song(let s) = item, !queue.isEmpty {
                         YouTubeGridItemView(item: item, onTap: { handleSongTap(s, in: queue) })

@@ -134,9 +134,9 @@ final class PlaylistDetailViewModel {
                 with: "", options: .regularExpression
             ).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !artist.isEmpty, !title.isEmpty,
-                  let metadata = await MetadataResolver.enrich(title: title, artist: artist, album: song.album),
-                  Self.metadataIdentity(metadata.title) == Self.metadataIdentity(title),
-                  Self.metadataIdentity(metadata.artist) == Self.metadataIdentity(artist) else { continue }
+                  let metadata = await MetadataResolver.enrich(title: title, artist: artist, album: song.album, duration: song.duration),
+                  TextMatch.titlesMatch(metadata.title, title),
+                  TextMatch.artistsMatch(metadata.artist, artist) else { continue }
             guard !Task.isCancelled, generation == loadGeneration else { return }
             // Apply into the local copy; publish once at the end so the
             // @Observable array isn't invalidated per row.
@@ -151,10 +151,6 @@ final class PlaylistDetailViewModel {
         playlist?.songs = songs
     }
 
-    private static func metadataIdentity(_ value: String) -> String {
-        value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-            .components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
-    }
 
     private func loadLocalPlaylist(entity: PlaylistEntity) async {
         do {
@@ -660,9 +656,8 @@ struct PlaylistDetailView: View {
     @ViewBuilder
     private func songList(for playlist: PlaylistDetailInfo) -> some View {
         // Direct LazyVStack children → rows build lazily.
-        ForEach(Array(playlist.songs.enumerated()), id: \.element.videoId) { index, song in
+        ForEach(Array(playlist.songs.enumerated()), id: \.offset) { index, song in
             SongRowView(song: song, onTap: { playSong(song, in: playlist) }, onNavigate: { pendingRoute = $0 })
-                .id(song.videoId)
                 .contextMenu {
                     if isEditable {
                         Button(role: .destructive) {
@@ -753,16 +748,16 @@ struct AddSongToPlaylistView: View {
                     List {
                         ForEach(filteredSongs, id: \.id) { song in
                             HStack(spacing: 12) {
-                                AsyncImageView(url: song.thumbnailUrl)
+                                SongArtworkView(song: song)
                                     .frame(width: 40, height: 40)
                                     .clipShape(RoundedRectangle(cornerRadius: 4))
 
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(song.title)
+                                    Text(NowPlaying.shared.metadataSnapshot(for: song.id)?.title ?? song.title)
                                         .font(.subheadline)
                                         .fontWeight(.medium)
                                         .lineLimit(1)
-                                    if let artist = song.artistName {
+                                    if let artist = NowPlaying.shared.metadataSnapshot(for: song.id)?.artist ?? song.artistName {
                                         Text(artist)
                                             .font(.caption)
                                             .foregroundColor(.secondary)

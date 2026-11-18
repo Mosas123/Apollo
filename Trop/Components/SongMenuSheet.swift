@@ -32,6 +32,10 @@ struct SongMenuSheet: View {
     private var isLiked: Bool {
         likeStore.isLiked(videoId: song.videoId)
     }
+
+    private var playbackMetadata: PlaybackMetadataSnapshot? {
+        NowPlaying.shared.metadataSnapshot(for: song.videoId)
+    }
     var body: some View {
         SheetChrome {
             Group {
@@ -68,15 +72,19 @@ struct SongMenuSheet: View {
                         MenuRow(
                             icon: "music.mic",
                             title: "View Artist",
-                            subtitle: song.artistNamesDisplay
+                            subtitle: playbackMetadata?.artist ?? song.artistNamesDisplay
                         ) { handleViewArtist() }
-                        if let albumId = song.firstAlbumBrowseId {
-                            Divider()
-                            MenuRow(
-                                icon: "record.circle",
-                                title: "View Album",
-                                subtitle: song.album
-                            ) { navigate(.album(browseId: albumId)) }
+                        Divider()
+                        MenuRow(
+                            icon: "record.circle",
+                            title: "View Album",
+                                subtitle: playbackMetadata?.album ?? song.album
+                        ) {
+                            if let albumId = song.firstAlbumBrowseId, !albumId.isEmpty {
+                                navigate(.album(browseId: albumId))
+                            } else {
+                                navigate(.songAlbum(song))
+                            }
                         }
                     }
                     MenuCard {
@@ -115,6 +123,11 @@ struct SongMenuSheet: View {
                         MenuRow(icon: "text.insert", title: "Play Next") { playNext() }
                         Divider()
                         MenuRow(icon: "list.bullet", title: "Add to Queue") { addToQueue() }
+                        Divider()
+                        NavigationLink(value: Destination.details) {
+                            MenuRowLabel(icon: "info.circle", title: "Details", subtitle: "Metadata & stream information")
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -149,7 +162,7 @@ struct SongMenuSheet: View {
         .sheet(isPresented: $showComments) {
             CommentsSheet(
                 videoId: song.videoId,
-                songTitle: song.title,
+                songTitle: playbackMetadata?.title ?? song.title,
                 onNavigate: { route in
                     if onNavigate != nil {
                         navigate(route)
@@ -171,7 +184,7 @@ struct SongMenuSheet: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(song.title)
+            Text(playbackMetadata?.title ?? song.title)
         }
         .task { await pin.load(videoId: song.videoId) }
     }
@@ -180,18 +193,18 @@ struct SongMenuSheet: View {
 
     private var headerCard: some View {
         HStack(spacing: 12) {
-            AsyncImageView(url: song.thumbnailUrl)
+            SongArtworkView(song: song)
                 .frame(width: 48, height: 48)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
 
             VStack(alignment: .leading, spacing: 2) {
                 MarqueeText(
-                    text: song.title,
+                    text: playbackMetadata?.title ?? song.title,
                     font: .headline,
                     frameHeight: 24,
                     textColor: .primary
                 )
-                Text(song.artistNamesDisplay)
+                Text(playbackMetadata?.artist ?? song.artistNamesDisplay)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -298,7 +311,8 @@ struct SongMenuSheet: View {
 
     private func navigate(_ route: DetailRoute) {
         dismiss()
-        onNavigate?(route)
+        if let onNavigate { onNavigate(route) }
+        else { AppRouter.shared.open(route) }
     }
 
     private func playSimilarAndExpand(_ similar: SongItem, in songs: [SongItem]) {

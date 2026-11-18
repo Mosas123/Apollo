@@ -200,7 +200,7 @@ struct MusicAddonsSettingsView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(isChecking || manifestURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-                Text("Add a Trop Music Addon v1 manifest. Stremio addons are not compatible yet.")
+                Text("Add a music addon manifest. Stremio (catalog/stream) and Trop v1 manifests are supported read-only.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 

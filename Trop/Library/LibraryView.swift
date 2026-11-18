@@ -153,7 +153,18 @@ struct LibraryView: View {
             .padding(.bottom, 28)
         }
         .scrollIndicators(.automatic)
-        .miniPlayerTracksScroll(headerOffset: $headerOffset).scrollEdgeEffectHidden(true, for: .bottom)
+        .miniPlayerTracksScroll(headerOffset: quantizedHeaderOffset).scrollEdgeEffectHidden(true, for: .bottom)
+    }
+
+    /// Coalesces scroll-offset writes into ~8pt steps so the list isn't
+    /// re-evaluated every scroll frame.
+    private var quantizedHeaderOffset: Binding<CGFloat> {
+        Binding(
+            get: { headerOffset },
+            set: { newValue in
+                if abs(newValue - headerOffset) >= 8 { headerOffset = newValue }
+            }
+        )
     }
 
     /// Simple grouped list of library destinations, Apple Music style.
@@ -293,7 +304,8 @@ struct LibraryView: View {
                 NavigationLink(value: DetailRoute.artist(browseId: artist.id)) {
                     artistCell(
                         url: artist.thumbnailUrl,
-                        name: artist.name
+                        name: artist.name,
+                        artistID: artist.id
                     )
                 }
                 .buttonStyle(.plain)
@@ -418,9 +430,9 @@ struct LibraryView: View {
         }
     }
 
-    private func artistCell(url: String?, name: String) -> some View {
+    private func artistCell(url: String?, name: String, artistID: String) -> some View {
         VStack(spacing: 8) {
-            AsyncImageView(url: url)
+            ArtistAvatarImageView(name: name, fallbackURL: url, artistID: artistID)
                 .frame(width: 120, height: 120)
                 .clipShape(Circle())
             Text(name).lineLimit(1).font(.callout)
@@ -489,7 +501,7 @@ struct LibraryView: View {
                 )
                 .map { ($0["playlist_id"] as String, $0["cnt"] as Int) }
             }
-            playlistSongCounts = Dictionary(uniqueKeysWithValues: rows)
+            playlistSongCounts = Dictionary(rows, uniquingKeysWith: { first, _ in first })
 
             isLoading = false
         } catch {

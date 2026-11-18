@@ -13,6 +13,7 @@ struct LyricsView<ProgressSlider: View>: View {
     @Environment(SettingsStore.self) private var settings
 
     @Binding var showLyrics: Bool
+    @Binding var showQueue: Bool
     let pendingRoute: Binding<DetailRoute?>
     @ViewBuilder var progressSlider: () -> ProgressSlider
 
@@ -22,7 +23,11 @@ struct LyricsView<ProgressSlider: View>: View {
     @State private var displayTime: TimeInterval = 0
     @State private var showSongMenu = false
     @State private var instrumentalGaps: [InstrumentalGap] = []
+    @State private var gapByAfterIndex: [Int: InstrumentalGap] = [:]
+    @State private var timedLineIndex: [Int] = []
+    @State private var timedLineStarts: [TimeInterval] = []
     @State private var romanizedLines: [String?] = []
+    @State private var lyricsLoadGeneration = UUID()
 
     struct InstrumentalGap {
         let afterIndex: Int
@@ -52,7 +57,6 @@ struct LyricsView<ProgressSlider: View>: View {
 
             playbackControls
         }
-        .ignoresSafeArea(.container, edges: .bottom)
         .simultaneousGesture(swipeBackGesture)
         .sheet(isPresented: $showSongMenu) {
             LyricsMenuSheet()
@@ -72,8 +76,7 @@ struct LyricsView<ProgressSlider: View>: View {
     // MARK: - Header
 
     private var headerBar: some View {
-        Color.clear
-            .padding(.top, 16)
+        Color.clear.frame(height: 8)
     }
 
     private var swipeBackGesture: some Gesture {
@@ -128,8 +131,27 @@ struct LyricsView<ProgressSlider: View>: View {
                             Spacer().frame(height: geo.size.height * 0.38)
                         }
                         .padding(.vertical, 8)
+                        .onGeometryChange(for: CGFloat.self) { content in
+                            content.size.height
+                        } action: { height in
+                            // Scroll only after the line IDs exist in the layout.
+                            // Re-read playback time: loading may have taken seconds.
+                            guard height > 0, !hasPositionedInitialLyrics,
+                                  isAutoScrollEnabled, !userHasScrolled else { return }
+                            scrollProxy = proxy
+                            updateActiveLine()
+                            scrollToActive(animated: false)
+                        }
                     }
                     .scrollIndicators(.hidden)
+                    .mask {
+                        LinearGradient(stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .black, location: 0.08),
+                            .init(color: .black, location: 0.90),
+                            .init(color: .clear, location: 1)
+                        ], startPoint: .top, endPoint: .bottom)
+                    }
                     .onScrollPhaseChange { _, newPhase in
                         if newPhase == .tracking || newPhase == .interacting {
                             pauseAutoScroll()
@@ -138,12 +160,8 @@ struct LyricsView<ProgressSlider: View>: View {
                     .onAppear { scrollProxy = proxy }
                     .onChange(of: activeIndex) { _, newIndex in
                         guard lines.indices.contains(newIndex) else { return }
-                        if isAutoScrollEnabled && !userHasScrolled {
-                            if hasPositionedInitialLyrics {
-                                scrollToActive()
-                            } else {
-                                hasPositionedInitialLyrics = true
-                            }
+                        if hasPositionedInitialLyrics && isAutoScrollEnabled && !userHasScrolled {
+                            scrollToActive()
                         }
                     }
                 }
@@ -198,11 +216,21 @@ struct LyricsView<ProgressSlider: View>: View {
     /// Centers the active line via the proxy only — writing the
     /// scrollPosition binding here would top-align the line and fight the
     /// center anchor.
-    private func scrollToActive() {
-        guard lines.indices.contains(activeIndex) else { return }
+    private func scrollToActive(animated: Bool = true) {
+        guard !timedLineStarts.isEmpty, lines.indices.contains(activeIndex),
+              let scrollProxy else { return }
         let targetID = lines[activeIndex].id
-        withAnimation(.easeInOut(duration: 0.4)) {
-            scrollProxy?.scrollTo(targetID, anchor: .center)
+        hasPositionedInitialLyrics = true
+        if animated {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                scrollProxy.scrollTo(targetID, anchor: .center)
+            }
+        } else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                scrollProxy.scrollTo(targetID, anchor: .center)
+            }
         }
     }
 
@@ -230,7 +258,7 @@ struct LyricsView<ProgressSlider: View>: View {
     /// A lyric line plus its interval ring, which only exists in the hierarchy
     /// while playback is actually inside the gap.
     private func lyricsLineRow(index: Int, line: LyricLine) -> some View {
-        let gap = instrumentalGaps.last(where: { $0.afterIndex == index })
+        let gap = gapByAfterIndex[index]
         let showRing = settings.showIntervalIndicator && gap != nil && isVisibleInGap(gap!)
         let romanized = romanization(for: index)
 
@@ -362,21 +390,34 @@ struct LyricsView<ProgressSlider: View>: View {
 
     private var songInfoRow: some View {
         HStack(spacing: 12) {
-            if let uiImage = np.thumbnailUIImage {
-                // Already center-cropped by NowPlaying.
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 64, height: 64)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            } else {
-                Image(systemName: "music.note")
-                    .font(.title2)
-                    .foregroundStyle(.white.opacity(0.4))
-                    .frame(width: 64, height: 64)
+            Button {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showLyrics = false
+                }
+            } label: {
+                if let uiImage = np.thumbnailUIImage {
+                    // Already center-cropped by NowPlaying.
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 44, height: 44)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                } else {
+                    Image(systemName: "music.note")
+                        .font(.title2)
+                        .foregroundStyle(.white.opacity(0.4))
+                        .frame(width: 44, height: 44)
+                }
             }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .accessibilityLabel("Back to player")
 
-            PlayerTitleBlock(title: np.title, artist: np.displayArtist)
+            PlayerTitleBlock(
+                title: np.displayTitle, artist: np.displayArtist,
+                titleFont: .subheadline.weight(.semibold), titleHeight: 20,
+                artistFont: .caption
+            )
 
             Spacer()
 
@@ -404,28 +445,55 @@ struct LyricsView<ProgressSlider: View>: View {
     }
 
     private var playbackControls: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 0) {
             progressSlider()
+                .padding(.bottom, 12)
 
-            PlayerPlayPauseButton(isPlaying: np.isPlaying) {
-                player.togglePlayPause()
-            }
+            PlaybackControlsRow(
+                isPlaying: np.isPlaying,
+                hasPrevious: np.hasPrevious,
+                hasNext: np.hasNext,
+                onPrevious: { np.playPrevious() },
+                onPlayPause: { player.togglePlayPause() },
+                onNext: { np.playNext() }
+            )
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: np.isPlaying)
+            .padding(.bottom, 8)
+
+            HStack(spacing: 12) {
+                Image(systemName: "speaker.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.5))
+                PlayerVolumeSlider().frame(height: 28)
+                Image(systemName: "speaker.wave.3.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+            .padding(.horizontal, 32)
+            .padding(.bottom, 4)
+
+            SecondaryActionsRow(
+                showQueue: $showQueue,
+                isRepeatOn: Binding(get: { np.isRepeatOn }, set: { np.isRepeatOn = $0 }),
+                showLyrics: $showLyrics
+            )
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 12)
-        .padding(.bottom, 20)
     }
 
     // MARK: - Data
 
     private func loadLyrics() async {
+        let generation = UUID()
+        lyricsLoadGeneration = generation
         guard let videoId = np.videoId else {
             lines = []
             return
         }
         lines = []
         instrumentalGaps = []
+        rebuildLyricLookups()
         activeIndex = 0
         hasPositionedInitialLyrics = false
         isAutoScrollEnabled = true
@@ -435,28 +503,52 @@ struct LyricsView<ProgressSlider: View>: View {
         guard !Task.isCancelled else { return }
         do {
             let result = try await LyricsService.shared.fetchLyrics(videoId: videoId)
-            guard !result.isEmpty else { return }
+            guard !Task.isCancelled, lyricsLoadGeneration == generation,
+                  np.videoId == videoId, !result.isEmpty else { return }
             let withoutMarkers = result.filter { !Self.isInstrumentalMarker($0) }
             lines = withoutMarkers.isEmpty ? result : withoutMarkers
             instrumentalGaps = detectGaps(in: result)
+            rebuildLyricLookups()
             updateActiveLine()
             await rebuildRomanization()
         } catch {
         }
     }
 
-    private func updateActiveLine() {
-        guard !lines.isEmpty else { return }
-        let t = np.currentTime + settings.lyricsOffsetSeconds
-        var idx = 0
+    /// Precomputes the gap-by-line lookup and a sorted index of timed lines
+    /// once per lyric load, instead of scanning on every tick/row render.
+    private func rebuildLyricLookups() {
+        var gapMap: [Int: InstrumentalGap] = [:]
+        for gap in instrumentalGaps where gapMap[gap.afterIndex] == nil {
+            gapMap[gap.afterIndex] = gap
+        }
+        gapByAfterIndex = gapMap
+
+        var idx: [Int] = []
+        var starts: [TimeInterval] = []
+        idx.reserveCapacity(lines.count)
+        starts.reserveCapacity(lines.count)
         for (i, line) in lines.enumerated() {
-            guard let start = line.startTime else { continue }
-            if start <= t {
-                idx = i
-            } else {
-                break
+            if let start = line.startTime {
+                idx.append(i)
+                starts.append(start)
             }
         }
+        timedLineIndex = idx
+        timedLineStarts = starts
+    }
+
+    private func updateActiveLine() {
+        guard !timedLineStarts.isEmpty else { return }
+        let t = np.currentTime + settings.lyricsOffsetSeconds
+        // Last timed line whose start is <= t (binary search).
+        var lo = 0
+        var hi = timedLineStarts.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if timedLineStarts[mid] <= t { lo = mid + 1 } else { hi = mid }
+        }
+        let idx = lo > 0 ? timedLineIndex[lo - 1] : 0
         if idx != activeIndex {
             activeIndex = idx
         }

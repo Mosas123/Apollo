@@ -39,6 +39,16 @@ struct SongRowView: View {
 
     @State private var durations = DurationResolver()
     @State private var showSongMenu = false
+    @State private var canonicalMetadata: ResolvedMetadata?
+    @State private var canonicalVideoID: String?
+
+    private var displayMetadata: ResolvedMetadata? {
+        canonicalVideoID == song.videoId ? canonicalMetadata : nil
+    }
+
+    private var playbackMetadata: PlaybackMetadataSnapshot? {
+        NowPlaying.shared.metadataSnapshot(for: song.videoId)
+    }
 
     var body: some View {
         HStack(spacing: DesignTokens.rowSpacing) {
@@ -49,18 +59,21 @@ struct SongRowView: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 24, alignment: .leading)
             } else {
-                AsyncImageView(url: song.thumbnailUrl)
-                    .frame(width: artSize, height: artSize)
-                    .clipShape(RoundedRectangle(cornerRadius: artRadius, style: .continuous))
+                SongArtworkView(song: song) { metadata in
+                    canonicalVideoID = song.videoId
+                    canonicalMetadata = metadata
+                }
+                .frame(width: artSize, height: artSize)
+                .clipShape(RoundedRectangle(cornerRadius: artRadius, style: .continuous))
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(song.title)
+                Text(playbackMetadata?.title ?? displayMetadata?.title ?? song.title)
                     .font(index == nil ? .headline : .body)
                     .foregroundColor(.primary)
                     .lineLimit(1)
 
-                Text(song.subtitleLine(duration: durations.effectiveDuration(known: song.duration)))
+                Text(subtitle)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
@@ -76,7 +89,7 @@ struct SongRowView: View {
             .sheet(isPresented: $showSongMenu) {
                 SongMenuSheet(
                     song: song,
-                    onNavigate: { onNavigate?($0) }
+                    onNavigate: onNavigate
                 )
             }
         }
@@ -92,9 +105,18 @@ struct SongRowView: View {
         }
     }
 
+    private var subtitle: String {
+        let duration = durations.effectiveDuration(known: song.duration)
+        guard let artist = playbackMetadata?.artist ?? displayMetadata?.artist else {
+            return song.subtitleLine(duration: duration)
+        }
+        let time = duration.formattedDuration
+        return time.isEmpty ? artist : "\(artist) • \(time)"
+    }
+
     @ViewBuilder
     private var songContextMenu: some View {
-        SongContextMenuButtons(song: song)
+        SongContextMenuButtons(song: song, onNavigate: onNavigate)
         Button {
             Task { @MainActor in showSongMenu = true }
         } label: {
@@ -106,20 +128,27 @@ struct SongRowView: View {
 /// Full-cell progress background shown while a song is downloading.
 struct DownloadCellProgressView: View {
     let song: SongItem
-    @ObservedObject private var downloadManager = DownloadManager.shared
+    // Only this row observes the fast-changing 0–99% value, instead of every
+    // row observing the whole manager.
+    @StateObject private var progress: DownloadProgressBox
+
+    @MainActor
+    init(song: SongItem) {
+        self.song = song
+        _progress = StateObject(wrappedValue: DownloadManager.shared.progressBox(for: song.videoId))
+    }
 
     var body: some View {
-        let state = downloadManager.state(for: song.videoId)
-        return GeometryReader { geo in
-            if case .downloading(let fraction) = state {
+        GeometryReader { geo in
+            if progress.fraction > 0 {
                 Color.accentColor.opacity(0.25)
                     .frame(
-                        width: geo.size.width * CGFloat(min(max(fraction, 0), 1)),
+                        width: geo.size.width * CGFloat(min(max(progress.fraction, 0), 1)),
                         height: geo.size.height
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: state)
+        .animation(.easeInOut(duration: 0.3), value: progress.fraction)
     }
 }

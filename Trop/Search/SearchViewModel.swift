@@ -69,6 +69,9 @@ final class SearchViewModel {
     /// Source-specific results never enter YouTube's YTItem parser.
     private(set) var audiusTracks: [MusicCatalogTrack] = []
     private(set) var qobuzTracks: [MusicCatalogTrack] = []
+    private(set) var pencariTracks: [MusicCatalogTrack] = []
+    private(set) var jiosaavnTracks: [MusicCatalogTrack] = []
+    private(set) var addonTracks: [MusicCatalogTrack] = []
 
     // MARK: - Local matches (populated per submission, for Library filter)
 
@@ -147,6 +150,9 @@ final class SearchViewModel {
         filters.append(contentsOf: Self.displayOrder.filter { titles.contains($0) })
         if !audiusTracks.isEmpty { filters.append("Audius") }
         if !qobuzTracks.isEmpty { filters.append("Qobuz") }
+        if !pencariTracks.isEmpty { filters.append("Lossless") }
+        if !jiosaavnTracks.isEmpty { filters.append("JioSaavn") }
+        if !addonTracks.isEmpty { filters.append("Add-ons") }
         return filters
     }
 
@@ -167,6 +173,18 @@ final class SearchViewModel {
 
     var showsQobuzResults: Bool {
         !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "Qobuz")
+    }
+
+    var showsPencariResults: Bool {
+        !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "Lossless")
+    }
+
+    var showsJioSaavnResults: Bool {
+        !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "JioSaavn")
+    }
+
+    var showsAddonResults: Bool {
+        !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "Add-ons")
     }
 
     var filteredResults: [SearchSection] {
@@ -306,6 +324,9 @@ final class SearchViewModel {
         isShowingLibrary = false
         audiusTracks = []
         qobuzTracks = []
+        pencariTracks = []
+        jiosaavnTracks = []
+        addonTracks = []
         localSongs = []
         localArtists = []
         localAlbums = []
@@ -323,7 +344,13 @@ final class SearchViewModel {
         do {
             let raw = try await SearchService.shared.search(query: query)
             guard !Task.isCancelled, query == submittedQuery else { return }
-            let parsed = SearchParser.parseSearchResults(from: raw)
+            // Parse off the main actor. TubeJSON is the Sendable box the
+            // engine already uses to move raw JSON across isolation.
+            let box = TubeJSON(raw)
+            let parsed = await Task.detached(priority: .userInitiated) {
+                SearchParser.parseSearchResults(from: box.value)
+            }.value
+            guard !Task.isCancelled, query == submittedQuery else { return }
             resultCache[query] = parsed
             cacheOrder.removeAll { $0 == query }
             cacheOrder.append(query)
@@ -352,15 +379,59 @@ final class SearchViewModel {
         guard includeProviders else { return }
         async let audius = try? AudiusClient().searchTracks(query: query, limit: 25)
         async let qobuz = QobuzCatalogService.shared.searchIfConfigured(query: query, limit: 25)
-        let (remoteAudius, remoteQobuz) = await (audius, qobuz)
+        async let pencari = fetchPencariTracks(query: query)
+        async let jiosaavn = try? JioSaavnClient().search(query: query, limit: 25)
+        async let addons = fetchAddonTracks(query: query)
+        let (remoteAudius, remoteQobuz, remotePencari, remoteJioSaavn, remoteAddons) = await (audius, qobuz, pencari, jiosaavn, addons)
         guard !Task.isCancelled, query == submittedQuery else { return }
         audiusTracks = remoteAudius ?? []
         qobuzTracks = remoteQobuz
+        pencariTracks = remotePencari
+        jiosaavnTracks = remoteJioSaavn ?? []
+        addonTracks = remoteAddons
         updateResultPhase()
     }
 
+    /// Music Add-ons (Stremio, read-only): search every enabled addon and map
+    /// its items into playable catalogue tracks.
+    private func fetchAddonTracks(query: String) async -> [MusicCatalogTrack] {
+        let installations = MusicAddonsStore.shared.enabledStremioInstallations
+        guard !installations.isEmpty else { return [] }
+        var tracks: [MusicCatalogTrack] = []
+        for installation in installations.prefix(4) {
+            guard let client = try? MusicAddonClient(installation: installation),
+                  let found = try? await client.search(query, limit: 10) else { continue }
+            for item in found {
+                var title = item.title
+                var artist = item.artist ?? ""
+                if artist.isEmpty, let separator = title.range(of: " - ") {
+                    artist = String(title[..<separator.lowerBound]).trimmingCharacters(in: .whitespaces)
+                    title = String(title[separator.upperBound...]).trimmingCharacters(in: .whitespaces)
+                }
+                let storage = AddonPlaybackID.encode(key: item.installationKey, type: item.type, id: item.id)
+                let raw = String(storage.dropFirst(AddonPlaybackID.prefix.count))
+                tracks.append(MusicCatalogTrack(
+                    id: MusicCatalogID(source: .addon, rawValue: raw),
+                    title: title.isEmpty ? item.title : title,
+                    artist: artist,
+                    durationSeconds: item.durationSeconds ?? 0,
+                    artworkURL: item.poster,
+                    permalinkURL: nil,
+                    isStreamable: true
+                ))
+            }
+        }
+        return tracks
+    }
+
+    /// PencariMusic requires a configured addon base; returns [] otherwise.
+    private func fetchPencariTracks(query: String) async -> [MusicCatalogTrack] {
+        guard let client = PencariMusicClient.configured() else { return [] }
+        return (try? await client.searchTracks(query: query, limit: 25)) ?? []
+    }
+
     private func updateResultPhase() {
-        if results.isEmpty && heroArtist == nil && audiusTracks.isEmpty && qobuzTracks.isEmpty {
+        if results.isEmpty && heroArtist == nil && audiusTracks.isEmpty && qobuzTracks.isEmpty && pencariTracks.isEmpty && jiosaavnTracks.isEmpty && addonTracks.isEmpty {
             phase = error == nil ? .noResults : .failed
         } else {
             phase = .results
@@ -424,9 +495,13 @@ final class SearchViewModel {
                     values = Array(try await SearchSuggestions.suggest(query: query).prefix(5))
                 }
                 guard !Task.isCancelled, self.submittedQuery == query else { return }
+                // Dedupe (case-insensitive) so `ForEach(id: \.self)` never hits
+                // duplicate identities.
+                var seen = Set<String>()
+                let unique = values.filter { seen.insert($0.lowercased()).inserted }
                 if self.suggestionCache.count >= 40 { self.suggestionCache.removeAll() }
-                self.suggestionCache[query] = values
-                self.suggestions = values
+                self.suggestionCache[query] = unique
+                self.suggestions = unique
             } catch { /* Suggestions are optional; results continue independently. */ }
         }
         fetchTask = Task { [weak self] in
@@ -445,6 +520,9 @@ final class SearchViewModel {
         results = []
         audiusTracks = []
         qobuzTracks = []
+        pencariTracks = []
+        jiosaavnTracks = []
+        addonTracks = []
         localSongs = []
         localArtists = []
         localAlbums = []

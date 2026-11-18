@@ -104,6 +104,7 @@ struct FullPlayerView: View {
                     if showLyrics {
                         LyricsView(
                             showLyrics: $showLyrics,
+                            showQueue: $showQueue,
                             pendingRoute: $pendingRoute,
                             progressSlider: { progressSlider(horizontalPadding: horizontalPadding) }
                         )
@@ -229,6 +230,7 @@ struct FullPlayerView: View {
                 y: isDocking ? miniFrame.minY - globalFrame.minY : sheet.dragOffset
             )
             .animation(.easeInOut(duration: 0.35), value: showQueue)
+            .animation(.easeInOut(duration: 0.3), value: showLyrics)
             .simultaneousGesture(collapseDrag)
             .onChange(of: showsMainArtwork, initial: true) { _, visible in
                 sheet.hasExpandedArtwork = visible
@@ -272,11 +274,42 @@ struct FullPlayerView: View {
     // MARK: - Go to album/artist
 
     private var currentSong: SongItem? {
-        np.queueSongs.indices.contains(np.queueIndex) ? np.queueSongs[np.queueIndex] : nil
+        guard let videoID = np.videoId else { return nil }
+        return np.queueSongs.first { $0.videoId == videoID }
+    }
+
+    private var navigationSong: SongItem? {
+        guard np.playbackKind == .music, let videoID = np.videoId else { return nil }
+        var song = currentSong ?? SongItem(
+            videoId: videoID, title: np.displayTitle,
+            artists: np.artists.isEmpty ? [YTArtist(name: np.displayArtist)] : np.artists,
+            album: np.displayAlbumTitle.isEmpty ? nil : np.displayAlbumTitle,
+            duration: np.duration.isFinite ? Int(max(0, np.duration)) : 0,
+            thumbnailUrl: nil, isExplicit: false
+        )
+        if song.artists.isEmpty, !np.displayArtist.isEmpty {
+            song.artists = [YTArtist(name: np.displayArtist)]
+        }
+        if song.album?.isEmpty != false, !np.displayAlbumTitle.isEmpty {
+            song.album = np.displayAlbumTitle
+        }
+        return song
+    }
+
+    private var canOpenAlbum: Bool {
+        guard let song = navigationSong else { return false }
+        return song.albumId?.isEmpty == false || MusicPlaybackIdentity.isYouTube(song.videoId)
+    }
+
+    private var canOpenArtist: Bool {
+        guard let song = navigationSong else { return false }
+        return song.artists.contains { $0.id?.isEmpty == false }
+            || !np.displayArtist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !song.artistNamesDisplay.isEmpty
     }
 
     private var currentAlbumSubtitle: String? {
-        if !np.albumTitle.isEmpty { return np.albumTitle }
+        if !np.displayAlbumTitle.isEmpty { return np.displayAlbumTitle }
         if let album = currentSong?.album, !album.isEmpty { return album }
         return nil
     }
@@ -295,8 +328,8 @@ struct FullPlayerView: View {
                         subtitle: currentAlbumSubtitle
                     )
                 }
-                .disabled(currentSong?.albumId?.isEmpty ?? true)
-                .opacity(currentSong?.albumId?.isEmpty ?? true ? 0.4 : 1)
+                .disabled(!canOpenAlbum)
+                .opacity(canOpenAlbum ? 1 : 0.4)
 
                 Divider()
 
@@ -307,8 +340,8 @@ struct FullPlayerView: View {
                         subtitle: np.displayArtist
                     )
                 }
-                .disabled(currentSong?.artists.contains { $0.id != nil } != true)
-                .opacity(currentSong?.artists.contains { $0.id != nil } != true ? 0.4 : 1)
+                .disabled(!canOpenArtist)
+                .opacity(canOpenArtist ? 1 : 0.4)
             }
             .glassEffect(.regular, in: .rect(cornerRadius: 18))
             .padding(.horizontal, 28)
@@ -339,16 +372,24 @@ struct FullPlayerView: View {
     }
 
     private func goToAlbum() {
-        guard let albumId = currentSong?.albumId, !albumId.isEmpty else { return }
+        guard let song = navigationSong, canOpenAlbum else { return }
         showGoToMenu = false
-        pendingRoute = .album(browseId: albumId)
+        if let albumId = song.albumId, !albumId.isEmpty {
+            pendingRoute = .album(browseId: albumId)
+        } else {
+            pendingRoute = .songAlbum(song)
+        }
     }
 
     private func goToArtist() {
-        guard let artist = currentSong?.artists.first(where: { $0.id != nil }),
-              let id = artist.id else { return }
+        guard let song = navigationSong, canOpenArtist else { return }
         showGoToMenu = false
-        pendingRoute = .artist(browseId: id)
+        if let id = song.artists.first(where: { $0.id?.isEmpty == false })?.id {
+            pendingRoute = .artist(browseId: id)
+        } else {
+            let name = np.displayArtist.isEmpty ? song.artistNamesDisplay : np.displayArtist
+            pendingRoute = .songArtist(song, name: name)
+        }
     }
 
     // MARK: - Gestures
@@ -497,7 +538,7 @@ struct FullPlayerView: View {
                         .foregroundStyle(.white.opacity(0.6))
                 }
                 PlayerTitleBlock(
-                    title: np.title,
+                    title: np.displayTitle,
                     artist: playerArtistLine,
                     spacing: 5,
                     titleFont: .title2.weight(.bold),
@@ -607,9 +648,9 @@ struct FullPlayerView: View {
                     artworkImage
                     CanvasVideoView(
                         videoId: np.videoId,
-                        title: np.title,
-                        artist: np.artist,
-                        album: np.albumTitle.isEmpty ? nil : np.albumTitle,
+                        title: np.displayTitle,
+                        artist: np.displayArtist,
+                        album: np.displayAlbumTitle.isEmpty ? nil : np.displayAlbumTitle,
                         isPlaying: np.isPlaying,
                         enabled: settings.canvasEnabled,
                         onDominantColorsChange: { canvasDominantColors = $0 }
@@ -688,10 +729,10 @@ struct FullPlayerView: View {
                     .contentTransition(.numericText())
             }
             .overlay {
-                if let videoId = np.videoId, MusicPlaybackIdentity.isQobuz(videoId) {
+                if np.isUpgradingQuality || np.qualityBadgeLabel != nil {
                     HStack(spacing: 4) {
                         Image(systemName: "waveform")
-                        Text("Lossless")
+                        Text(np.isUpgradingQuality ? "Upgrading…" : (np.qualityBadgeLabel ?? "Standard"))
                     }
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.white.opacity(0.8))

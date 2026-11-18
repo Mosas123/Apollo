@@ -18,6 +18,17 @@ enum SponsorBlock {
     static func save(enabled: Bool) {
         UserDefaults.standard.set(enabled, forKey: enabledKey)
     }
+
+    private static let skipIntroKey = "sponsorBlockSkipIntroAtStart"
+
+    /// Off by default: inaccurate segment boundaries could skip into the vocals.
+    static var skipsIntroAtStart: Bool {
+        UserDefaults.standard.bool(forKey: skipIntroKey)
+    }
+
+    static func saveSkipIntroAtStart(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: skipIntroKey)
+    }
 }
 
 @MainActor
@@ -34,6 +45,8 @@ final class SponsorBlockIntegration {
     private var skipped: Set<Int> = []
     private var prefetchedSegments: [String: [Segment]] = [:]
     private var prefetchOrder: [String] = []
+    private var prefetchedAt: [String: Date] = [:]
+    private let cacheTTL: TimeInterval = 24 * 3600
     private var fetchTasks: [String: Task<[Segment], Never>] = [:]
 
     private init() {}
@@ -54,8 +67,9 @@ final class SponsorBlockIntegration {
             return 0
         }
         guard SponsorBlock.isEnabled,
-              let first = found.first,
-              first.start < 0.5
+              let first = found.min(by: { $0.start < $1.start }),
+              first.start < 0.5,
+              first.end <= 25
         else { return 0 }
         return first.end
     }
@@ -69,7 +83,7 @@ final class SponsorBlockIntegration {
             segments = []
             skipped = []
             if let found = prefetchedSegments[id] {
-                segments = found
+                segments = found.sorted { $0.start < $1.start }
             } else {
                 _ = fetchTask(for: id)
             }
@@ -81,7 +95,7 @@ final class SponsorBlockIntegration {
         let position = nowPlaying.currentTime
         for (index, segment) in segments.enumerated() where !skipped.contains(index) {
             // Within the last second the jump isn't worth it.
-            guard position >= segment.start, position < segment.end - 1 else { continue }
+            guard position >= segment.start - 0.25, position < segment.end - 1 else { continue }
             skipped.insert(index)
             player.seek(to: segment.end)
             return
@@ -92,7 +106,9 @@ final class SponsorBlockIntegration {
         if let task = fetchTasks[videoId] {
             return task
         }
-        if let cached = prefetchedSegments[videoId] {
+        if let cached = prefetchedSegments[videoId],
+           let fetched = prefetchedAt[videoId],
+           Date().timeIntervalSince(fetched) < cacheTTL {
             return Task { cached }
         }
 
@@ -102,16 +118,18 @@ final class SponsorBlockIntegration {
             let found = await task.value
             guard let self else { return }
             self.fetchTasks.removeValue(forKey: videoId)
-            self.prefetchedSegments[videoId] = found
+            self.prefetchedSegments[videoId] = found.sorted { $0.start < $1.start }
+            self.prefetchedAt[videoId] = Date()
             if !self.prefetchOrder.contains(videoId) {
                 self.prefetchOrder.append(videoId)
             }
             while self.prefetchedSegments.count > 64, let oldest = self.prefetchOrder.first {
                 self.prefetchOrder.removeFirst()
                 self.prefetchedSegments.removeValue(forKey: oldest)
+                self.prefetchedAt.removeValue(forKey: oldest)
             }
             if self.videoId == videoId {
-                self.segments = found
+                self.segments = found.sorted { $0.start < $1.start }
             }
         }
         return task
@@ -135,7 +153,10 @@ final class SponsorBlockIntegration {
             .map { String(format: "%02x", $0) }
             .joined()
         var components = URLComponents(string: "https://sponsor.ajay.app/api/skipSegments/\(hash.prefix(4))")
-        components?.queryItems = [URLQueryItem(name: "categories", value: "[\"music_offtopic\"]")]
+        components?.queryItems = [
+            URLQueryItem(name: "categories", value: "[\"music_offtopic\"]"),
+            URLQueryItem(name: "actionTypes", value: "[\"skip\"]")
+        ]
         guard let url = components?.url else {
             Log.sponsorBlock.error("Could not build SponsorBlock URL videoId=\(videoId)")
             return []

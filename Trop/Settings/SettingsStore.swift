@@ -98,6 +98,7 @@ extension DownloadQuality: SettingsOption {
     public var displayName: String {
         switch self {
         case .auto: return "Auto"
+        case .lossless: return "Lossless (FLAC)"
         case .high: return "High (128–192 kbps)"
         case .standard: return "Standard (64–96 kbps)"
         }
@@ -223,6 +224,27 @@ final class SettingsStore: @unchecked Sendable {
 
     var podcastIndexSecret: String {
         didSet { Self.defaults.set(podcastIndexSecret, forKey: Keys.podcastIndexSecret) }
+    }
+
+    // MARK: - PencariMusic (Stremio/Eclipse music addon)
+
+    /// Tokenized addon base, e.g.
+    /// `https://stream.pencarimovie.com/<token>`. Empty disables the source.
+    /// Search lives at `/music/search`, streams at `/music/stream/<id>`.
+    var pencariMusicBaseURL: String {
+        didSet { Self.defaults.set(pencariMusicBaseURL, forKey: Keys.pencariMusicBaseURL) }
+    }
+
+    /// Source preference for a track: Auto / High / Lossless. Upgrades are
+    /// prefetched at track boundaries and never block playback.
+    var musicQualityMode: MusicQualityMode {
+        didSet { Self.defaults.set(musicQualityMode.rawValue, forKey: Keys.musicQualityMode) }
+    }
+
+    /// When on, the app may switch to a better source *during* playback. The
+    /// user hears a very short fade while the stream reloads.
+    var upgradeDuringPlayback: Bool {
+        didSet { Self.defaults.set(upgradeDuringPlayback, forKey: Keys.upgradeDuringPlayback) }
     }
 
     // MARK: - Liquid Glass
@@ -422,6 +444,9 @@ final class SettingsStore: @unchecked Sendable {
         static let showExploreTab = "settings.showExploreTab"
         static let glassStyle = "settings.glassStyle"
         static let podcastIndexKey = "settings.podcastIndexKey"
+        static let pencariMusicBaseURL = "settings.pencariMusicBaseURL"
+        static let musicQualityMode = "settings.musicQualityMode"
+        static let upgradeDuringPlayback = "settings.upgradeDuringPlayback"
         static let aiProvider = "settings.aiProvider"
         static let aiKey = "settings.aiKey"
         static let aiModel = "settings.aiModel"
@@ -500,12 +525,15 @@ final class SettingsStore: @unchecked Sendable {
         showExploreTab = Self.load(Keys.showExploreTab, default: false)
         glassStyle = Self.loadEnum(Keys.glassStyle, default: .regular)
         podcastIndexKey = Self.loadString(Keys.podcastIndexKey, default: "")
+        pencariMusicBaseURL = Self.loadString(Keys.pencariMusicBaseURL, default: PencariMusicClient.defaultBase)
+        musicQualityMode = Self.loadEnum(Keys.musicQualityMode, default: .auto)
+        upgradeDuringPlayback = Self.load(Keys.upgradeDuringPlayback, default: false)
         aiProvider = Self.loadString(Keys.aiProvider, default: AIProvider.off.rawValue)
         aiKey = Self.loadString(Keys.aiKey, default: "")
         aiModel = Self.loadString(Keys.aiModel, default: "")
         podcastIndexSecret = Self.loadString(Keys.podcastIndexSecret, default: "")
-        lyricsFontSize = Self.load(Keys.lyricsFontSize, default: 17)
-        lyricsAlignment = Self.loadEnum(Keys.lyricsAlignment, default: .center)
+        lyricsFontSize = Self.load(Keys.lyricsFontSize, default: 28)
+        lyricsAlignment = Self.loadEnum(Keys.lyricsAlignment, default: .left)
         lyricsOffsetSeconds = Self.load(Keys.lyricsOffsetSeconds, default: 0)
         showIntervalIndicator = Self.load(Keys.showIntervalIndicator, default: true)
         romanizeCurrentTrack = Self.load(Keys.romanizeCurrentTrack, default: true)

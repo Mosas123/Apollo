@@ -160,10 +160,12 @@ extension DatabaseService {
         }
     }
 
-    /// `?` placeholders for `IN (...)` clauses. Callers must guard against
-    /// empty input first (`IN ()` is invalid SQL).
+    /// `?` placeholders for `IN (...)` clauses. For an empty list returns
+    /// `NULL`, so `IN (NULL)` stays valid SQL and matches nothing instead of
+    /// producing the invalid `IN ()`.
     static func placeholders(count: Int) -> String {
-        Array(repeating: "?", count: max(count, 0)).joined(separator: ",")
+        guard count > 0 else { return "NULL" }
+        return Array(repeating: "?", count: count).joined(separator: ",")
     }
 
     static func chunked(_ ids: [String], size: Int = 500) -> [[String]] {
@@ -181,7 +183,7 @@ extension DatabaseService {
             sql: "SELECT * FROM song WHERE id IN (\(placeholders(count: ids.count)))",
             arguments: StatementArguments(ids)
         )
-        return Dictionary(uniqueKeysWithValues: fetched.map { ($0.id, $0) })
+        return Dictionary(fetched.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     }
 }
 

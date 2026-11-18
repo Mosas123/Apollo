@@ -41,10 +41,12 @@ struct PlayerMenuSheet: View {
                     actionGrid
                     MenuCard {
                         viewArtistRow
-                        if let albumId = song.firstAlbumBrowseId {
-                            Divider()
-                            MenuRow(icon: "record.circle", title: "View Album", subtitle: song.album) {
+                        Divider()
+                        MenuRow(icon: "record.circle", title: "View Album", subtitle: song.album) {
+                            if let albumId = song.firstAlbumBrowseId, !albumId.isEmpty {
                                 navigate(.album(browseId: albumId))
+                            } else {
+                                navigate(.songAlbum(song))
                             }
                         }
                         Divider()
@@ -469,13 +471,22 @@ struct AddSongToPlaylistSheet: View {
 struct SongDetailsView: View {
     let song: SongItem
 
+    @State private var canonicalMetadata: ResolvedMetadata?
     @State private var stream: PlaybackResult?
     @State private var formatEntity: FormatEntity?
     @State private var viewCountText: String?
     @State private var resolvedDuration: Int = 0
 
+    private var playbackMetadata: PlaybackMetadataSnapshot? {
+        NowPlaying.shared.metadataSnapshot(for: song.videoId)
+    }
+
     private var effectiveDuration: Int {
-        song.duration > 0 ? song.duration : resolvedDuration
+        if playbackMetadata != nil {
+            let duration = NowPlaying.shared.duration
+            if duration.isFinite, duration > 0 { return Int(duration) }
+        }
+        return song.duration > 0 ? song.duration : resolvedDuration
     }
 
     var body: some View {
@@ -491,19 +502,41 @@ struct SongDetailsView: View {
         .navigationTitle("Details")
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadMetadata() }
+        .task(id: song) {
+            canonicalMetadata = nil
+            guard MusicPlaybackIdentity.isYouTube(song.videoId),
+                  song.contentKind == nil || song.contentKind == .music else { return }
+            let resolved = await MetadataResolver.enrich(
+                title: song.title, artist: song.artistNamesDisplay,
+                album: song.album, duration: song.duration
+            )
+            guard !Task.isCancelled else { return }
+            canonicalMetadata = resolved
+            if let resolved { NowPlaying.shared.acceptResolvedMetadata(resolved, videoId: song.videoId) }
+        }
     }
 
     // MARK: Sections
 
     private var trackSection: some View {
         section("Track") {
-            row("Title", song.title)
-            row("Artists", song.artistNamesDisplay)
-            if let album = song.album {
+            row("Title", playbackMetadata?.title ?? canonicalMetadata?.title ?? song.title)
+            row("Artists", playbackMetadata?.artist ?? canonicalMetadata?.artist ?? song.artistNamesDisplay)
+            if let album = playbackMetadata?.album ?? canonicalMetadata?.album ?? song.album {
                 row("Album", album)
             }
             row("Duration", effectiveDuration.formattedDuration)
+            if playbackMetadata != nil, song.duration > 0, abs(effectiveDuration - song.duration) > 1 {
+                row("Original duration", song.duration.formattedDuration)
+            }
             row("Video ID", song.videoId, monospaced: true)
+            if let source = playbackMetadata?.source ?? canonicalMetadata?.source {
+                row("Metadata source", source)
+                if (playbackMetadata?.title ?? canonicalMetadata?.title) != song.title { row("Video title", song.title) }
+                if (playbackMetadata?.artist ?? canonicalMetadata?.artist) != song.artistNamesDisplay {
+                    row("Channel / original credits", song.artistNamesDisplay)
+                }
+            }
         }
     }
 
@@ -511,6 +544,7 @@ struct SongDetailsView: View {
     private var streamSection: some View {
         section("Stream") {
             if let s = stream {
+                row("Source", MusicPlaybackIdentity.sourceLabel(song.videoId))
                 row("Client", s.clientName)
                 row("ITAG", "\(s.itag)", monospaced: true)
                 row("Bitrate", "\(s.bitrate / 1000) kbps")
@@ -575,6 +609,10 @@ struct SongDetailsView: View {
     // MARK: Helpers
 
     private func loadMetadata() async {
+        guard MusicPlaybackIdentity.isYouTube(song.videoId) else {
+            viewCountText = "Unavailable"
+            return
+        }
         if song.duration <= 0 {
             if let duration = await InnerTubeClient.tropShared.resolveDuration(videoId: song.videoId) {
                 resolvedDuration = duration

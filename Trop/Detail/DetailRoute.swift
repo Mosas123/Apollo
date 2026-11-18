@@ -13,6 +13,9 @@ import SwiftUI
 enum DetailRoute: Hashable, Identifiable {
     var id: String {
         switch self {
+        case .songDetails(let song): return "song_details_\(song.videoId)"
+        case .songAlbum(let song): return "song_album_\(song.videoId)"
+        case .songArtist(let song, let name): return "song_artist_\(song.videoId)_\(name)"
         case .album(let browseId): return "album_\(browseId)"
         case .artist(let browseId): return "artist_\(browseId)"
         case .playlist(let playlistId): return "playlist_\(playlistId)"
@@ -30,6 +33,9 @@ enum DetailRoute: Hashable, Identifiable {
     }
 
     case album(browseId: String)
+    case songDetails(SongItem)
+    case songAlbum(SongItem)
+    case songArtist(SongItem, name: String)
     case artist(browseId: String)
     case playlist(playlistId: String)
     case podcast(browseId: String)
@@ -50,6 +56,12 @@ struct DetailRouteDestinationView: View {
 
     var body: some View {
         switch route {
+        case .songDetails(let song):
+            SongDetailsView(song: song)
+        case .songAlbum(let song):
+            SongAlbumDestinationView(song: song)
+        case .songArtist(let song, let name):
+            SongArtistDestinationView(song: song, artistName: name)
         case .album(let browseId):
             AlbumDetailView(browseId: browseId)
         case .artist(let browseId):

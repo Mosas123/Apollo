@@ -297,6 +297,27 @@ struct SearchView: View {
                         externalTrackRow(track, from: viewModel.qobuzTracks)
                     }
                 }
+
+                if viewModel.showsPencariResults && !viewModel.pencariTracks.isEmpty {
+                    sectionHeader("Lossless")
+                    ForEach(viewModel.pencariTracks, id: \.id) { track in
+                        externalTrackRow(track, from: viewModel.pencariTracks)
+                    }
+                }
+
+                if viewModel.showsJioSaavnResults && !viewModel.jiosaavnTracks.isEmpty {
+                    sectionHeader("JioSaavn")
+                    ForEach(viewModel.jiosaavnTracks, id: \.id) { track in
+                        externalTrackRow(track, from: viewModel.jiosaavnTracks)
+                    }
+                }
+
+                if viewModel.showsAddonResults && !viewModel.addonTracks.isEmpty {
+                    sectionHeader("Add-ons")
+                    ForEach(viewModel.addonTracks, id: \.id) { track in
+                        externalTrackRow(track, from: viewModel.addonTracks)
+                    }
+                }
             }
             .padding(.bottom, 16)
         }
@@ -375,7 +396,7 @@ struct SearchView: View {
                 router.searchPath.append(DetailRoute.artist(browseId: artist.browseId))
             } label: {
                 HStack(spacing: 12) {
-                    AsyncImageView(url: artist.thumbnailUrl)
+                    ArtistAvatarImageView(name: artist.name, fallbackURL: artist.thumbnailUrl, artistID: artist.browseId)
                         .frame(width: 56, height: 56)
                         .clipShape(Circle())
                     Text(artist.name)
@@ -409,14 +430,14 @@ struct SearchView: View {
 
     private func artistCarousel(items: [YTItem]) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 16) {
+            LazyHStack(alignment: .top, spacing: 16) {
                 ForEach(items, id: \.id) { item in
                     if case .artist(let artist) = item {
                         Button {
                             router.searchPath.append(DetailRoute.artist(browseId: artist.browseId))
                         } label: {
                             VStack(spacing: 8) {
-                                AsyncImageView(url: artist.thumbnailUrl)
+                                ArtistAvatarImageView(name: artist.name, fallbackURL: artist.thumbnailUrl, artistID: artist.browseId)
                                     .frame(width: 110, height: 110)
                                     .clipShape(Circle())
                                 Text(artist.name)
@@ -437,7 +458,7 @@ struct SearchView: View {
 
     private func albumCarousel(items: [YTItem]) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 12) {
+            LazyHStack(alignment: .top, spacing: 12) {
                 ForEach(items, id: \.id) { item in
                     if case .album(let album) = item {
                         Button {
