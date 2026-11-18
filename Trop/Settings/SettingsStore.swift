@@ -88,7 +88,6 @@ extension AudioQuality: SettingsOption {
         switch self {
         case .auto: return "Auto"
         case .high: return "High"
-        case .jiosaavn: return "JioSaavn (320 kbps)"
         case .medium: return "Medium"
         case .low: return "Low"
         }

@@ -50,7 +50,7 @@ struct StremioDescriptor: Codable, Sendable, Equatable {
             let label: String?
         }
         let key: String
-        let type: String
+        let type: String?
         let label: String?
         let options: [Option]?
         let `default`: String?
@@ -107,6 +107,10 @@ extension MusicAddonInstallation {
                 }
                 if value.contains("atmos") {
                     caps.atmos = true
+                }
+                if value == "max" {
+                    caps.cd = true
+                    caps.hiRes = true
                 }
             }
         }

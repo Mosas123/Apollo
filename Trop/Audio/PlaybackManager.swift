@@ -279,6 +279,21 @@ actor PlaybackManager {
     private var queueChangeTask: Task<Void, Never>?
     private var prefetchRefreshTask: Task<Void, Never>?
 
+    /// Lossy sources (YouTube/JioSaavn/AAC) are allowed unless the user asked
+    /// for FLAC explicitly (CD or Best FLAC).
+    private var lossySourcesAllowed: Bool {
+        let mode = SettingsStore.shared.musicQualityMode
+        return mode != .cd && mode != .lossless
+    }
+
+    /// Auto/High race YouTube, JioSaavn and add-on AAC 320. Standard/Low stay
+    /// on YouTube and only use the others when YouTube has no stream.
+    private var prefers320Lossy: Bool {
+        guard lossySourcesAllowed else { return false }
+        let quality = SettingsStore.shared.audioQuality
+        return quality == .auto || quality == .high
+    }
+
     private struct AddonQualityPreference: Sendable {
         let requireCD: Bool
         let preferHiRes: Bool
@@ -319,8 +334,9 @@ actor PlaybackManager {
         if let preference = addonPreference {
             acceptable = Self.resultMatches(cached.result, preference: preference)
         } else {
-            acceptable = SettingsStore.shared.audioQuality == .jiosaavn
-                && cached.result.audioQuality.lowercased().contains("jiosaavn")
+            let quality = cached.result.audioQuality.lowercased()
+            acceptable = prefers320Lossy
+                && (quality.contains("jiosaavn") || quality.contains("addon-aac"))
         }
         guard acceptable else { return nil }
         return (cached.result, age)
@@ -335,13 +351,11 @@ actor PlaybackManager {
         preference: AddonQualityPreference
     ) -> Bool {
         let quality = result.audioQuality.lowercased()
-        if quality.contains("addon-aac") {
+        if quality.contains("addon-aac") || quality.contains("jiosaavn") {
             let mode = SettingsStore.shared.musicQualityMode
-            return mode == .auto || mode == .high
-        }
-        if quality.contains("jiosaavn") {
-            let mode = SettingsStore.shared.musicQualityMode
-            return mode == .auto || mode == .high
+            let allowedMode = mode != .cd && mode != .lossless
+            let qualitySetting = SettingsStore.shared.audioQuality
+            return allowedMode && (qualitySetting == .auto || qualitySetting == .high)
         }
         if preference.preferAtmos { return quality.contains("atmos") }
         if quality.contains("atmos") { return false }
@@ -377,8 +391,7 @@ actor PlaybackManager {
         ) {
             return lossless
         }
-        let mode = SettingsStore.shared.musicQualityMode
-        if mode == .auto || mode == .high {
+        if prefers320Lossy {
             // Add-on AAC 320 and JioSaavn 320 cover each other: whichever
             // answers first wins.
             let hasAddonAAC = await MainActor.run {
@@ -429,11 +442,9 @@ actor PlaybackManager {
         }
     }
 
-    /// JioSaavn 320 fallback: best match by metadata, only when Preferred
-    /// Source is Auto (CD/Lossless are explicit FLAC requests).
+    /// JioSaavn 320 fallback: best match by metadata. Callers decide when the
+    /// lossy pool is allowed (everything except CD / Best FLAC).
     private func resolveJioSaavnFallback(videoId: String) async -> PlaybackResult? {
-        let mode = SettingsStore.shared.musicQualityMode
-        guard mode == .auto || mode == .high else { return nil }
         guard !MusicPlaybackIdentity.isExternal(videoId),
               !MusicPlaybackIdentity.isLegacyPencari(videoId) else { return nil }
         guard let song = await queueSong(for: videoId) else { return nil }
@@ -469,9 +480,25 @@ actor PlaybackManager {
         )
     }
 
+    /// JioSaavn and the add-on AAC 320 copy race each other.
+    private func resolveLossyBest(videoId: String) async -> PlaybackResult? {
+        await withTaskGroup(of: PlaybackResult?.self) { group in
+            group.addTask { await self.resolveAddonAAC(videoId: videoId) }
+            group.addTask { await self.resolveJioSaavnFallback(videoId: videoId) }
+            var best: PlaybackResult?
+            for await candidate in group {
+                guard let candidate else { continue }
+                best = candidate
+                break
+            }
+            group.cancelAll()
+            return best
+        }
+    }
+
     /// AAC 320 fallback from the add-ons.
     private func resolveAddonAAC(videoId: String) async -> PlaybackResult? {
-        guard addonPreference != nil else { return nil }
+        guard SettingsStore.shared.hasMusicAddons, lossySourcesAllowed else { return nil }
         guard !MusicPlaybackIdentity.isExternal(videoId),
               !MusicPlaybackIdentity.isLegacyPencari(videoId) else { return nil }
         guard let song = await queueSong(for: videoId) else { return nil }
@@ -693,8 +720,8 @@ actor PlaybackManager {
     }
 
     private func prefetchForCurrentTrack() async {
-        let jiosaavnOnly = addonPreference == nil && SettingsStore.shared.audioQuality == .jiosaavn
-        guard addonPreference != nil || jiosaavnOnly else { return }
+        let lossyOnly = addonPreference == nil && prefers320Lossy
+        guard addonPreference != nil || lossyOnly else { return }
         guard let current = await MainActor.run(body: { NowPlaying.shared.videoId }) else { return }
         await prefetchUpcomingUpgrades(after: current, count: 2)
     }
@@ -731,21 +758,30 @@ actor PlaybackManager {
         schedulePrefetchRefresh(videoId: videoId)
     }
 
-    /// URLs from addons expire; re-warm the next songs before this track ends.
+    /// Add-on URLs expire; re-warm the next songs when this track is about to
+    /// end. Polls so it also works when the duration was unknown at start.
     private func schedulePrefetchRefresh(videoId: String) {
         prefetchRefreshTask?.cancel()
         prefetchRefreshTask = Task { [weak self] in
-            let duration = await MainActor.run { NowPlaying.shared.duration }
-            let delay = duration > 0 ? max(20, duration - 90) : 120
-            try? await Task.sleep(for: .seconds(delay))
-            guard !Task.isCancelled, let self else { return }
-            let stillCurrent = await MainActor.run { NowPlaying.shared.videoId == videoId }
-            guard stillCurrent else { return }
-            await self.prefetchUpcomingUpgrades(
-                after: videoId,
-                count: 2,
-                refreshSoonExpiring: true
-            )
+            var refreshed = false
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                guard !Task.isCancelled, let self else { return }
+                let state = await MainActor.run {
+                    (NowPlaying.shared.videoId, NowPlaying.shared.duration, NowPlaying.shared.currentTime)
+                }
+                guard state.0 == videoId else { return }
+                guard state.1 > 0 else { continue }
+                if !refreshed, state.1 - state.2 <= 90 {
+                    refreshed = true
+                    await self.prefetchUpcomingUpgrades(
+                        after: videoId,
+                        count: 2,
+                        refreshSoonExpiring: true
+                    )
+                }
+                if state.2 >= state.1 { return }
+            }
         }
     }
 
@@ -777,8 +813,8 @@ actor PlaybackManager {
         count: Int = 2,
         refreshSoonExpiring: Bool = false
     ) async {
-        let jiosaavnOnly = addonPreference == nil && SettingsStore.shared.audioQuality == .jiosaavn
-        guard addonPreference != nil || jiosaavnOnly else { return }
+        let lossyOnly = addonPreference == nil && prefers320Lossy
+        guard addonPreference != nil || lossyOnly else { return }
         let queue = await MainActor.run { NowPlaying.shared.queueSongs }
         guard let index = queue.firstIndex(where: { $0.videoId == videoId }) else { return }
         let upcoming = queue.dropFirst(index + 1).prefix(count).map(\.videoId)
@@ -815,11 +851,11 @@ actor PlaybackManager {
                     budget: 30,
                     ignoreCache: refreshSoonExpiring
                 )
-            } else if let jiosaavn = await resolveJioSaavnFallback(videoId: id) {
+            } else if let lossy = await resolveLossyBest(videoId: id) {
                 if upgradeResultCache.count >= 100 {
                     upgradeResultCache.removeAll(keepingCapacity: true)
                 }
-                upgradeResultCache[id] = (jiosaavn, Date())
+                upgradeResultCache[id] = (lossy, Date())
             }
         }
         upgradePrefetchInFlight.subtract(targets)
@@ -991,15 +1027,6 @@ actor PlaybackManager {
 
         // A prefetched lossless/high stream means the track can start right in
         // the better source instead of resolving YouTube first.
-        if SettingsStore.shared.audioQuality == .jiosaavn,
-           SettingsStore.shared.musicQualityMode == .auto
-               || SettingsStore.shared.musicQualityMode == .high,
-           let jiosaavn = await resolveJioSaavnFallback(videoId: videoId) {
-            await playNetworkResult(jiosaavn, videoId: videoId)
-            scheduleUpgradePrefetch(videoId: videoId)
-            return jiosaavn
-        }
-
         if let cached = cachedUpgrade(videoId: videoId) {
             let upgrade = cached.result
             // Prefetch already verified a fresh URL; skipping the extra Range
@@ -1012,6 +1039,19 @@ actor PlaybackManager {
                 return upgrade
             }
             upgradeResultCache[videoId] = nil
+        }
+
+        // Off (or no add-on FLAC): Auto/High start straight in the lossy pool
+        // (JioSaavn / AAC 320) instead of YouTube.
+        if addonPreference == nil, prefers320Lossy,
+           let lossy = await resolveLossyBest(videoId: videoId) {
+            if upgradeResultCache.count >= 100 {
+                upgradeResultCache.removeAll(keepingCapacity: true)
+            }
+            upgradeResultCache[videoId] = (lossy, Date())
+            await playNetworkResult(lossy, videoId: videoId)
+            scheduleUpgradePrefetch(videoId: videoId)
+            return lossy
         }
 
         if let cached = await StreamCache.shared.get(videoId: videoId) {
@@ -1038,7 +1078,23 @@ actor PlaybackManager {
         }
 
         let task = Task { [self] in
-            try await resolveAndPlayFromNetwork(videoId: videoId)
+            do {
+                return try await resolveAndPlayFromNetwork(videoId: videoId)
+            } catch {
+                // YouTube has no stream: JioSaavn/AAC can still cover it, even
+                // in Standard/Low (only when YouTube failed).
+                if self.lossySourcesAllowed,
+                   let lossy = await self.resolveLossyBest(videoId: videoId) {
+                    if self.upgradeResultCache.count >= 100 {
+                        self.upgradeResultCache.removeAll(keepingCapacity: true)
+                    }
+                    self.upgradeResultCache[videoId] = (lossy, Date())
+                    await self.playNetworkResult(lossy, videoId: videoId)
+                    self.scheduleUpgradePrefetch(videoId: videoId)
+                    return lossy
+                }
+                throw error
+            }
         }
         inflightResolutions[key] = task
         defer { clearInflight(key: key) }

@@ -78,7 +78,6 @@ public enum FormatSelector: Sendable {
     private static func qualityTier(for preference: AudioQuality) -> Int {
         switch preference {
         case .high: return 3
-        case .jiosaavn: return 3
         case .medium: return 2
         case .low: return 1
         case .auto: return 0
