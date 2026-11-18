@@ -569,7 +569,7 @@ extension DownloadManager {
         // track and a queue of 50 would stall for minutes.
         if allowLossless,
            !MusicPlaybackIdentity.isExternal(song.videoId),
-           SettingsStore.shared.musicQualityMode == .lossless,
+           SettingsStore.shared.losslessDownloads,
            let lossless = await raceLosslessSource(for: song) {
             Log.downloadManager.debug("Lossless source for \(song.videoId)")
             return lossless

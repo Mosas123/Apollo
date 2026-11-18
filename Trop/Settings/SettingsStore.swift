@@ -382,6 +382,11 @@ final class SettingsStore: @unchecked Sendable {
         didSet { Self.defaults.set(downloadQuality.rawValue, forKey: Keys.downloadQuality) }
     }
 
+    /// Try Pencari/add-ons before the YouTube stream so downloads can be FLAC.
+    var losslessDownloads: Bool {
+        didSet { Self.defaults.set(losslessDownloads, forKey: Keys.losslessDownloads) }
+    }
+
     var wifiOnlyDownloads: Bool {
         didSet { Self.defaults.set(wifiOnlyDownloads, forKey: Keys.wifiOnlyDownloads) }
     }
@@ -477,6 +482,7 @@ final class SettingsStore: @unchecked Sendable {
         static let trackSearchHistory = "settings.trackSearchHistory"
         static let trackPlayHistory = "settings.trackPlayHistory"
         static let downloadQuality = "settings.downloadQuality"
+        static let losslessDownloads = "settings.losslessDownloads"
         static let wifiOnlyDownloads = "settings.wifiOnlyDownloads"
         static let autoDownloadOnLike = "settings.autoDownloadOnLike"
         static let autoDownloadNewEpisodes = "settings.autoDownloadNewEpisodes"
@@ -562,6 +568,7 @@ final class SettingsStore: @unchecked Sendable {
         trackSearchHistory = Self.load(Keys.trackSearchHistory, default: true)
         trackPlayHistory = Self.load(Keys.trackPlayHistory, default: true)
         downloadQuality = Self.loadEnum(Keys.downloadQuality, default: .auto)
+        losslessDownloads = Self.load(Keys.losslessDownloads, default: true)
         wifiOnlyDownloads = Self.load(Keys.wifiOnlyDownloads, default: false)
         autoDownloadOnLike = Self.load(Keys.autoDownloadOnLike, default: false)
         autoDownloadNewEpisodes = Self.load(Keys.autoDownloadNewEpisodes, default: false)

@@ -27,13 +27,14 @@ struct DownloadSettingsView: View {
 
             Section {
                 SettingsPickerRow("Download Quality", icon: "waveform", selection: $settings.downloadQuality)
+                SettingsToggleRow("Lossless When Available", icon: "waveform.path", isOn: $settings.losslessDownloads)
                 SettingsToggleRow("Wi-Fi Only", icon: "wifi", isOn: $settings.wifiOnlyDownloads)
                 SettingsToggleRow("Auto-Download on Like", icon: "heart.fill", isOn: $settings.autoDownloadOnLike)
                 SettingsToggleRow("Auto-Download New Episodes", icon: "antenna.radiowaves.left.and.right", isOn: $settings.autoDownloadNewEpisodes)
             } header: {
                 Text("Preferences")
             } footer: {
-                Text("Auto-download saves liked songs for offline playback. Wi-Fi Only blocks downloads on cellular data.")
+                Text("Auto-download saves liked songs for offline playback. Lossless tries Pencari and your music add-ons first and saves FLAC; if nothing matches it uses the quality above. Wi-Fi Only blocks downloads on cellular data.")
             }
         }
         .navigationTitle("Download Settings")
