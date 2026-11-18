@@ -573,12 +573,24 @@ struct PodcastDetailView: View {
     // MARK: - Actions
 
     private func playAll(_ podcast: PodcastDetailInfo) {
-        PlaybackQueue.play(podcast.episodes.map { $0.toSongItem() }, log: Log.podcastDetail, context: "playAll")
+        PlaybackQueue.play(podcastSongs(podcast), log: Log.podcastDetail, context: "playAll")
+    }
+
+    /// Episodes inherit the podcast's cover so the player shows the show
+    /// profile image for every episode.
+    private func podcastSongs(_ podcast: PodcastDetailInfo) -> [SongItem] {
+        podcast.episodes.map { episode in
+            var song = episode.toSongItem()
+            if let cover = podcast.thumbnailUrl, !cover.isEmpty {
+                song.thumbnailUrl = cover
+            }
+            return song
+        }
     }
 
     private func playEpisode(_ episode: EpisodeItem, in podcast: PodcastDetailInfo) {
-        let songs = podcast.episodes.map { $0.toSongItem() }
-        let song = episode.toSongItem()
+        let songs = podcastSongs(podcast)
+        let song = songs.first { $0.videoId == episode.videoId } ?? episode.toSongItem()
         Task {
             let saved = await EpisodePlaybackStore.shared.position(for: episode.videoId)
             let resumeAt: TimeInterval? = if let saved, saved.position > 10, !saved.isFinished {
@@ -666,7 +678,7 @@ struct PodcastMoreSheet: View {
 
     private func addToQueue() {
         let np = NowPlaying.shared
-        np.queueSongs.append(contentsOf: podcast.episodes.map { $0.toSongItem() })
+        np.queueSongs.append(contentsOf: podcastSongs(podcast))
         np.persistQueueState()
     }
 
