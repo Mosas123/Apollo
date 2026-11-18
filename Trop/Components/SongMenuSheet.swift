@@ -248,6 +248,9 @@ struct SongMenuSheet: View {
                 MenuRow(icon: "checkmark.circle.fill", title: "Remove Download", destructive: true) {
                     Task { await downloadManager.delete(videoId: song.videoId) }
                 }
+            case .preparing:
+                MenuRow(icon: "waveform", title: "Preparing FLAC…") {}
+                    .disabled(true)
             case .downloading:
                 MenuRow(icon: "arrow.down.circle", title: "Downloading…") {}
                     .disabled(true)

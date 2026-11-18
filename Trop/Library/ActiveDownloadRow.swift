@@ -21,7 +21,7 @@ struct ActiveDownloadRow: View {
             thumbnailView
             infoStack
             Spacer(minLength: 0)
-            Text("\(Int(progress * 100))%")
+            Text(progress > 0 ? "\(Int(progress * 100))%" : "Preparing…")
                 .font(.caption.weight(.semibold))
                 .monospacedDigit()
                 .foregroundStyle(settings.accentColor)

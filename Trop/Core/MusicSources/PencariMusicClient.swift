@@ -95,8 +95,19 @@ struct PencariMusicClient: Sendable {
         let (data, response) = try await transport(URLRequest(url: url, timeoutInterval: 8))
         try Self.validate(response)
         let decoded = try JSONDecoder().decode(SearchResponse.self, from: data)
-        let tracks = decoded.tracks ?? []
-        return tracks.prefix(limit).map { track in
+        let all = decoded.tracks ?? []
+        // The origin returns every copy it has (FLAC, M4A…) for the same song.
+        // Keep the lossless ones and collapse duplicates so the UI and the
+        // matcher see one entry per track.
+        let lossless = all.filter { ($0.format ?? "flac").lowercased() == "flac" }
+        var seen = Set<String>()
+        let unique = (lossless.isEmpty ? all : lossless).filter { track in
+            // Copies differ by a second or two; bucket the duration so those
+            // collapse but live/radio versions stay apart.
+            let key = "\(track.title.lowercased())|\(track.artist?.lowercased() ?? "")|\((track.duration ?? 0) / 5)"
+            return seen.insert(key).inserted
+        }
+        return unique.prefix(limit).map { track in
             MusicCatalogTrack(
                 id: MusicCatalogID(source: .pencari, rawValue: track.id),
                 title: track.title,
@@ -123,9 +134,30 @@ struct PencariMusicClient: Sendable {
         return components.url
     }
 
-    /// Resolves a short code to a playable (FLAC) URL, retrying while the
-    /// origin reports it is busy.
+    /// What the stream endpoint knows before a single byte is downloaded.
+    struct StreamInfo: Sendable {
+        let url: URL
+        let format: String?
+        let quality: String?
+        let bitrateKbps: Int?
+        let sizeBytes: Int?
+
+        var isHiRes: Bool {
+            let value = (quality ?? "").lowercased()
+            return value.contains("hi_res") || value.contains("hires")
+                || value.contains("hi-res") || (bitrateKbps ?? 0) > 1000
+        }
+
+        var qualityLabel: String { isHiRes ? "FLAC · Hi-Res" : "FLAC · CD" }
+    }
+
+    /// Resolves a short code to a playable FLAC URL, retrying while the origin
+    /// reports it is busy.
     func resolveStreamURL(for rawId: String) async throws -> URL {
+        try await resolveStreamInfo(for: rawId).url
+    }
+
+    func resolveStreamInfo(for rawId: String) async throws -> StreamInfo {
         guard baseURL.host != nil else { throw PencariMusicError.invalidBase }
         var lastError: Error = PencariMusicError.unavailableTrack
         for attempt in 0..<3 {
@@ -144,7 +176,7 @@ struct PencariMusicClient: Sendable {
                 try Self.validate(response)
                 let decoded = try JSONDecoder().decode(StreamResponse.self, from: data)
                 if let absolute = URL(string: decoded.url), absolute.scheme != nil {
-                    return absolute
+                    return Self.info(decoded, url: absolute)
                 }
                 // Relative answers resolve against the token base, which must
                 // keep its trailing slash so the token isn't dropped.
@@ -152,7 +184,7 @@ struct PencariMusicClient: Sendable {
                 guard let streamURL = URL(string: decoded.url, relativeTo: baseDir)?.absoluteURL else {
                     throw PencariMusicError.unavailableTrack
                 }
-                return streamURL
+                return Self.info(decoded, url: streamURL)
             } catch let error as PencariMusicError {
                 if error == .originBusy, attempt < 2 {
                     lastError = error
@@ -168,6 +200,10 @@ struct PencariMusicClient: Sendable {
     /// "prefer lossless" path where latency matters and failure just falls
     /// back to YouTube.
     func resolveStreamURLFast(for rawId: String) async throws -> URL {
+        try await resolveStreamInfoFast(for: rawId).url
+    }
+
+    func resolveStreamInfoFast(for rawId: String) async throws -> StreamInfo {
         guard let url = streamEndpoint(rawId) else { throw PencariMusicError.invalidBase }
         let (data, response) = try await transport(URLRequest(url: url, timeoutInterval: 8))
         if let http = response as? HTTPURLResponse, http.statusCode == 503 {
@@ -176,13 +212,23 @@ struct PencariMusicClient: Sendable {
         try Self.validate(response)
         let decoded = try JSONDecoder().decode(StreamResponse.self, from: data)
         if let absolute = URL(string: decoded.url), absolute.scheme != nil {
-            return absolute
+            return Self.info(decoded, url: absolute)
         }
         let baseDir = baseURL.appendingPathComponent("")
         guard let streamURL = URL(string: decoded.url, relativeTo: baseDir)?.absoluteURL else {
             throw PencariMusicError.unavailableTrack
         }
-        return streamURL
+        return Self.info(decoded, url: streamURL)
+    }
+
+    private static func info(_ response: StreamResponse, url: URL) -> StreamInfo {
+        StreamInfo(
+            url: url,
+            format: response.format,
+            quality: response.quality,
+            bitrateKbps: response.kbps ?? response.bitrate,
+            sizeBytes: response.size
+        )
     }
 
     private static func validate(_ response: URLResponse) throws {
@@ -217,4 +263,8 @@ private struct StreamResponse: Decodable {
     let url: String
     let format: String?
     let mimeType: String?
+    let quality: String?
+    let kbps: Int?
+    let bitrate: Int?
+    let size: Int?
 }

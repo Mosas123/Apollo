@@ -33,8 +33,26 @@ final class DownloadManager: ObservableObject {
     @Published private(set) var persistedDownloadCount = 0
     @Published private(set) var isLoaded = false
 
+    /// Lossless files above this size ask for confirmation first: a hi-res
+    /// album can easily reach gigabytes.
+    nonisolated static let largeDownloadBytes: Int64 = 60 * 1024 * 1024
+
+    struct LargeDownloadRequest: Identifiable, Equatable {
+        let id: String
+        let title: String
+        let artist: String
+        let megabytes: Int
+        let quality: String?
+    }
+
+    @Published var largeDownloadRequest: LargeDownloadRequest?
+    private var pendingLargeDownload: (song: SongItem, source: DownloadSource)?
+    private var pencariCoolingUntil: Date?
+
     enum DownloadState: Equatable {
         case notStarted
+        /// Looking for a lossless source (Pencari/add-ons) before downloading.
+        case preparing
         case downloading(Double)
         case completed
         case failed(String)
@@ -299,10 +317,20 @@ extension DownloadManager {
         }
     }
 
-    func download(song: SongItem, allowLosslessSource: Bool = true) async {
+    func download(
+        song: SongItem,
+        allowLosslessSource: Bool = true,
+        confirmedLarge: Bool = false,
+        preResolved: DownloadSource? = nil,
+        retried: Bool = false
+    ) async {
         let videoId = song.videoId
         if case .downloading = downloads[videoId] {
             Log.downloadManager.debug("Download already in progress for \(videoId)")
+            return
+        }
+        if case .preparing = downloads[videoId] {
+            Log.downloadManager.debug("Download source already being prepared for \(videoId)")
             return
         }
 
@@ -336,14 +364,40 @@ extension DownloadManager {
             return
         }
 
+        let willTryLossless = preResolved == nil
+            && allowLosslessSource
+            && !MusicPlaybackIdentity.isExternal(videoId)
+            && SettingsStore.shared.losslessDownloads
+        if willTryLossless {
+            downloads[videoId] = .preparing
+        }
         setProgress(0.02, for: videoId)
         var destinationURL: URL?
+        var failedAddonKey: String?
         do {
             async let artworkData = prefetchArtwork(for: song)
 
             setProgress(0.05, for: videoId)
             let resolveStart = CFAbsoluteTimeGetCurrent()
-            let source = try await downloadSource(for: song, allowLossless: allowLosslessSource)
+            let source = preResolved ?? (try await downloadSource(for: song, allowLossless: allowLosslessSource))
+            let knownBytes = source.knownSizeBytes.map(Int64.init)
+                ?? await contentLength(of: source.url)
+            if !confirmedLarge, source.format == .flac,
+               let bytes = knownBytes,
+               bytes > Self.largeDownloadBytes {
+                pendingLargeDownload = (song, source)
+                downloads[videoId] = .notStarted
+                largeDownloadRequest = LargeDownloadRequest(
+                    id: videoId,
+                    title: song.title,
+                    artist: artist,
+                    megabytes: Int((bytes + 1_048_575) / 1_048_576),
+                    quality: source.qualityLabel
+                )
+                Log.downloadManager.debug("Large lossless download \(bytes / 1_048_576)MB — waiting for confirmation")
+                return
+            }
+            downloads[videoId] = .downloading(0)
             let resolveElapsed = CFAbsoluteTimeGetCurrent() - resolveStart
             let format = source.format
             Log.downloadManager.debug(
@@ -360,6 +414,23 @@ extension DownloadManager {
                 .appendingPathComponent("\(UUID().uuidString).\(format.tempExtension)")
             defer { try? fileManager.removeItem(at: tempDownload) }
             let dlStart = CFAbsoluteTimeGetCurrent()
+            let stallWatcher = Task { [weak self] in
+                var lastSize: Int64 = -1
+                var stalled = 0
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(5))
+                    if Task.isCancelled { return }
+                    guard let self else { return }
+                    let size = Int64((try? tempDownload.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+                    if size <= lastSize { stalled += 1 } else { stalled = 0 }
+                    lastSize = size
+                    if stalled >= 4 {
+                        await MainActor.run { self.activeFFmpegSessions[videoId]?.cancel() }
+                        return
+                    }
+                }
+            }
+            defer { stallWatcher.cancel() }
             try await downloadToFile(
                 from: source.url,
                 to: tempDownload,
@@ -368,8 +439,20 @@ extension DownloadManager {
             let dlElapsed = CFAbsoluteTimeGetCurrent() - dlStart
             let dlSize = (try? tempDownload.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
             Log.downloadManager.debug("DOWNLOAD \(String(format: "%.1f", dlElapsed))s \(dlSize / 1024)KB")
+            // Some origins close the connection early; a truncated FLAC still
+            // starts with the right magic bytes, so compare the byte count.
+            if source.format != .other, let expected = knownBytes, expected > 0,
+               Int64(dlSize) < expected - 262_144 {
+                Log.downloadManager.error("Truncated download: got \(dlSize) of \(expected) bytes")
+                throw DownloadError.incompleteTransfer
+            }
 
-            let artwork = await artworkData
+            var artwork = await artworkData
+            if let sourceArtwork = source.artworkURL,
+               let better = await prefetchArtwork(from: sourceArtwork.absoluteString) {
+                artwork = better
+            }
+            let album = source.album ?? song.album
 
             ensureDirectories()
             setProgress(0.88, for: videoId)
@@ -385,6 +468,7 @@ extension DownloadManager {
                         fileExtension: "flac",
                         title: song.title,
                         artist: artist,
+                        album: album,
                         artworkData: artwork,
                         videoId: videoId
                     )
@@ -396,6 +480,7 @@ extension DownloadManager {
                             fileExtension: "flac",
                             title: song.title,
                             artist: artist,
+                            album: album,
                             artworkData: nil,
                             videoId: videoId
                         )
@@ -410,6 +495,7 @@ extension DownloadManager {
                     fileExtension: "mp3",
                     title: song.title,
                     artist: artist,
+                    album: album,
                     artworkData: artwork,
                     videoId: videoId
                 )
@@ -426,6 +512,7 @@ extension DownloadManager {
                     fileExtension: "m4a",
                     title: song.title,
                     artist: artist,
+                    album: album,
                     artworkData: artwork,
                     videoId: videoId
                 )
@@ -440,6 +527,7 @@ extension DownloadManager {
                         outputURL: fileURL,
                         title: song.title,
                         artist: artist,
+                        album: album,
                         artworkData: artwork
                     ),
                     videoId: videoId
@@ -468,7 +556,7 @@ extension DownloadManager {
                 title: song.title,
                 artist: artist,
                 duration: song.duration,
-                thumbnailUrl: song.thumbnailUrl,
+                thumbnailUrl: source.artworkURL?.absoluteString ?? song.thumbnailUrl,
                 localPath: storedPath(for: fileURL),
                 downloadedAt: Date()
             )
@@ -484,7 +572,27 @@ extension DownloadManager {
             if let destinationURL { try? fileManager.removeItem(at: destinationURL) }
             downloads[videoId] = .notStarted
         } catch {
-            if cancelledDownloadIds.contains(videoId) || (error as? URLError)?.code == .cancelled {
+            let cancelled = cancelledDownloadIds.contains(videoId)
+                || (error as? URLError)?.code == .cancelled
+                || error is CancellationError
+            if let key = failedAddonKey, !cancelled {
+                await AddonHealth.shared.recordFailure(key)
+            }
+            // A second addon/copy is often enough: the failed one is cooling
+            // now, so the next lookup goes elsewhere instead of giving up.
+            if !cancelled, !retried, failedAddonKey != nil {
+                clearProgress(for: videoId)
+                if let destinationURL { try? fileManager.removeItem(at: destinationURL) }
+                downloads[videoId] = .notStarted
+                Log.downloadManager.debug("Retrying \(videoId) on another addon copy")
+                await download(
+                    song: song,
+                    allowLosslessSource: allowLosslessSource,
+                    retried: true
+                )
+                return
+            }
+            if cancelled {
                 cancelledDownloadIds.remove(videoId)
                 clearProgress(for: videoId)
                 if let destinationURL { try? fileManager.removeItem(at: destinationURL) }
@@ -527,22 +635,30 @@ extension DownloadManager {
         }
     }
 
-    private struct DownloadSource {
+    private struct DownloadSource: Sendable {
         let url: URL
         let mimeType: String
         let format: DownloadFormat
+        var album: String? = nil
+        var artworkURL: URL? = nil
+        var qualityLabel: String? = nil
+        var knownSizeBytes: Int? = nil
+        var addonKey: String? = nil
     }
 
     /// Picks what to download: an add-on track resolves its own stream; a
     /// YouTube song tries a lossless add-on match when the user prefers
     /// lossless, and falls back to the YouTube stream.
     private func downloadSource(for song: SongItem, allowLossless: Bool = true) async throws -> DownloadSource {
+        let requireCD = SettingsStore.shared.musicQualityMode == .cd
+        let preferAtmos = SettingsStore.shared.preferAtmos && !requireCD
         if let ref = AddonPlaybackID.decode(song.videoId) {
             guard let installation = MusicAddonsStore.shared.installation(key: ref.k) else {
                 throw MusicCatalogError.unavailableTrack
             }
             let client = try MusicAddonClient(installation: installation)
             let stream = try await client.resolveStream(type: ref.t, id: ref.i)
+            guard !stream.isEncrypted else { throw MusicCatalogError.unavailableTrack }
             switch stream.kind {
             case .youtube(let youTubeId):
                 let resolved = try await PlaybackManager.shared.resolve(
@@ -560,7 +676,12 @@ extension DownloadManager {
                 return DownloadSource(
                     url: url,
                     mimeType: stream.mimeType,
-                    format: Self.format(mime: stream.mimeType, url: url)
+                    format: Self.format(mime: stream.mimeType, url: url),
+                    album: song.album,
+                    artworkURL: song.thumbnailUrl.flatMap(URL.init(string:)),
+                    qualityLabel: Self.qualityLabel(for: stream),
+                    knownSizeBytes: stream.sizeBytes,
+                    addonKey: installation.key
                 )
             }
         }
@@ -570,7 +691,11 @@ extension DownloadManager {
         if allowLossless,
            !MusicPlaybackIdentity.isExternal(song.videoId),
            SettingsStore.shared.losslessDownloads,
-           let lossless = await raceLosslessSource(for: song) {
+           let lossless = await raceLosslessSource(
+               for: song,
+               requireCD: requireCD,
+               preferAtmos: preferAtmos
+           ) {
             Log.downloadManager.debug("Lossless source for \(song.videoId)")
             return lossless
         }
@@ -590,6 +715,37 @@ extension DownloadManager {
         )
     }
 
+    private func contentLength(of url: URL) async -> Int64? {
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = 10
+        guard let (_, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse,
+              http.statusCode == 200 || http.statusCode == 206 else { return nil }
+        let length = http.expectedContentLength
+        return length > 0 ? length : nil
+    }
+
+    /// Called from the confirmation alert; resumes with the already-resolved
+    /// source so nothing is looked up twice.
+    func confirmLargeDownload() {
+        guard let pending = pendingLargeDownload else { return }
+        pendingLargeDownload = nil
+        largeDownloadRequest = nil
+        Task { await download(song: pending.song, confirmedLarge: true, preResolved: pending.source) }
+    }
+
+    func cancelLargeDownload() {
+        pendingLargeDownload = nil
+        largeDownloadRequest = nil
+    }
+
+    private static func qualityLabel(for stream: AddonStream) -> String? {
+        if stream.qualityTier == "Atmos" { return "Dolby Atmos" }
+        guard stream.qualityTier == "Lossless" else { return nil }
+        return stream.isHiRes ? "FLAC · Hi-Res" : "FLAC · CD"
+    }
+
     private static func format(mime: String, url: URL) -> DownloadFormat {
         let type = mime.lowercased()
         let ext = url.pathExtension.lowercased()
@@ -603,13 +759,27 @@ extension DownloadManager {
 
     /// Pencari and the installed addons race each other; the first lossless
     /// hit wins and the other lookup is cancelled. YouTube is the fallback.
-    private func raceLosslessSource(for song: SongItem, seconds: Double = 14) async -> DownloadSource? {
+    private func raceLosslessSource(
+        for song: SongItem,
+        seconds: Double = 45,
+        requireCD: Bool = false,
+        preferAtmos: Bool = false
+    ) async -> DownloadSource? {
         await withTaskGroup(of: DownloadSource?.self) { group in
             group.addTask {
-                await self.withTimeout(seconds: seconds) { await self.pencariDownloadSource(for: song) }
+                await self.withTimeout(seconds: seconds) {
+                    await self.pencariDownloadSource(for: song, requireCD: requireCD)
+                }
             }
             group.addTask {
-                await self.withTimeout(seconds: seconds) { await self.addonDownloadSource(for: song) }
+                await self.withTimeout(seconds: seconds) {
+                    await self.addonDownloadSource(
+                        for: song,
+                        seconds: seconds,
+                        requireCD: requireCD,
+                        preferAtmos: preferAtmos
+                    )
+                }
             }
             var found: DownloadSource?
             for await candidate in group {
@@ -623,37 +793,92 @@ extension DownloadManager {
     }
 
     /// Best lossless addon stream for a YouTube song, probed before use.
-    private func addonDownloadSource(for song: SongItem) async -> DownloadSource? {
-        guard let match = await bestAddonMatch(for: song),
-              match.stream.qualityTier == "Lossless",
-              case .url(let url) = match.stream.kind,
-              await probeAudioURL(url) else { return nil }
-        return DownloadSource(url: url, mimeType: match.stream.mimeType, format: .flac)
+    private func addonDownloadSource(
+        for song: SongItem,
+        seconds: Double = 45,
+        requireCD: Bool = false,
+        preferAtmos: Bool = false
+    ) async -> DownloadSource? {
+        guard let match = await bestAddonMatch(
+                  for: song,
+                  seconds: seconds,
+                  requireCD: requireCD,
+                  preferAtmos: preferAtmos
+              ),
+              match.stream.qualityTier == "Lossless" || match.stream.qualityTier == "Atmos",
+              case .url(let url) = match.stream.kind else { return nil }
+        // Addons that report a size (PencariMusic) often answer HEAD badly;
+        // the stream endpoint already vouched for the URL.
+        // Atmos is lossy (E-AC3): it's only taken when the user asked for it.
+        if match.stream.qualityTier == "Atmos", !preferAtmos { return nil }
+        if match.stream.sizeBytes == nil, !(await probeAudioURL(url)) {
+            await AddonHealth.shared.recordFailure(match.track.installationKey)
+            return nil
+        }
+        return DownloadSource(
+            url: url,
+            mimeType: match.stream.mimeType,
+            format: .flac,
+            album: match.track.album,
+            artworkURL: match.track.poster,
+            qualityLabel: Self.qualityLabel(for: match.stream),
+            knownSizeBytes: match.stream.sizeBytes,
+            addonKey: match.track.installationKey
+        )
     }
 
     /// Same track on the bundled PencariMusic lossless source. Returns nil on
     /// any miss so the addon/YouTube paths still run.
-    private func pencariDownloadSource(for song: SongItem) async -> DownloadSource? {
+    private func pencariDownloadSource(for song: SongItem, requireCD: Bool = false) async -> DownloadSource? {
         guard !MusicPlaybackIdentity.isExternal(song.videoId) else { return nil }
         guard let client = PencariMusicClient.configured() else { return nil }
         let title = song.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return nil }
         let artist = song.artists.first?.name ?? ""
         let query = artist.isEmpty ? title : "\(artist) \(title)"
+        if let until = pencariCoolingUntil, until > Date() { return nil }
         guard let tracks = try? await client.searchTracks(query: query, limit: 8),
               let best = tracks.first(where: {
                   TextMatch.titlesMatch($0.title, title)
                       && (artist.isEmpty || TextMatch.artistsMatch($0.artist, artist))
-              }),
-              let url = try? await client.resolveStreamURLFast(for: best.id.rawValue),
-              await probeAudioURL(url) else { return nil }
-        return DownloadSource(url: url, mimeType: "audio/flac", format: .flac)
+              }) else { return nil }
+        guard let info = try? await client.resolveStreamInfoFast(for: best.id.rawValue) else {
+            // Dead/saturated origin: stop paying the lookup on every download.
+            pencariCoolingUntil = Date().addingTimeInterval(120)
+            return nil
+        }
+        // CD mode: this copy is hi-res, so don't count it as a bad origin.
+        if requireCD, info.isHiRes { return nil }
+        guard info.sizeBytes != nil || await probeAudioURL(info.url) else {
+            pencariCoolingUntil = Date().addingTimeInterval(120)
+            return nil
+        }
+        return DownloadSource(
+            url: info.url,
+            mimeType: "audio/flac",
+            format: .flac,
+            album: best.album,
+            artworkURL: best.artworkURL,
+            qualityLabel: info.qualityLabel,
+            knownSizeBytes: info.sizeBytes
+        )
     }
 
     /// Bounded add-on lookup so a slow addon can't stall the download; without
     /// a match the YouTube stream is used.
-    private func bestAddonMatch(for song: SongItem, seconds: Double = 12) async -> AddonSourceResolver.Match? {
-        await withTimeout(seconds: seconds) { await AddonSourceResolver.bestMatch(for: song) }
+    private func bestAddonMatch(
+        for song: SongItem,
+        seconds: Double = 12,
+        requireCD: Bool = false,
+        preferAtmos: Bool = false
+    ) async -> AddonSourceResolver.Match? {
+        await withTimeout(seconds: seconds) {
+            await AddonSourceResolver.bestMatch(
+                for: song,
+                requireCD: requireCD,
+                preferAtmos: preferAtmos
+            )
+        }
     }
 
     /// Runs an optional lookup with a deadline; nil on timeout.
@@ -837,9 +1062,10 @@ extension DownloadManager {
             lastProgressTime[videoId] = now
         }
         lastReportedProgress[videoId] = clamped
-        if case .downloading = (downloads[videoId] ?? .notStarted) {
-            // already flagged as downloading
-        } else {
+        switch downloads[videoId] ?? .notStarted {
+        case .downloading, .preparing:
+            break
+        default:
             downloads[videoId] = .downloading(0)
         }
         progressBox(for: videoId).fraction = clamped
@@ -1109,10 +1335,12 @@ extension DownloadManager {
 
     var activeDownloads: [(videoId: String, progress: Double)] {
         downloads.compactMap { videoId, state in
-            if case .downloading = state {
+            switch state {
+            case .downloading, .preparing:
                 return (videoId, progressBoxes[videoId]?.fraction ?? 0)
+            default:
+                return nil
             }
-            return nil
         }
         .sorted { $0.progress > $1.progress }
     }
@@ -1141,8 +1369,12 @@ extension DownloadManager {
         return tracksById[videoId] != nil ? .completed : .notStarted
     }
 
-    private func ffmpegMetadataArgs(title: String, artist: String) -> [String] {
-        ["-metadata", "title=\(title)", "-metadata", "artist=\(artist)"]
+    private func ffmpegMetadataArgs(title: String, artist: String, album: String? = nil) -> [String] {
+        var args = ["-metadata", "title=\(title)", "-metadata", "artist=\(artist)"]
+        if let album, !album.isEmpty {
+            args += ["-metadata", "album=\(album)"]
+        }
+        return args
     }
 
     private func writeTempArtwork(_ data: Data?) throws -> URL? {
@@ -1159,6 +1391,7 @@ extension DownloadManager {
         fileExtension: String,
         title: String,
         artist: String,
+        album: String? = nil,
         artworkData: Data?,
         videoId: String
     ) async throws {
@@ -1185,7 +1418,7 @@ extension DownloadManager {
         } else {
             args += ["-c", "copy"]
         }
-        args += ffmpegMetadataArgs(title: title, artist: artist)
+        args += ffmpegMetadataArgs(title: title, artist: artist, album: album)
         args.append(tempOutput.path)
 
         try await runFFmpeg(arguments: args, videoId: videoId)
@@ -1219,7 +1452,7 @@ extension DownloadManager {
         } else {
             args += ["-c:a", "aac", "-b:a", "\(bitrate)"]
         }
-        args += ffmpegMetadataArgs(title: request.title, artist: request.artist)
+        args += ffmpegMetadataArgs(title: request.title, artist: request.artist, album: request.album)
         args.append(tempOutput.path)
 
         try await runFFmpeg(arguments: args, videoId: videoId)
@@ -1232,6 +1465,7 @@ extension DownloadManager {
         let outputURL: URL
         let title: String
         let artist: String
+        let album: String?
         let artworkData: Data?
     }
 }
@@ -1239,6 +1473,7 @@ extension DownloadManager {
 enum DownloadError: Error, LocalizedError {
     case invalidStreamURL
     case transcodeFailed
+    case incompleteTransfer
 
     var errorDescription: String? {
         switch self {
@@ -1246,6 +1481,8 @@ enum DownloadError: Error, LocalizedError {
             return "The stream URL returned by the server was invalid"
         case .transcodeFailed:
             return "Could not convert this track for offline playback."
+        case .incompleteTransfer:
+            return "The server closed the download early. Try again."
         }
     }
 }
