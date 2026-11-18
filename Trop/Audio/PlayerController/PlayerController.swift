@@ -316,6 +316,16 @@ extension PlayerController {
         NowPlaying.shared.currentTime = playbackStart
         NowPlaying.shared.duration = max(0, duration ?? 0)
         setNowPlayingMetadata()
+        if startAt == 0, losslessLabel == nil {
+            volumeOverride = 0
+            applyPlayerVolume()
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(120))
+                guard let self else { return }
+                await self.fadeVolume(to: SettingsStore.shared.playerVolume, duration: 0.3)
+                self.setVolumeOverride(nil)
+            }
+        }
     }
 
     func seek(to time: TimeInterval) {

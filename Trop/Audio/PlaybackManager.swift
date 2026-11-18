@@ -618,7 +618,9 @@ actor PlaybackManager {
         let previous = await MainActor.run { PlayerController.shared.currentVideoId }
         let isPlaying = await MainActor.run { NowPlaying.shared.isPlaying }
         if isPlaying, let previous, previous != videoId {
+            await PlayerController.shared.fadeVolume(to: 0, duration: 0.12)
             await MainActor.run { PlayerController.shared.setPaused(true) }
+            await MainActor.run { PlayerController.shared.setVolumeOverride(nil) }
         }
         if MusicPlaybackIdentity.isExternal(videoId) {
             let result: PlaybackResult
