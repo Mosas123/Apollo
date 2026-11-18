@@ -17,7 +17,13 @@ enum MusicAddonDownloadError: Error, LocalizedError {
     }
 }
 
-private final class MusicAddonNoRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+private final class MusicAddonRedirectPolicy: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let baseDomain: String
+
+    init(baseDomain: String) {
+        self.baseDomain = baseDomain
+    }
+
     func urlSession(
         _ session: URLSession,
         task: URLSessionTask,
@@ -25,9 +31,15 @@ private final class MusicAddonNoRedirects: NSObject, URLSessionTaskDelegate, @un
         newRequest request: URLRequest,
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
-        // Never silently follow an untrusted manifest URL to another host,
-        // a LAN service or an HTTP endpoint.
-        completionHandler(nil)
+        // Follow only HTTPS redirects inside the same registrable domain
+        // (e.g. stream -> stream1). Never jump to another host or HTTP.
+        guard let target = request.url,
+              target.scheme?.lowercased() == "https",
+              MusicAddonManifestDownloader.registrableDomain(target.host) == baseDomain else {
+            completionHandler(nil)
+            return
+        }
+        completionHandler(request)
     }
 }
 
@@ -40,6 +52,9 @@ struct MusicAddonManifestDownloader: Sendable {
             throw MusicAddonDownloadError.invalidURL
         }
 
+        guard let baseDomain = Self.registrableDomain(url.host) else {
+            throw MusicAddonDownloadError.invalidURL
+        }
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpShouldSetCookies = false
         configuration.httpCookieAcceptPolicy = .never
@@ -57,14 +72,15 @@ struct MusicAddonManifestDownloader: Sendable {
         let response: URLResponse
         do {
             (stream, response) = try await session.bytes(
-                for: request, delegate: MusicAddonNoRedirects()
+                for: request, delegate: MusicAddonRedirectPolicy(baseDomain: baseDomain)
             )
         } catch {
             throw MusicAddonDownloadError.requestFailed
         }
         guard let http = response as? HTTPURLResponse,
               http.statusCode == 200,
-              http.url?.host == url.host else {
+              let finalURL = http.url,
+              Self.registrableDomain(finalURL.host) == baseDomain else {
             throw MusicAddonDownloadError.invalidResponse
         }
         if http.expectedContentLength > 64 * 1024 {
@@ -84,7 +100,19 @@ struct MusicAddonManifestDownloader: Sendable {
             throw MusicAddonDownloadError.requestFailed
         }
         guard !data.isEmpty else { throw MusicAddonDownloadError.invalidResponse }
-        return (data, url)
+        return (data, finalURL)
+    }
+
+    static func registrableDomain(_ host: String?) -> String? {
+        guard let host = host?.lowercased(), !host.isEmpty else { return nil }
+        let labels = host.split(separator: ".").map(String.init)
+        guard labels.count >= 2 else { return host }
+        let twoPartSuffixes: Set<String> = ["co.uk", "com.br", "com.au", "co.jp", "co.nz", "com.mx", "co.in"]
+        let suffix = labels.suffix(2).joined(separator: ".")
+        if twoPartSuffixes.contains(suffix), labels.count >= 3 {
+            return labels.suffix(3).joined(separator: ".")
+        }
+        return labels.suffix(2).joined(separator: ".")
     }
 }
 
