@@ -47,6 +47,7 @@
 "All" = "Todo";
 "All Results" = "Todos los resultados";
 "Allow Hi-Res (24-bit)" = "Permitir alta resolución (24 bits)";
+"Amber" = "Ámbar";
 "An addon endpoint is invalid or unsafe." = "El complemento contiene una dirección no válida o no compatible.";
 "App volume" = "Volumen de la app";
 "Appearance" = "Apariencia";
@@ -64,6 +65,8 @@
 "Audio Quality" = "Calidad del audio";
 "Audio capable" = "Con audio";
 "Audio quality" = "Calidad del audio";
+"Audio: %@" = "Audio: %@";
+"Audio: unknown" = "Calidad de audio desconocida";
 "Audiobooks" = "Audiolibros";
 "August" = "Agosto";
 "Authorizing…" = "Conectando la cuenta…";
@@ -79,6 +82,8 @@
 "Bass Reducer" = "Menos graves";
 "Best FLAC" = "Mejor calidad FLAC";
 "Bitrate" = "Tasa de bits";
+"Blue" = "Azul";
+"Brown" = "Marrón";
 "Button 1" = "Botón 1";
 "Button 2" = "Botón 2";
 "Buttons" = "Botones";
@@ -161,6 +166,7 @@
 "Custom model" = "Modelo personalizado";
 "Customize Radio" = "Personalizar radio";
 "Custom…" = "Personalizado…";
+"Cyan" = "Cian";
 "DND" = "No molestar";
 "Daily Discover" = "Tu descubrimiento diario";
 "Dance & electronic" = "Dance y electrónica";
@@ -220,6 +226,7 @@
 "Energize" = "Actívate";
 "Energy" = "Energía";
 "Enter a valid HTTPS addon manifest URL." = "Introduce una dirección HTTPS válida para el complemento.";
+"Enter a valid HTTPS manifest URL." = "Introduce una URL HTTPS válida para el manifiesto.";
 "Episodes" = "Episodios";
 "Equalizer" = "Ecualizador";
 "Equalizer Off" = "Ecualizador desactivado";
@@ -257,6 +264,7 @@
 "GitHub" = "GitHub";
 "Go to Album" = "Ir al álbum";
 "Go to Artist" = "Ir al artista";
+"Green" = "Verde";
 "Guest" = "Invitado";
 "HTTP cache" = "Caché de red";
 "Harassment or bullying" = "Acoso o intimidación";
@@ -278,6 +286,7 @@
 "Images" = "Imágenes";
 "Include explicit" = "Incluir contenido explícito";
 "Indie & alternative" = "Indie y alternativa";
+"Indigo" = "Índigo";
 "Install Disabled" = "Añadir sin activar";
 "Install a compatible music addon to manage it here." = "Añade un complemento musical compatible para gestionarlo aquí.";
 "Installed" = "Instalados";
@@ -301,6 +310,7 @@
 "Light" = "Claro";
 "Like" = "Me gusta";
 "Liked Songs" = "Canciones que te gustan";
+"Lime" = "Verde lima";
 "Link Copied" = "Enlace copiado";
 "Links" = "Enlaces";
 "Liquid Glass" = "Liquid Glass";
@@ -426,6 +436,7 @@
 "Optional. An AI model suggests songs from your history; each suggestion is verified on YouTube Music before it appears. Uses your own API key." = "Opcional. Recibe sugerencias basadas en lo que escuchas. La app comprueba cada canción en YouTube Music. Necesitas tu propia clave de API.";
 "Optional. Create a free key at podcastindex.org to enrich podcast art and metadata. Without it, the app falls back to iTunes podcast search." = "Opcional. Consigue una clave gratuita en podcastindex.org para completar las portadas y los datos de los podcasts. Si no la configuras, se usará la búsqueda de podcasts de iTunes.";
 "Options" = "Opciones";
+"Orange" = "Naranja";
 "Original duration" = "Duración original";
 "Overview" = "Resumen";
 "Party" = "Fiesta";
@@ -436,6 +447,7 @@
 "Persist Queue" = "Conservar la cola";
 "Persist Queue restores your queue, shuffle, and repeat state when the app relaunches." = "Recupera tu cola y los ajustes de reproducción aleatoria y repetición al volver a abrir la app.";
 "Pin to Quick Picks" = "Fijar en Selección rápida";
+"Pink" = "Rosa";
 "Play" = "Reproducir";
 "Play After" = "Añadir al final de la cola";
 "Play All" = "Reproducir todo";
@@ -460,6 +472,8 @@
 "Preferences" = "Preferencias";
 "Preferred Source" = "Calidad de reproducción preferida";
 "Preferred Source picks which stream to use. If \"Upgrade to best quality during playback\" is on, the app may switch to a better source mid-song; you'll hear a very short fade (about 0.3s) while the new stream loads, then playback continues at the same position." = "Elige la calidad que prefieres al reproducir. Si activas la mejora de calidad durante la reproducción, la app podrá cambiar a una fuente mejor con una transición breve, sin perder tu posición.";
+"Preparing download…" = "Preparando la descarga…";
+"Preparing…" = "Preparando…";
 "Presence" = "Estado de actividad";
 "Preview" = "Vista previa";
 "Previous" = "Anterior";
@@ -472,6 +486,7 @@
 "Provider Order" = "Prioridad de los proveedores";
 "Providers" = "Proveedores";
 "Pull to refresh or try another category." = "Desliza hacia abajo para actualizar o elige otra categoría.";
+"Purple" = "Morado";
 "Qobuz" = "Qobuz";
 "Qobuz credentials removed." = "Se eliminaron las credenciales de Qobuz.";
 "Queue" = "Cola de reproducción";
@@ -485,6 +500,7 @@
 "Recently Added" = "Añadido recientemente";
 "Recently Played" = "Escuchado recientemente";
 "Recently searched" = "Búsquedas recientes";
+"Red" = "Rojo";
 "Refetch" = "Buscar de nuevo";
 "Region" = "Región";
 "Register a listen after %ld%% of the song or %@, whichever comes first. Songs shorter than %@ are skipped." = "Se registra la escucha al llegar al %ld%% de la canción o a %@, lo que ocurra primero. No se registran las canciones de menos de %@.";
@@ -632,6 +648,7 @@
 "Syncs with your YouTube Music account. This cannot be changed later." = "Se sincroniza con tu cuenta de YouTube Music. Esta opción no se puede cambiar después.";
 "System" = "Sistema";
 "Tab Bar" = "Barra de pestañas";
+"Teal" = "Verde azulado";
 "Template" = "Plantilla";
 "Test key" = "Probar clave";
 "Thanks for helping keep YouTube safe." = "Gracias por ayudar a mantener YouTube seguro.";
@@ -639,6 +656,7 @@
 "The addon limit has been reached." = "Alcanzaste el límite de complementos.";
 "The addon name, identifier or version is invalid." = "El nombre, el identificador o la versión del complemento no son válidos.";
 "The addon update requires approval for new permissions." = "Revisa los permisos nuevos antes de actualizar el complemento.";
+"The demo addon is already installed." = "El complemento de ejemplo ya está instalado.";
 "The download timed out." = "La descarga tardó demasiado. Vuelve a intentarlo.";
 "The manifest could not be fetched. Check the URL and connection." = "No se pudo cargar el complemento. Revisa la dirección y tu conexión.";
 "The manifest exceeds the 64 KB size limit." = "El archivo del complemento supera el límite de 64 KB.";
@@ -692,6 +710,7 @@
 "User Status" = "Estado del usuario";
 "User authentication token" = "Token de acceso del usuario";
 "V-Shape" = "En V";
+"VBR (lossless)" = "Tasa variable (sin pérdida)";
 "Variety" = "Variedad";
 "Version" = "Versión";
 "Version %@" = "Versión %@";

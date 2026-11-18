@@ -1,7 +1,7 @@
 # Thrum translations
 
-The app declares English (`en`), Spanish (`es`) and Chinese (`zh`, simplified
-characters). iOS chooses among them using the user's app language settings.
+The app declares English (`en`), Spanish (`es`), French (`fr`), Brazilian
+Portuguese (`pt-BR`) and Chinese (`zh`, simplified characters). iOS chooses among them using the user's app language settings.
 English is the development language and fallback.
 
 Edit the JSON catalogs in this directory, then run:
@@ -22,6 +22,11 @@ The checks do not compile or launch the app.
   concise and explain failures in language a listener can act on.
 - Use neutral Spanish consistently: “Biblioteca”, “Reproducir a continuación”,
   “Accesos rápidos”, “Sin pérdida” and “Descargas”.
+- Use natural French interface terms: “Bibliothèque”, “Écouter ensuite”,
+  “Sélection rapide” and “Sans perte”. Address the listener with “vous”.
+- Use Brazilian Portuguese: “Configurações”, “Reproduzir a seguir”,
+  “Músicas curtidas”, “Baixar” and “Sem perdas”. Avoid European Portuguese
+  terms such as “ficheiro”, “ecrã” or “transferir” for downloads.
 - Preserve provider names and technical identifiers such as FLAC, Qobuz and
   Last.fm. Song titles, artist names and fetched descriptions are content.
 - Preserve printf argument types (`%@`, `%ld`) and escaped percentages (`%%`).
@@ -36,5 +41,5 @@ The checks do not compile or launch the app.
 
 Before release, inspect Home, Search, Settings, playback, VoiceOver labels,
 errors, and singular/plural counts on an iPhone in each language. Check long
-Spanish labels and large text sizes for clipping. Automated catalog and syntax
+French, Spanish and Portuguese labels and large text sizes for clipping. Automated catalog and syntax
 checks do not replace that visual review.

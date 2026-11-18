@@ -562,7 +562,7 @@ struct SongDetailsView: View {
                 if s.bitrate > 0 {
                     row("Bitrate", "\(s.bitrate / 1000) kbps")
                 } else if NowPlaying.shared.currentLosslessLabel != nil {
-                    row("Bitrate", "VBR (lossless)")
+                    row("Bitrate", String(localized: "VBR (lossless)"))
                 } else {
                     row("Bitrate", "—")
                 }

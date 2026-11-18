@@ -79,7 +79,7 @@ struct SettingsView: View {
                 .frame(width: 48, height: 48)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(accountState.isLoggedIn ? accountState.accountName : "Guest")
+                    Text(accountState.isLoggedIn ? accountState.accountName : String(localized: "Guest"))
                         .font(.headline)
                         .lineLimit(1)
                 }

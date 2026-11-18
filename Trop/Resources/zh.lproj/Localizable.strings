@@ -47,6 +47,7 @@
 "All" = "全部";
 "All Results" = "全部结果";
 "Allow Hi-Res (24-bit)" = "允许高解析度（24 位）";
+"Amber" = "琥珀色";
 "An addon endpoint is invalid or unsafe." = "扩展包含无效或不受支持的地址。";
 "App volume" = "应用音量";
 "Appearance" = "外观";
@@ -64,6 +65,8 @@
 "Audio Quality" = "音质";
 "Audio capable" = "支持音频";
 "Audio quality" = "音质";
+"Audio: %@" = "音频：%@";
+"Audio: unknown" = "音质未知";
 "Audiobooks" = "有声书";
 "August" = "八月";
 "Authorizing…" = "正在授权…";
@@ -79,6 +82,8 @@
 "Bass Reducer" = "降低低音";
 "Best FLAC" = "最佳 FLAC 音质";
 "Bitrate" = "比特率";
+"Blue" = "蓝色";
+"Brown" = "棕色";
 "Button 1" = "按钮 1";
 "Button 2" = "按钮 2";
 "Buttons" = "按钮";
@@ -161,6 +166,7 @@
 "Custom model" = "自定义模型";
 "Customize Radio" = "自定义电台";
 "Custom…" = "自定义…";
+"Cyan" = "青色";
 "DND" = "勿扰";
 "Daily Discover" = "每日发现";
 "Dance & electronic" = "舞曲与电子";
@@ -220,6 +226,7 @@
 "Energize" = "活力";
 "Energy" = "活力";
 "Enter a valid HTTPS addon manifest URL." = "请输入有效的 HTTPS 扩展清单地址。";
+"Enter a valid HTTPS manifest URL." = "请输入有效的 HTTPS 清单地址。";
 "Episodes" = "剧集";
 "Equalizer" = "均衡器";
 "Equalizer Off" = "均衡器已关闭";
@@ -257,6 +264,7 @@
 "GitHub" = "GitHub";
 "Go to Album" = "查看专辑";
 "Go to Artist" = "查看艺人";
+"Green" = "绿色";
 "Guest" = "访客";
 "HTTP cache" = "网络缓存";
 "Harassment or bullying" = "骚扰或欺凌";
@@ -278,6 +286,7 @@
 "Images" = "图片";
 "Include explicit" = "包含成人内容";
 "Indie & alternative" = "独立与另类";
+"Indigo" = "靛蓝色";
 "Install Disabled" = "安装但不启用";
 "Install a compatible music addon to manage it here." = "安装兼容的音乐扩展后，可在此管理。";
 "Installed" = "已安装";
@@ -301,6 +310,7 @@
 "Light" = "浅色";
 "Like" = "喜欢";
 "Liked Songs" = "喜欢的歌曲";
+"Lime" = "青柠色";
 "Link Copied" = "链接已复制";
 "Links" = "链接";
 "Liquid Glass" = "Liquid Glass";
@@ -426,6 +436,7 @@
 "Optional. An AI model suggests songs from your history; each suggestion is verified on YouTube Music before it appears. Uses your own API key." = "可选功能：AI 根据收听记录推荐歌曲，每首推荐都会先在 YouTube Music 中验证。需要使用你自己的 API 密钥。";
 "Optional. Create a free key at podcastindex.org to enrich podcast art and metadata. Without it, the app falls back to iTunes podcast search." = "可选功能：在 podcastindex.org 申请免费密钥，以补充播客封面和信息。未配置时使用 iTunes 播客搜索。";
 "Options" = "选项";
+"Orange" = "橙色";
 "Original duration" = "原始时长";
 "Overview" = "概览";
 "Party" = "派对";
@@ -436,6 +447,7 @@
 "Persist Queue" = "保持队列";
 "Persist Queue restores your queue, shuffle, and repeat state when the app relaunches." = "重新打开应用时恢复队列、随机播放和循环状态。";
 "Pin to Quick Picks" = "置顶到快捷精选";
+"Pink" = "粉色";
 "Play" = "播放";
 "Play After" = "添加到队列末尾";
 "Play All" = "全部播放";
@@ -460,6 +472,8 @@
 "Preferences" = "偏好设置";
 "Preferred Source" = "首选播放音质";
 "Preferred Source picks which stream to use. If \"Upgrade to best quality during playback\" is on, the app may switch to a better source mid-song; you'll hear a very short fade (about 0.3s) while the new stream loads, then playback continues at the same position." = "选择首选播放音质。启用播放中音质升级后，应用可切换到更好的音源；切换时会有短暂淡入淡出，并从原进度继续播放。";
+"Preparing download…" = "正在准备下载…";
+"Preparing…" = "准备中…";
 "Presence" = "状态";
 "Preview" = "预览";
 "Previous" = "上一首";
@@ -472,6 +486,7 @@
 "Provider Order" = "歌词来源优先级";
 "Providers" = "提供方";
 "Pull to refresh or try another category." = "下拉刷新，或试试其他分类。";
+"Purple" = "紫色";
 "Qobuz" = "Qobuz";
 "Qobuz credentials removed." = "已移除 Qobuz 凭据。";
 "Queue" = "播放队列";
@@ -485,6 +500,7 @@
 "Recently Added" = "最近添加";
 "Recently Played" = "最近播放";
 "Recently searched" = "最近搜索";
+"Red" = "红色";
 "Refetch" = "重新获取";
 "Region" = "地区";
 "Register a listen after %ld%% of the song or %@, whichever comes first. Songs shorter than %@ are skipped." = "播放达到歌曲的 %ld%% 或 %@ 时记录收听，以先到者为准。短于 %@ 的歌曲不记录。";
@@ -632,6 +648,7 @@
 "Syncs with your YouTube Music account. This cannot be changed later." = "与 YouTube Music 账户同步。此设置之后无法更改。";
 "System" = "系统默认";
 "Tab Bar" = "标签栏";
+"Teal" = "蓝绿色";
 "Template" = "模板";
 "Test key" = "测试密钥";
 "Thanks for helping keep YouTube safe." = "感谢你帮助维护 YouTube 的安全。";
@@ -639,6 +656,7 @@
 "The addon limit has been reached." = "已达到扩展数量上限。";
 "The addon name, identifier or version is invalid." = "扩展名称、标识或版本无效。";
 "The addon update requires approval for new permissions." = "更新此扩展前，需要确认新增权限。";
+"The demo addon is already installed." = "示例扩展已安装。";
 "The download timed out." = "下载超时，请重试。";
 "The manifest could not be fetched. Check the URL and connection." = "无法获取扩展清单，请检查地址和网络连接。";
 "The manifest exceeds the 64 KB size limit." = "扩展清单超过 64 KB 的大小限制。";
@@ -692,6 +710,7 @@
 "User Status" = "用户状态";
 "User authentication token" = "用户访问令牌";
 "V-Shape" = "V 形";
+"VBR (lossless)" = "可变比特率（无损）";
 "Variety" = "多样";
 "Version" = "版本";
 "Version %@" = "版本 %@";

@@ -10,7 +10,7 @@ from pathlib import Path
 import generate_localizations as generator
 
 ROOT = Path(__file__).resolve().parent.parent
-LOCALES = ('en', 'es', 'zh')
+LOCALES = ('en', 'es', 'fr', 'pt-BR', 'zh')
 
 
 class LocalizationTests(unittest.TestCase):
@@ -50,7 +50,7 @@ class LocalizationTests(unittest.TestCase):
                     self.assertEqual(count['NSStringFormatSpecTypeKey'], 'NSStringPluralRuleType')
                     self.assertEqual(count['NSStringFormatValueTypeKey'], 'ld')
                     self.assertIn('other', count)
-                    if locale in ('en', 'es'):
+                    if locale != 'zh':
                         self.assertIn('one', count)
                         self.assertNotEqual(count['one'], count['other'])
                     for rule, text in count.items():
@@ -62,7 +62,7 @@ class LocalizationTests(unittest.TestCase):
         project = (ROOT / 'Trop.xcodeproj' / 'project.pbxproj').read_text()
         regions = re.search(r'knownRegions = \((.*?)\);', project, re.S).group(1)
         for locale in LOCALES:
-            self.assertRegex(regions, rf'\b{locale},')
+            self.assertIn(locale, [item.strip().strip(chr(34)) for item in regions.split(',')])
 
     def test_no_accidental_chinese_in_spanish(self):
         for key, value in self.catalogs['es'].items():

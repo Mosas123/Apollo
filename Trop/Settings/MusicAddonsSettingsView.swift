@@ -208,7 +208,7 @@ struct MusicAddonsSettingsView: View {
                     do {
                         try addonStore.installSample()
                     } catch MusicAddonError.alreadyInstalled {
-                        show("The demo addon is already installed.")
+                        show(String(localized: "The demo addon is already installed."))
                     } catch {
                         show(error.localizedDescription)
                     }
@@ -229,7 +229,7 @@ struct MusicAddonsSettingsView: View {
         if caps.hiRes { parts.append("Hi-Res") }
         if caps.aac320 { parts.append("AAC 320") }
         if caps.atmos { parts.append("Atmos") }
-        return parts.isEmpty ? "Audio: unknown" : "Audio: " + parts.joined(separator: " · ")
+        return parts.isEmpty ? String(localized: "Audio: unknown") : AppStrings.format("Audio: %@", parts.joined(separator: " · "))
     }
 
     private var installedSection: some View {
@@ -407,7 +407,7 @@ struct MusicAddonsSettingsView: View {
         guard !isChecking else { return }
         let input = manifestURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: input) else {
-            show("Enter a valid HTTPS manifest URL.")
+            show(String(localized: "Enter a valid HTTPS manifest URL."))
             return
         }
         isChecking = true

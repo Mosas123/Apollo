@@ -12,7 +12,7 @@ struct ActiveDownloadRow: View {
     let videoId: String
     let progress: Double
 
-    @State private var title = "Downloading…"
+    @State private var title = String(localized: "Downloading…")
     @State private var artist = ""
     @State private var thumbnailUrl: String?
 
@@ -21,7 +21,7 @@ struct ActiveDownloadRow: View {
             thumbnailView
             infoStack
             Spacer(minLength: 0)
-            Text(progress > 0 ? "\(Int(progress * 100))%" : "Preparing…")
+            Text(progress > 0 ? "\(Int(progress * 100))%" : String(localized: "Preparing…"))
                 .font(.caption.weight(.semibold))
                 .monospacedDigit()
                 .foregroundStyle(settings.accentColor)
@@ -67,7 +67,7 @@ struct ActiveDownloadRow: View {
             Text(title)
                 .font(.subheadline.weight(.medium))
                 .lineLimit(1)
-            Text(artist.isEmpty ? "Preparing download…" : artist)
+            Text(artist.isEmpty ? String(localized: "Preparing download…") : artist)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

@@ -47,6 +47,7 @@
 "All" = "All";
 "All Results" = "All Results";
 "Allow Hi-Res (24-bit)" = "Allow Hi-Res (24-bit)";
+"Amber" = "Amber";
 "An addon endpoint is invalid or unsafe." = "An addon endpoint is invalid or unsafe.";
 "App volume" = "App volume";
 "Appearance" = "Appearance";
@@ -64,6 +65,8 @@
 "Audio Quality" = "Audio Quality";
 "Audio capable" = "Audio capable";
 "Audio quality" = "Audio quality";
+"Audio: %@" = "Audio: %@";
+"Audio: unknown" = "Audio: unknown";
 "Audiobooks" = "Audiobooks";
 "August" = "August";
 "Authorizing…" = "Authorizing…";
@@ -79,6 +82,8 @@
 "Bass Reducer" = "Bass Reducer";
 "Best FLAC" = "Best FLAC";
 "Bitrate" = "Bitrate";
+"Blue" = "Blue";
+"Brown" = "Brown";
 "Button 1" = "Button 1";
 "Button 2" = "Button 2";
 "Buttons" = "Buttons";
@@ -161,6 +166,7 @@
 "Custom model" = "Custom model";
 "Customize Radio" = "Customize Radio";
 "Custom…" = "Custom…";
+"Cyan" = "Cyan";
 "DND" = "DND";
 "Daily Discover" = "Daily Discover";
 "Dance & electronic" = "Dance & electronic";
@@ -220,6 +226,7 @@
 "Energize" = "Energize";
 "Energy" = "Energy";
 "Enter a valid HTTPS addon manifest URL." = "Enter a valid HTTPS addon manifest URL.";
+"Enter a valid HTTPS manifest URL." = "Enter a valid HTTPS manifest URL.";
 "Episodes" = "Episodes";
 "Equalizer" = "Equalizer";
 "Equalizer Off" = "Equalizer Off";
@@ -257,6 +264,7 @@
 "GitHub" = "GitHub";
 "Go to Album" = "Go to Album";
 "Go to Artist" = "Go to Artist";
+"Green" = "Green";
 "Guest" = "Guest";
 "HTTP cache" = "HTTP cache";
 "Harassment or bullying" = "Harassment or bullying";
@@ -278,6 +286,7 @@
 "Images" = "Images";
 "Include explicit" = "Include explicit";
 "Indie & alternative" = "Indie & alternative";
+"Indigo" = "Indigo";
 "Install Disabled" = "Install Disabled";
 "Install a compatible music addon to manage it here." = "Install a compatible music addon to manage it here.";
 "Installed" = "Installed";
@@ -301,6 +310,7 @@
 "Light" = "Light";
 "Like" = "Like";
 "Liked Songs" = "Liked Songs";
+"Lime" = "Lime";
 "Link Copied" = "Link Copied";
 "Links" = "Links";
 "Liquid Glass" = "Liquid Glass";
@@ -426,6 +436,7 @@
 "Optional. An AI model suggests songs from your history; each suggestion is verified on YouTube Music before it appears. Uses your own API key." = "Optional. An AI model suggests songs from your history; each suggestion is verified on YouTube Music before it appears. Uses your own API key.";
 "Optional. Create a free key at podcastindex.org to enrich podcast art and metadata. Without it, the app falls back to iTunes podcast search." = "Optional. Create a free key at podcastindex.org to enrich podcast art and metadata. Without it, the app falls back to iTunes podcast search.";
 "Options" = "Options";
+"Orange" = "Orange";
 "Original duration" = "Original duration";
 "Overview" = "Overview";
 "Party" = "Party";
@@ -436,6 +447,7 @@
 "Persist Queue" = "Remember queue";
 "Persist Queue restores your queue, shuffle, and repeat state when the app relaunches." = "Persist Queue restores your queue, shuffle, and repeat state when the app relaunches.";
 "Pin to Quick Picks" = "Pin to Quick Picks";
+"Pink" = "Pink";
 "Play" = "Play";
 "Play After" = "Play After";
 "Play All" = "Play All";
@@ -460,6 +472,8 @@
 "Preferences" = "Preferences";
 "Preferred Source" = "Preferred playback quality";
 "Preferred Source picks which stream to use. If \"Upgrade to best quality during playback\" is on, the app may switch to a better source mid-song; you'll hear a very short fade (about 0.3s) while the new stream loads, then playback continues at the same position." = "Preferred Source picks which stream to use. If \"Upgrade to best quality during playback\" is on, the app may switch to a better source mid-song; you'll hear a very short fade (about 0.3s) while the new stream loads, then playback continues at the same position.";
+"Preparing download…" = "Preparing download…";
+"Preparing…" = "Preparing…";
 "Presence" = "Presence";
 "Preview" = "Preview";
 "Previous" = "Previous";
@@ -472,6 +486,7 @@
 "Provider Order" = "Provider Order";
 "Providers" = "Providers";
 "Pull to refresh or try another category." = "Pull to refresh or try another category.";
+"Purple" = "Purple";
 "Qobuz" = "Qobuz";
 "Qobuz credentials removed." = "Qobuz credentials removed.";
 "Queue" = "Queue";
@@ -485,6 +500,7 @@
 "Recently Added" = "Recently Added";
 "Recently Played" = "Recently Played";
 "Recently searched" = "Recently searched";
+"Red" = "Red";
 "Refetch" = "Refetch";
 "Region" = "Region";
 "Register a listen after %ld%% of the song or %@, whichever comes first. Songs shorter than %@ are skipped." = "Register a listen after %ld%% of the song or %@, whichever comes first. Songs shorter than %@ are skipped.";
@@ -632,6 +648,7 @@
 "Syncs with your YouTube Music account. This cannot be changed later." = "Syncs with your YouTube Music account. This cannot be changed later.";
 "System" = "System";
 "Tab Bar" = "Tab Bar";
+"Teal" = "Teal";
 "Template" = "Template";
 "Test key" = "Test key";
 "Thanks for helping keep YouTube safe." = "Thanks for helping keep YouTube safe.";
@@ -639,6 +656,7 @@
 "The addon limit has been reached." = "The addon limit has been reached.";
 "The addon name, identifier or version is invalid." = "The addon name, identifier or version is invalid.";
 "The addon update requires approval for new permissions." = "The addon update requires approval for new permissions.";
+"The demo addon is already installed." = "The demo addon is already installed.";
 "The download timed out." = "The download timed out.";
 "The manifest could not be fetched. Check the URL and connection." = "The manifest could not be fetched. Check the URL and connection.";
 "The manifest exceeds the 64 KB size limit." = "The manifest exceeds the 64 KB size limit.";
@@ -692,6 +710,7 @@
 "User Status" = "User Status";
 "User authentication token" = "User authentication token";
 "V-Shape" = "V-Shape";
+"VBR (lossless)" = "VBR (lossless)";
 "Variety" = "Variety";
 "Version" = "Version";
 "Version %@" = "Version %@";

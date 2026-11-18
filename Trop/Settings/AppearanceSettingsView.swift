@@ -50,7 +50,7 @@ struct AppearanceSettingsView: View {
                             }
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel(preset.name)
+                        .accessibilityLabel(LocalizedStringKey(preset.name))
                     }
                 }
                 .padding(.vertical, 4)
