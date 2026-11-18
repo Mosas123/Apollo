@@ -147,7 +147,11 @@ actor MusicAddonClient {
             url: baseURL.appendingPathComponent("search"),
             resolvingAgainstBaseURL: false
         )
-        components?.queryItems = [URLQueryItem(name: "q", value: term)]
+        var items = [URLQueryItem(name: "q", value: term)]
+        if SettingsStore.shared.musicQualityMode == .lossless {
+            items.append(URLQueryItem(name: "quality", value: "lossless"))
+        }
+        components?.queryItems = items
         guard let url = components?.url, let data = await fetch(url),
               let object = try? JSONSerialization.jsonObject(with: data),
               let root = object as? [String: Any],
@@ -216,9 +220,12 @@ actor MusicAddonClient {
               let streams = root["streams"] as? [[String: Any]] else {
             throw MusicAddonClientError.noStream
         }
+        var best: (AddonStream, Int)?
         for stream in streams {
             if let ytId = stream["ytId"] as? String, !ytId.isEmpty {
-                return AddonStream(kind: .youtube(ytId), mimeType: "audio/mp4", bitrate: 0, qualityTier: "Standard")
+                let candidate = AddonStream(kind: .youtube(ytId), mimeType: "audio/mp4", bitrate: 0, qualityTier: "Standard")
+                if best == nil { best = (candidate, 0) }
+                continue
             }
             let raw = (stream["url"] as? String) ?? (stream["externalUrl"] as? String)
             guard let raw, let streamURL = URL(string: raw),
@@ -226,14 +233,22 @@ actor MusicAddonClient {
                   scheme == "http" || scheme == "https" else { continue }
             let hints = Self.describe(stream)
             let quality = Self.quality(from: hints, url: streamURL)
-            return AddonStream(
+            let rank: Int
+            switch quality.tier {
+            case "Lossless": rank = 3
+            case "High": rank = 2
+            default: rank = 1
+            }
+            let candidate = AddonStream(
                 kind: .url(streamURL),
                 mimeType: quality.mime,
                 bitrate: quality.bitrate,
                 qualityTier: quality.tier
             )
+            if best == nil || rank > best!.1 { best = (candidate, rank) }
         }
-        throw MusicAddonClientError.noStream
+        guard let best else { throw MusicAddonClientError.noStream }
+        return best.0
     }
 
     // MARK: - Helpers
