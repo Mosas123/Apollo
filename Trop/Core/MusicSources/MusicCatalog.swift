@@ -84,6 +84,17 @@ enum MusicPlaybackIdentity {
         playbackID?.hasPrefix("addon:") == true
     }
 
+    /// Human-readable origin of the current stream (not the YouTube transport
+    /// client). Shown in the player menu.
+    static func sourceLabel(_ playbackID: String?) -> String {
+        if isQobuz(playbackID) { return "Qobuz" }
+        if isPencari(playbackID) { return "PencariMusic" }
+        if isJioSaavn(playbackID) { return "JioSaavn" }
+        if isAddon(playbackID) { return "Music Add-on" }
+        if isAudius(playbackID) { return "Audius" }
+        return "YouTube"
+    }
+
     static func isExternal(_ playbackID: String?) -> Bool {
         isAudius(playbackID) || isQobuz(playbackID) || isPencari(playbackID)
             || isJioSaavn(playbackID) || isAddon(playbackID)

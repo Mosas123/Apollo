@@ -530,6 +530,7 @@ struct SongDetailsView: View {
     private var streamSection: some View {
         section("Stream") {
             if let s = stream {
+                row("Source", MusicPlaybackIdentity.sourceLabel(song.videoId))
                 row("Client", s.clientName)
                 row("ITAG", "\(s.itag)", monospaced: true)
                 row("Bitrate", "\(s.bitrate / 1000) kbps")
