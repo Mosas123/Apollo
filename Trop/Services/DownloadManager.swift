@@ -674,10 +674,8 @@ extension DownloadManager {
                     continuation: continuation,
                     sessionBox: sessionBox,
                     onSize: onSize,
-                    onCompletion: { [weak self] completedID in
-                        guard let self, let videoId, let completedID,
-                              let active = self.activeFFmpegSessions[videoId],
-                              Int(active.getSessionId()) == completedID else { return }
+                    onCompletion: { [weak self] _ in
+                        guard let self, let videoId else { return }
                         self.activeFFmpegSessions.removeValue(forKey: videoId)
                     }
                 )
@@ -718,8 +716,7 @@ extension DownloadManager {
             withArgumentsAsync: arguments,
             withCompleteCallback: { session in
                 sessionBox.set(nil)
-                let completedID = session.map { Int($0.getSessionId()) }
-                Task { @MainActor in onCompletion(completedID) }
+                Task { @MainActor in onCompletion(nil) }
                 let rc = session?.getReturnCode()
                 if ReturnCode.isSuccess(rc) {
                     finish(.success(Void()))
