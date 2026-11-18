@@ -59,6 +59,8 @@ final class NowPlaying {
     /// Human name of the source currently feeding the player (add-on name,
     /// "Qobuz", "Downloaded"…), used by the details sheet.
     var currentSourceName: String?
+    /// The stream actually playing, so details never show a stale cached one.
+    var currentResult: PlaybackResult?
     var currentTime: TimeInterval = 0
     var duration: TimeInterval = 0
     var progress: Float {

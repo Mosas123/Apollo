@@ -23,11 +23,11 @@ enum MusicQualityMode: String, CaseIterable, Identifiable, Sendable, Hashable {
 
     var displayName: String {
         switch self {
-        case .off: return "Off (no upgrades)"
+        case .off: return "Off"
         case .auto: return "Auto"
         case .high: return "High (320 kbps)"
-        case .cd: return "CD (FLAC 16/44)"
-        case .lossless: return "Lossless (FLAC)"
+        case .cd: return "CD (16/44)"
+        case .lossless: return "Best FLAC"
         }
     }
 }

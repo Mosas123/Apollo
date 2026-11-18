@@ -142,6 +142,72 @@ enum AddonSourceResolver {
         }
     }
 
+    /// AAC 320 fallback: same metadata matching, but asks the addon for its
+    /// lossy 320 copy. Used when no FLAC worked and JioSaavn may not have it.
+    @MainActor
+    static func bestLossyMatch(for song: SongItem) async -> Match? {
+        let installations = Array(MusicAddonsStore.shared.enabledStremioInstallations.prefix(4))
+        guard !installations.isEmpty else { return nil }
+
+        let title = TextMatch.queryTitle(song.title)
+        let artist = TextMatch.queryArtist(song.artists.first?.name ?? "")
+        let album = TextMatch.queryTitle(song.album ?? "")
+        var queries: [String] = []
+        let withAlbum = [artist, album, title].filter { !$0.isEmpty }.joined(separator: " ")
+        let withoutAlbum = [artist, title].filter { !$0.isEmpty }.joined(separator: " ")
+        if !withAlbum.isEmpty { queries.append(withAlbum) }
+        if !withoutAlbum.isEmpty, !queries.contains(withoutAlbum) { queries.append(withoutAlbum) }
+        let criteria = Criteria(
+            title: song.title,
+            artist: artist,
+            album: song.album,
+            duration: song.duration > 0 ? song.duration : nil,
+            queries: queries
+        )
+
+        let order = await AddonHealth.shared.ordered(installations.map(\.key))
+        for key in order {
+            guard let installation = installations.first(where: { $0.key == key }),
+                  let client = try? MusicAddonClient(installation: installation) else { continue }
+            var collected: [AddonTrack] = []
+            await withTaskGroup(of: [AddonTrack].self) { group in
+                for query in queries {
+                    group.addTask {
+                        await candidates(
+                            in: client,
+                            query: query,
+                            criteria: criteria,
+                            preferAtmos: false,
+                            preferHiRes: false
+                        )
+                    }
+                }
+                for await list in group { collected.append(contentsOf: list) }
+            }
+            var seen = Set<String>()
+            let unique = collected.filter { seen.insert($0.id).inserted }
+            guard !unique.isEmpty else { continue }
+            let ranked = unique
+                .sorted {
+                    score($0, criteria: criteria, preferAtmos: false, preferHiRes: false)
+                        > score($1, criteria: criteria, preferAtmos: false, preferHiRes: false)
+                }
+                .prefix(2)
+            for track in ranked {
+                guard let stream = try? await client.resolveStream(
+                          type: track.type,
+                          id: track.id,
+                          preferAtmos: false,
+                          quality: .high
+                      ),
+                      !stream.isEncrypted,
+                      stream.qualityTier == "High" else { continue }
+                return Match(track: track, stream: stream)
+            }
+        }
+        return nil
+    }
+
     /// Collects candidates for one addon (both queries + the album route) in
     /// parallel, then dedupes and resolves only the best few.
     private static func bestMatch(
@@ -165,7 +231,8 @@ enum AddonSourceResolver {
             let filtered = Self.filterAlbumTracks(
                 cached,
                 criteria: criteria,
-                preferAtmos: preferAtmos
+                preferAtmos: preferAtmos,
+                preferHiRes: preferHiRes
             )
             if !filtered.isEmpty {
                 collected = filtered
@@ -181,7 +248,8 @@ enum AddonSourceResolver {
                             in: client,
                             query: query,
                             criteria: criteria,
-                            preferAtmos: preferAtmos
+                            preferAtmos: preferAtmos,
+                            preferHiRes: preferHiRes
                         )
                     }
                 }
@@ -191,7 +259,8 @@ enum AddonSourceResolver {
                             in: client,
                             installationKey: installation.key,
                             criteria: criteria,
-                            preferAtmos: preferAtmos
+                            preferAtmos: preferAtmos,
+                            preferHiRes: preferHiRes
                         )
                     }
                 }
@@ -224,11 +293,13 @@ enum AddonSourceResolver {
         in client: MusicAddonClient,
         query: String,
         criteria: Criteria,
-        preferAtmos: Bool
+        preferAtmos: Bool,
+        preferHiRes: Bool
     ) async -> [AddonTrack] {
         guard let found = try? await client.search(query, limit: 20) else { return [] }
         return found.filter { track in
             if track.isAtmosOnly, !preferAtmos { return false }
+            if track.isHiRes, !preferHiRes { return false }
             guard TextMatch.titlesMatch(track.title, criteria.title) else { return false }
             if let trackArtist = track.artist, !trackArtist.isEmpty, !criteria.artist.isEmpty,
                !TextMatch.artistsMatch(trackArtist, criteria.artist) { return false }
@@ -246,7 +317,8 @@ enum AddonSourceResolver {
         in client: MusicAddonClient,
         installationKey: String,
         criteria: Criteria,
-        preferAtmos: Bool
+        preferAtmos: Bool,
+        preferHiRes: Bool
     ) async -> [AddonTrack] {
         guard let albumName = criteria.album, !albumName.isEmpty else { return [] }
         let key = Self.albumKey(
@@ -255,7 +327,12 @@ enum AddonSourceResolver {
             album: albumName
         )
         if let cached = await AddonAlbumCache.shared.get(key), !cached.isEmpty {
-            return Self.filterAlbumTracks(cached, criteria: criteria, preferAtmos: preferAtmos)
+            return Self.filterAlbumTracks(
+                cached,
+                criteria: criteria,
+                preferAtmos: preferAtmos,
+                preferHiRes: preferHiRes
+            )
         }
         let query = [criteria.artist, TextMatch.queryTitle(albumName)]
             .filter { !$0.isEmpty }
@@ -276,16 +353,23 @@ enum AddonSourceResolver {
               !tracks.isEmpty else { return [] }
 
         await AddonAlbumCache.shared.store(tracks, for: key)
-        return Self.filterAlbumTracks(tracks, criteria: criteria, preferAtmos: preferAtmos)
+        return Self.filterAlbumTracks(
+            tracks,
+            criteria: criteria,
+            preferAtmos: preferAtmos,
+            preferHiRes: preferHiRes
+        )
     }
 
     private static func filterAlbumTracks(
         _ tracks: [AddonTrack],
         criteria: Criteria,
-        preferAtmos: Bool
+        preferAtmos: Bool,
+        preferHiRes: Bool
     ) -> [AddonTrack] {
         var matches = tracks.filter { track in
             guard !(track.isAtmosOnly && !preferAtmos) else { return false }
+            guard !(track.isHiRes && !preferHiRes) else { return false }
             return TextMatch.titlesMatch(track.title, criteria.title)
         }
         if let duration = criteria.duration {
@@ -313,10 +397,14 @@ enum AddonSourceResolver {
     ) async -> (Match, Int)? where C.Element == AddonTrack {
         var best: (Match, Int)?
         for track in tracks {
+            let streamQuality: AddonStreamQuality = preferAtmos
+                ? .max
+                : (requireCD ? .lossless : (preferHiRes ? .hires : .lossless))
             guard let stream = try? await client.resolveStream(
                       type: track.type,
                       id: track.id,
-                      preferAtmos: preferAtmos
+                      preferAtmos: preferAtmos,
+                      quality: streamQuality
                   ),
                   !stream.isEncrypted else { continue }
             if stream.qualityTier == "Atmos", !preferAtmos { continue }

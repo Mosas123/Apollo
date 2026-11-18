@@ -63,17 +63,21 @@ final class DownloadManager: ObservableObject {
             // Auto here instead of disabling FLAC downloads.
             return AddonQualityPreference(
                 requireCD: false,
-                preferHiRes: SettingsStore.shared.preferLossless,
+                preferHiRes: SettingsStore.shared.preferHiRes,
                 preferAtmos: SettingsStore.shared.preferAtmos
             )
         case .cd:
             return AddonQualityPreference(requireCD: true, preferHiRes: false, preferAtmos: false)
         case .lossless:
-            return AddonQualityPreference(requireCD: false, preferHiRes: true, preferAtmos: false)
+            return AddonQualityPreference(
+                requireCD: false,
+                preferHiRes: SettingsStore.shared.preferHiRes,
+                preferAtmos: false
+            )
         case .auto, .high:
             return AddonQualityPreference(
                 requireCD: false,
-                preferHiRes: SettingsStore.shared.preferLossless,
+                preferHiRes: SettingsStore.shared.preferHiRes,
                 preferAtmos: SettingsStore.shared.preferAtmos
             )
         }
@@ -696,10 +700,20 @@ extension DownloadManager {
                 throw MusicCatalogError.unavailableTrack
             }
             let client = try MusicAddonClient(installation: installation)
+            let preferAtmos = preference?.preferAtmos ?? false
+            let quality: AddonStreamQuality
+            if preferAtmos {
+                quality = .max
+            } else if preference?.requireCD == true {
+                quality = .lossless
+            } else {
+                quality = (preference?.preferHiRes ?? false) ? .hires : .lossless
+            }
             let stream = try await client.resolveStream(
                 type: ref.t,
                 id: ref.i,
-                preferAtmos: preference?.preferAtmos ?? false
+                preferAtmos: preferAtmos,
+                quality: quality
             )
             guard !stream.isEncrypted else { throw MusicCatalogError.unavailableTrack }
             switch stream.kind {

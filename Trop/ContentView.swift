@@ -86,6 +86,7 @@ struct ContentView: View {
         .task {
             // Load installed add-ons early: FLAC/CD/Atmos settings depend on it.
             _ = MusicAddonsStore.shared
+            await MusicAddonsStore.shared.refreshAll()
         }
         .simultaneousGesture(backSwipeGesture)
     }

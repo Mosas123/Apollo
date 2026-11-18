@@ -236,9 +236,10 @@ final class SettingsStore: @unchecked Sendable {
     /// their search engine, so they are hidden and ignored without it.
     var hasMusicAddons: Bool = false
 
-    /// In Auto, prefer a hi-res FLAC over the CD copy when both exist.
-    var preferLossless: Bool {
-        didSet { Self.defaults.set(preferLossless, forKey: Keys.preferLossless) }
+    /// Resolve and prefer 24-bit copies. Off by default: hi-res needs an
+    /// external DAC and is several times larger than CD.
+    var preferHiRes: Bool {
+        didSet { Self.defaults.set(preferHiRes, forKey: Keys.preferHiRes) }
     }
 
     /// Take the Dolby Atmos copy (E-AC3 5.1, downmixed to stereo by iOS) when an
@@ -457,7 +458,8 @@ final class SettingsStore: @unchecked Sendable {
         static let podcastIndexKey = "settings.podcastIndexKey"
         static let musicQualityMode = "settings.musicQualityMode"
         static let preferAtmos = "settings.preferAtmos"
-        static let preferLossless = "settings.preferLossless"
+        static let preferHiRes = "settings.preferHiRes"
+        static let legacyPreferLossless = "settings.preferLossless"
         static let upgradeDuringPlayback = "settings.upgradeDuringPlayback"
         static let aiProvider = "settings.aiProvider"
         static let aiKey = "settings.aiKey"
@@ -540,7 +542,10 @@ final class SettingsStore: @unchecked Sendable {
         podcastIndexKey = Self.loadString(Keys.podcastIndexKey, default: "")
         musicQualityMode = Self.loadEnum(Keys.musicQualityMode, default: .auto)
         preferAtmos = Self.load(Keys.preferAtmos, default: false)
-        preferLossless = Self.load(Keys.preferLossless, default: false)
+        preferHiRes = Self.load(
+            Keys.preferHiRes,
+            default: (d.object(forKey: Keys.legacyPreferLossless) as? Bool) ?? false
+        )
         upgradeDuringPlayback = Self.load(Keys.upgradeDuringPlayback, default: false)
         aiProvider = Self.loadString(Keys.aiProvider, default: AIProvider.off.rawValue)
         aiKey = Self.loadString(Keys.aiKey, default: "")

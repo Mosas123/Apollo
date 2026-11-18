@@ -155,6 +155,13 @@ final class MusicAddonsStore {
         installations.first { $0.key == key && $0.isEnabled }
     }
     var enabledCount: Int { installations.filter(\.isEnabled).count }
+
+    /// Union of what the enabled addons say they can serve.
+    var availableAudioCapabilities: AddonCapabilities {
+        enabledStremioInstallations.reduce(into: AddonCapabilities()) { result, installation in
+            result.formUnion(installation.audioCapabilities)
+        }
+    }
     var streamCapabilityCount: Int {
         installations.filter { $0.manifest.capabilities.contains(.stream) }.count
     }
@@ -186,6 +193,15 @@ final class MusicAddonsStore {
     func move(from source: Int, to target: Int) {
         registry.move(from: source, to: target)
         save()
+    }
+
+    /// Re-reads every installed manifest once so new settings (declared audio
+    /// qualities) show up without the user refreshing each addon by hand.
+    func refreshAll() async {
+        let keys = installations.filter { !Self.isSample($0) }.map(\.key)
+        for key in keys {
+            try? await refresh(key: key)
+        }
     }
 
     func refresh(key: String) async throws {

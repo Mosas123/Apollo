@@ -44,12 +44,77 @@ struct StremioDescriptor: Codable, Sendable, Equatable {
         let name: String?
         let extra: [Extra]?
     }
+    struct Setting: Codable, Sendable, Equatable {
+        struct Option: Codable, Sendable, Equatable {
+            let value: String
+            let label: String?
+        }
+        let key: String
+        let type: String
+        let label: String?
+        let options: [Option]?
+        let `default`: String?
+    }
     let resources: [Resource]
     let types: [String]
     let catalogs: [Catalog]
     /// Stremio manifests that carry music wrap tracks as movie/series items;
     /// the declared content type is the only way to tell them apart.
     var contentType: String? = nil
+    var settings: [Setting]? = nil
+}
+
+/// Audio tiers an addon says it can serve. The manifest settings are the only
+/// declaration we have; addons without them are assumed to be FLAC sources.
+struct AddonCapabilities: Sendable, Equatable {
+    var cd = false
+    var hiRes = false
+    var atmos = false
+    var aac320 = false
+
+    var hasLossless: Bool { cd || hiRes }
+    var hasAny: Bool { hasLossless || aac320 || atmos }
+
+    mutating func formUnion(_ other: AddonCapabilities) {
+        cd = cd || other.cd
+        hiRes = hiRes || other.hiRes
+        atmos = atmos || other.atmos
+        aac320 = aac320 || other.aac320
+    }
+}
+
+extension MusicAddonInstallation {
+    var audioCapabilities: AddonCapabilities {
+        guard let descriptor = manifest.stremio else { return AddonCapabilities() }
+        let settings = descriptor.settings ?? []
+        var caps = AddonCapabilities()
+        let quality = settings.first { $0.key.lowercased() == "quality" }
+        let values = (quality?.options ?? []).map { $0.value.lowercased() }
+        if values.isEmpty || values == ["auto"] {
+            // No declared options: treat it as a FLAC source (Nebula does this).
+            caps.cd = true
+            caps.hiRes = true
+        } else {
+            for value in values {
+                if value.contains("hires") || value.contains("hi-res") || value.contains("hi_res") {
+                    caps.hiRes = true
+                }
+                if value.contains("lossless") || value.contains("cd") || value == "flac" {
+                    caps.cd = true
+                }
+                if value.contains("320") || value.contains("high") || value.contains("aac") {
+                    caps.aac320 = true
+                }
+                if value.contains("atmos") {
+                    caps.atmos = true
+                }
+            }
+        }
+        if settings.contains(where: { $0.key.lowercased() == "atmos" }) {
+            caps.atmos = true
+        }
+        return caps
+    }
 }
 
 enum MusicAddonError: Error, Equatable, LocalizedError {
@@ -159,6 +224,7 @@ struct MusicAddonPackage: Sendable {
             let types: [String]?
             let catalogs: [StremioDescriptor.Catalog]?
             let contentType: String?
+            let settings: [StremioDescriptor.Setting]?
         }
         guard let raw = try? JSONDecoder().decode(RawManifest.self, from: data) else { return nil }
         let resources = raw.resources.map { StremioDescriptor.Resource(name: $0.name.lowercased()) }
@@ -185,7 +251,8 @@ struct MusicAddonPackage: Sendable {
                 resources: resources,
                 types: raw.types ?? [],
                 catalogs: catalogs,
-                contentType: raw.contentType
+                contentType: raw.contentType,
+                settings: raw.settings
             )
         )
         return MusicAddonPackage(manifestURL: url, manifest: manifest)

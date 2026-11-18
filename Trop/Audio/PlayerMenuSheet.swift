@@ -530,14 +530,28 @@ struct SongDetailsView: View {
     }
 
     @ViewBuilder
+    private var effectiveStream: PlaybackResult? {
+        if let current = NowPlaying.shared.currentResult,
+           current.videoId == song.videoId {
+            return current
+        }
+        return stream
+    }
+
     private var streamSection: some View {
         section("Stream") {
-            if let s = stream {
+            if let s = effectiveStream {
                 row("Source", NowPlaying.shared.currentSourceName
                     ?? MusicPlaybackIdentity.sourceLabel(song.videoId))
                 row("Client", s.clientName)
                 row("ITAG", "\(s.itag)", monospaced: true)
-                row("Bitrate", "\(s.bitrate / 1000) kbps")
+                if s.bitrate > 0 {
+                    row("Bitrate", "\(s.bitrate / 1000) kbps")
+                } else if NowPlaying.shared.currentLosslessLabel != nil {
+                    row("Bitrate", "VBR (lossless)")
+                } else {
+                    row("Bitrate", "—")
+                }
                 row("Audio quality", s.audioQuality.replacingOccurrences(of: "AUDIO_QUALITY_", with: ""))
                 if let loudness = s.loudnessDb {
                     row("Loudness", String(format: "%.1f dB", loudness))

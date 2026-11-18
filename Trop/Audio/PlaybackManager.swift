@@ -202,9 +202,17 @@ actor PlaybackManager {
             throw MusicCatalogError.unavailableTrack
         }
         let client = try MusicAddonClient(installation: installation)
-        let atmos = SettingsStore.shared.musicQualityMode == .auto
-            && SettingsStore.shared.preferAtmos
-        let stream = try await client.resolveStream(type: ref.t, id: ref.i, preferAtmos: atmos)
+        let mode = SettingsStore.shared.musicQualityMode
+        let atmos = mode == .auto && SettingsStore.shared.preferAtmos
+        let quality: AddonStreamQuality = atmos
+            ? .max
+            : (mode == .cd ? .lossless : (SettingsStore.shared.preferHiRes ? .hires : .lossless))
+        let stream = try await client.resolveStream(
+            type: ref.t,
+            id: ref.i,
+            preferAtmos: atmos,
+            quality: quality
+        )
         guard !stream.isEncrypted else { throw MusicCatalogError.unavailableTrack }
         resolvedSourceNames[videoId] = installation.manifest.name
 
@@ -283,11 +291,15 @@ actor PlaybackManager {
         case .cd:
             return AddonQualityPreference(requireCD: true, preferHiRes: false, preferAtmos: false)
         case .lossless:
-            return AddonQualityPreference(requireCD: false, preferHiRes: true, preferAtmos: false)
+            return AddonQualityPreference(
+                requireCD: false,
+                preferHiRes: SettingsStore.shared.preferHiRes,
+                preferAtmos: false
+            )
         case .auto, .high:
             return AddonQualityPreference(
                 requireCD: false,
-                preferHiRes: SettingsStore.shared.preferLossless,
+                preferHiRes: SettingsStore.shared.preferHiRes,
                 preferAtmos: SettingsStore.shared.preferAtmos
             )
         }
@@ -320,6 +332,10 @@ actor PlaybackManager {
         preference: AddonQualityPreference
     ) -> Bool {
         let quality = result.audioQuality.lowercased()
+        if quality.contains("addon-aac") {
+            let mode = SettingsStore.shared.musicQualityMode
+            return mode == .auto || mode == .high
+        }
         if quality.contains("jiosaavn") {
             let mode = SettingsStore.shared.musicQualityMode
             return mode == .auto || mode == .high
@@ -327,6 +343,7 @@ actor PlaybackManager {
         if preference.preferAtmos { return quality.contains("atmos") }
         if quality.contains("atmos") { return false }
         guard isLosslessResult(result) else { return false }
+        if isHiResResult(result), !preference.preferHiRes { return false }
         if preference.requireCD, isHiResResult(result) { return false }
         return true
     }
@@ -357,13 +374,33 @@ actor PlaybackManager {
             return lossless
         }
         let mode = SettingsStore.shared.musicQualityMode
-        if mode == .auto || mode == .high,
-           let jiosaavn = await resolveJioSaavnFallback(videoId: videoId) {
-            if upgradeResultCache.count >= 100 {
-                upgradeResultCache.removeAll(keepingCapacity: true)
+        if mode == .auto || mode == .high {
+            // Add-on AAC 320 and JioSaavn 320 cover each other: whichever
+            // answers first wins.
+            let hasAddonAAC = await MainActor.run {
+                MusicAddonsStore.shared.availableAudioCapabilities.aac320
             }
-            upgradeResultCache[videoId] = (jiosaavn, Date())
-            return jiosaavn
+            let fallback = await withTaskGroup(of: PlaybackResult?.self) { group in
+                if hasAddonAAC {
+                    group.addTask { await self.resolveAddonAAC(videoId: videoId) }
+                }
+                group.addTask { await self.resolveJioSaavnFallback(videoId: videoId) }
+                var first: PlaybackResult?
+                for await candidate in group {
+                    guard let candidate else { continue }
+                    first = candidate
+                    break
+                }
+                group.cancelAll()
+                return first
+            }
+            if let fallback {
+                if upgradeResultCache.count >= 100 {
+                    upgradeResultCache.removeAll(keepingCapacity: true)
+                }
+                upgradeResultCache[videoId] = (fallback, Date())
+                return fallback
+            }
         }
         return nil
     }
@@ -421,6 +458,39 @@ actor PlaybackManager {
             duration: song.duration,
             expiresInSeconds: 0,
             clientName: "jiosaavn",
+            musicVideoType: nil,
+            hasVideoContent: false,
+            muxedStreamUrl: nil,
+            loudnessDb: nil
+        )
+    }
+
+    /// AAC 320 fallback from the add-ons.
+    private func resolveAddonAAC(videoId: String) async -> PlaybackResult? {
+        guard addonPreference != nil else { return nil }
+        guard !MusicPlaybackIdentity.isExternal(videoId),
+              !MusicPlaybackIdentity.isLegacyPencari(videoId) else { return nil }
+        guard let song = await queueSong(for: videoId) else { return nil }
+        guard let match = await AddonSourceResolver.bestLossyMatch(for: song),
+              case .url(let url) = match.stream.kind,
+              let finalURL = await Self.verifiedStreamURL(url.absoluteString) else {
+            return nil
+        }
+        if let name = await addonName(for: match.track.installationKey) {
+            resolvedSourceNames[videoId] = name
+        }
+        return PlaybackResult(
+            streamUrl: finalURL.absoluteString,
+            itag: 0,
+            mimeType: "audio/mp4",
+            bitrate: 320_000,
+            audioQuality: "addon-aac-320",
+            videoId: videoId,
+            title: song.title,
+            author: song.artistNamesDisplay,
+            duration: song.duration,
+            expiresInSeconds: 0,
+            clientName: "addon",
             musicVideoType: nil,
             hasVideoContent: false,
             muxedStreamUrl: nil,
@@ -528,6 +598,10 @@ actor PlaybackManager {
             qualityLabel: newLabel,
             startAt: position
         )
+        await MainActor.run {
+            NowPlaying.shared.currentResult = result
+            NowPlaying.shared.currentSourceName = sourceName(for: result, videoId: videoId)
+        }
         // Stay muted while the new stream buffers; fade in only once audio is
         // actually advancing. Fading during buffering made it enter abruptly
         // at full volume.
@@ -774,7 +848,7 @@ actor PlaybackManager {
             NowPlaying.shared.currentSourceName = "Downloaded"
             NowPlaying.shared.updateVideoAvailability()
         }
-        return PlaybackResult(
+        let localResult = PlaybackResult(
             streamUrl: localPath.absoluteString,
             itag: 0,
             mimeType: isFLAC ? "audio/flac" : "audio/mp4",
@@ -791,6 +865,10 @@ actor PlaybackManager {
             muxedStreamUrl: nil,
             loudnessDb: nil
         )
+        await MainActor.run {
+            NowPlaying.shared.currentResult = localResult
+        }
+        return localResult
     }
 
     /// Resolve a video and start playback. Returns the result used, or throws.
@@ -839,6 +917,10 @@ actor PlaybackManager {
                 losslessLabel: Self.losslessLabel(result),
                 qualityLabel: Self.qualityLabel(result)
             )
+            await MainActor.run {
+                NowPlaying.shared.currentSourceName = sourceName(for: result, videoId: videoId)
+                NowPlaying.shared.currentResult = result
+            }
             return result
         }
         await MainActor.run { SponsorBlockIntegration.shared.warm(for: videoId) }
@@ -934,7 +1016,12 @@ actor PlaybackManager {
     }
 
     private func sourceName(for result: PlaybackResult, videoId: String) -> String {
-        if let addon = resolvedSourceNames[videoId] { return addon }
+        // Only credit the add-on when the stream that is actually playing came
+        // from it; a cached prefetch name must not mislabel a YouTube stream.
+        if result.clientName.lowercased() == "addon",
+           let addon = resolvedSourceNames[videoId] {
+            return addon
+        }
         switch result.clientName.lowercased() {
         case "local": return "Downloaded"
         case "jiosaavn": return "JioSaavn"
@@ -966,6 +1053,7 @@ actor PlaybackManager {
         let sourceName = sourceName(for: result, videoId: videoId)
         await MainActor.run {
             NowPlaying.shared.currentSourceName = sourceName
+            NowPlaying.shared.currentResult = result
         }
         await publishVideoAvailability(result: result, videoId: videoId, rowType: queueSong?.musicVideoType)
     }

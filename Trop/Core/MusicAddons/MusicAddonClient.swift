@@ -60,6 +60,13 @@ struct AddonAlbum: Sendable, Equatable {
     let year: Int?
 }
 
+enum AddonStreamQuality: String, Sendable {
+    case max
+    case hires
+    case lossless
+    case high
+}
+
 struct AddonStream: Sendable {
     enum Kind: Sendable {
         case url(URL)
@@ -235,7 +242,7 @@ actor MusicAddonClient {
             resolvingAgainstBaseURL: false
         )
         var items = [URLQueryItem(name: "q", value: term)]
-        if SettingsStore.shared.musicQualityMode.prefersLossless || SettingsStore.shared.preferLossless {
+        if SettingsStore.shared.musicQualityMode.prefersLossless || SettingsStore.shared.preferHiRes {
             items.append(URLQueryItem(name: "quality", value: "lossless"))
         }
         components?.queryItems = items
@@ -349,15 +356,20 @@ actor MusicAddonClient {
     func resolveStream(
         type: String,
         id: String,
-        preferAtmos: Bool = false
+        preferAtmos: Bool = false,
+        quality: AddonStreamQuality = .max
     ) async throws -> AddonStream {
         if eclipseMode {
-            return try await eclipseStream(id: id, preferAtmos: preferAtmos)
+            return try await eclipseStream(id: id, preferAtmos: preferAtmos, quality: quality)
         }
         return try await stremioStream(type: type, id: id)
     }
 
-    private func eclipseStream(id: String, preferAtmos: Bool) async throws -> AddonStream {
+    private func eclipseStream(
+        id: String,
+        preferAtmos: Bool,
+        quality: AddonStreamQuality
+    ) async throws -> AddonStream {
         guard let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
             throw MusicAddonClientError.invalidURL
         }
@@ -368,7 +380,8 @@ actor MusicAddonClient {
             resolvingAgainstBaseURL: false
         )
         components?.queryItems = [
-            URLQueryItem(name: "atmos", value: preferAtmos ? "on" : "off")
+            URLQueryItem(name: "atmos", value: preferAtmos ? "on" : "off"),
+            URLQueryItem(name: "quality", value: quality.rawValue)
         ]
         let url = components?.url
             ?? baseURL.appendingPathComponent("stream").appendingPathComponent(encoded)
