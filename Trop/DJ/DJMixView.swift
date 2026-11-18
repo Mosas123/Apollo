@@ -12,6 +12,7 @@ final class DJMixViewModel {
     }
 
     var items: [Item] = []
+    var useAI = false
     var isWorking = false
     var status: String?
     var outputURL: URL?
@@ -60,7 +61,10 @@ final class DJMixViewModel {
         }
         isWorking = true
         defer { isWorking = false }
-        let plan = DJMixPlanner.plan(tracks: analyzed)
+        let aiPlan = useAI
+            ? await DJAIPlanner.plan(tracks: analyzed, request: DJAIPlanner.Request())
+            : nil
+        let plan = aiPlan ?? DJMixPlanner.plan(tracks: analyzed)
         let output = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Thrum Mix \(Int(Date().timeIntervalSince1970)).wav")
         do {
@@ -81,6 +85,7 @@ struct DJMixView: View {
         List {
             Section {
                 Button("Add audio files") { importing = true }
+                Toggle("AI plan (uses your AI key)", isOn: $model.useAI)
                 if model.isWorking { ProgressView() }
                 ForEach(model.items) { item in
                     VStack(alignment: .leading) {
