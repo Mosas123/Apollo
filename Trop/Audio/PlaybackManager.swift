@@ -450,11 +450,12 @@ actor PlaybackManager {
     /// lossless is ready with zero delay when it comes up. Runs off the play
     /// path and respects the origin cooldown.
     private func prefetchNextUpgrade(after videoId: String) async {
-        guard SettingsStore.shared.musicQualityMode != .auto else { return }
+        guard upgradeMode != .auto else { return }
         let queue = await MainActor.run { NowPlaying.shared.queueSongs }
         guard let index = queue.firstIndex(where: { $0.videoId == videoId }),
               queue.indices.contains(index + 1) else { return }
         let next = queue[index + 1].videoId
+        await MainActor.run { SponsorBlockIntegration.shared.warm(for: next) }
         guard !MusicPlaybackIdentity.isExternal(next) else { return }
         if let cached = upgradeResultCache[next],
            Date().timeIntervalSince(cached.at) < pencariResultTTL {

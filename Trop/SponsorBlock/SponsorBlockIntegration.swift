@@ -45,6 +45,8 @@ final class SponsorBlockIntegration {
     private var skipped: Set<Int> = []
     private var prefetchedSegments: [String: [Segment]] = [:]
     private var prefetchOrder: [String] = []
+    private var prefetchedAt: [String: Date] = [:]
+    private let cacheTTL: TimeInterval = 24 * 3600
     private var fetchTasks: [String: Task<[Segment], Never>] = [:]
 
     private init() {}
@@ -66,7 +68,8 @@ final class SponsorBlockIntegration {
         }
         guard SponsorBlock.isEnabled,
               let first = found.min(by: { $0.start < $1.start }),
-              first.start < 0.5
+              first.start < 0.5,
+              first.end <= 25
         else { return 0 }
         return first.end
     }
@@ -92,7 +95,7 @@ final class SponsorBlockIntegration {
         let position = nowPlaying.currentTime
         for (index, segment) in segments.enumerated() where !skipped.contains(index) {
             // Within the last second the jump isn't worth it.
-            guard position >= segment.start, position < segment.end - 1 else { continue }
+            guard position >= segment.start - 0.25, position < segment.end - 1 else { continue }
             skipped.insert(index)
             player.seek(to: segment.end)
             return
@@ -103,7 +106,9 @@ final class SponsorBlockIntegration {
         if let task = fetchTasks[videoId] {
             return task
         }
-        if let cached = prefetchedSegments[videoId] {
+        if let cached = prefetchedSegments[videoId],
+           let fetched = prefetchedAt[videoId],
+           Date().timeIntervalSince(fetched) < cacheTTL {
             return Task { cached }
         }
 
@@ -114,12 +119,14 @@ final class SponsorBlockIntegration {
             guard let self else { return }
             self.fetchTasks.removeValue(forKey: videoId)
             self.prefetchedSegments[videoId] = found.sorted { $0.start < $1.start }
+            self.prefetchedAt[videoId] = Date()
             if !self.prefetchOrder.contains(videoId) {
                 self.prefetchOrder.append(videoId)
             }
             while self.prefetchedSegments.count > 64, let oldest = self.prefetchOrder.first {
                 self.prefetchOrder.removeFirst()
                 self.prefetchedSegments.removeValue(forKey: oldest)
+                self.prefetchedAt.removeValue(forKey: oldest)
             }
             if self.videoId == videoId {
                 self.segments = found.sorted { $0.start < $1.start }
@@ -146,7 +153,10 @@ final class SponsorBlockIntegration {
             .map { String(format: "%02x", $0) }
             .joined()
         var components = URLComponents(string: "https://sponsor.ajay.app/api/skipSegments/\(hash.prefix(4))")
-        components?.queryItems = [URLQueryItem(name: "categories", value: "[\"music_offtopic\"]")]
+        components?.queryItems = [
+            URLQueryItem(name: "categories", value: "[\"music_offtopic\"]"),
+            URLQueryItem(name: "actionTypes", value: "[\"skip\"]")
+        ]
         guard let url = components?.url else {
             Log.sponsorBlock.error("Could not build SponsorBlock URL videoId=\(videoId)")
             return []
