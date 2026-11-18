@@ -18,6 +18,17 @@ enum SponsorBlock {
     static func save(enabled: Bool) {
         UserDefaults.standard.set(enabled, forKey: enabledKey)
     }
+
+    private static let skipIntroKey = "sponsorBlockSkipIntroAtStart"
+
+    /// Off by default: inaccurate segment boundaries could skip into the vocals.
+    static var skipsIntroAtStart: Bool {
+        UserDefaults.standard.bool(forKey: skipIntroKey)
+    }
+
+    static func saveSkipIntroAtStart(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: skipIntroKey)
+    }
 }
 
 @MainActor

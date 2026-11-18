@@ -245,7 +245,7 @@ extension PlayerController {
         }
 
         var skipStart: Double = 0
-        if MusicPlaybackIdentity.isYouTube(videoId) {
+        if SponsorBlock.skipsIntroAtStart, MusicPlaybackIdentity.isYouTube(videoId) {
             skipStart = await SponsorBlockIntegration.shared.preloadedStartOffset(for: videoId)
         }
         guard NowPlaying.shared.videoId == videoId else {
