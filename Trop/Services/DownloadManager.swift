@@ -380,8 +380,12 @@ extension DownloadManager {
             setProgress(0.05, for: videoId)
             let resolveStart = CFAbsoluteTimeGetCurrent()
             let source = preResolved ?? (try await downloadSource(for: song, allowLossless: allowLosslessSource))
-            let knownBytes = source.knownSizeBytes.map(Int64.init)
-                ?? await contentLength(of: source.url)
+            let knownBytes: Int64?
+            if let known = source.knownSizeBytes {
+                knownBytes = Int64(known)
+            } else {
+                knownBytes = await contentLength(of: source.url)
+            }
             if !confirmedLarge, source.format == .flac,
                let bytes = knownBytes,
                bytes > Self.largeDownloadBytes {
@@ -635,7 +639,7 @@ extension DownloadManager {
         }
     }
 
-    private struct DownloadSource: Sendable {
+    struct DownloadSource: Sendable {
         let url: URL
         let mimeType: String
         let format: DownloadFormat
@@ -849,7 +853,9 @@ extension DownloadManager {
         }
         // CD mode: this copy is hi-res, so don't count it as a bad origin.
         if requireCD, info.isHiRes { return nil }
-        guard info.sizeBytes != nil || await probeAudioURL(info.url) else {
+        var playable = info.sizeBytes != nil
+        if !playable { playable = await probeAudioURL(info.url) }
+        guard playable else {
             pencariCoolingUntil = Date().addingTimeInterval(120)
             return nil
         }
@@ -857,7 +863,7 @@ extension DownloadManager {
             url: info.url,
             mimeType: "audio/flac",
             format: .flac,
-            album: best.album,
+            album: nil,
             artworkURL: best.artworkURL,
             qualityLabel: info.qualityLabel,
             knownSizeBytes: info.sizeBytes
