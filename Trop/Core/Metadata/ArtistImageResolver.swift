@@ -5,11 +5,24 @@ import Foundation
 enum ArtistImageResolver {
     private actor Cache {
         static let shared = Cache()
-        struct Entry {
+        struct Entry: Codable {
             let url: URL?
             let expiresAt: Date
         }
         private var entries: [String: Entry] = [:]
+        private let diskURL: URL
+        private var saveTask: Task<Void, Never>?
+
+        init() {
+            let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+                ?? URL(fileURLWithPath: NSTemporaryDirectory())
+            diskURL = base.appendingPathComponent("artist-images.json")
+            if let data = try? Data(contentsOf: diskURL),
+               let decoded = try? JSONDecoder().decode([String: Entry].self, from: data) {
+                let now = Date()
+                entries = decoded.filter { $0.value.expiresAt > now }
+            }
+        }
 
         func entry(_ key: String) -> Entry? {
             guard let entry = entries[key], entry.expiresAt > Date() else {
@@ -22,6 +35,13 @@ enum ArtistImageResolver {
         func store(_ key: String, _ url: URL?) {
             if entries.count >= 300 { entries.removeAll(keepingCapacity: true) }
             entries[key] = Entry(url: url, expiresAt: Date().addingTimeInterval(url == nil ? 900 : 86400))
+            saveTask?.cancel()
+            saveTask = Task {
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled,
+                      let data = try? JSONEncoder().encode(self.entries) else { return }
+                try? data.write(to: self.diskURL, options: .atomic)
+            }
         }
     }
 
