@@ -82,13 +82,12 @@ struct DJMixView: View {
     @State private var importing = false
 
     var body: some View {
-        @Bindable var bindable = model
         List {
             Section {
                 Button("Add audio files") { importing = true }
-                Toggle("AI plan (uses your AI key)", isOn: $bindable.useAI)
+                Toggle("AI plan (uses your AI key)", isOn: Binding(get: { model.useAI }, set: { model.useAI = $0 }))
                 if model.isWorking { ProgressView() }
-                ForEach(model.items) { item in
+                ForEach(model.items, id: \DJMixItem.id) { item in
                     VStack(alignment: .leading) {
                         Text(item.track.title).lineLimit(1)
                         if let analysis = item.analysis {
