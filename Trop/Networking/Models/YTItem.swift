@@ -322,48 +322,30 @@ struct SongItem: Codable, Hashable {
         var album: String?
         var albumId: String?
 
-        // Try flexColumns[2] first — dedicated album column with navigation endpoint (like Metrolist)
-        if flexColumns.indices.contains(2) {
-            let albumRuns = flexTextRuns(flexColumns, index: 2)
-            if let firstRun = albumRuns.first,
-               let name = firstRun["text"] as? String,
-               let nav = firstRun["navigationEndpoint"] as? [String: Any],
-               let browse = nav["browseEndpoint"] as? [String: Any],
-               let bid = browse["browseId"] as? String {
-                album = name
-                albumId = bid
+        // Album names must come from an album navigation endpoint. A subtitle's
+        // next segment may be a duration ("4:33"), year or play count.
+        for index in flexColumns.indices.dropFirst() {
+            for run in flexTextRuns(flexColumns, index: index) {
+                guard let name = run["text"] as? String,
+                      let nav = run["navigationEndpoint"] as? [String: Any],
+                      let browse = nav["browseEndpoint"] as? [String: Any],
+                      let bid = browse["browseId"] as? String else { continue }
+                let config = browse["browseEndpointContextSupportedConfigs"] as? [String: Any]
+                let music = config?["browseEndpointContextMusicConfig"] as? [String: Any]
+                if bid.hasPrefix("MPREb_") || music?["pageType"] as? String == "MUSIC_PAGE_TYPE_ALBUM" {
+                    album = name
+                    albumId = bid
+                }
             }
         }
 
-        if !segments.isEmpty {
-            let artistSegments = segments.drop { seg in seg.allSatisfy { !ArtistCredits.isArtistName($0) } }
-            let credits = ArtistCredits.parse(runs: runs)
-            func creditId(for rawText: String) -> String? {
-                let cleaned = ArtistCredits.cleanedName(rawText)
-                return credits.first { $0.name == cleaned }?.browseId
-            }
-            if artistSegments.isEmpty {
-                artists = segments[0].filter { ArtistCredits.isArtistName($0) }.map {
-                    YTArtist(name: ArtistCredits.cleanedName($0), id: creditId(for: $0))
-                }
-                if album == nil && segments.count > 1 {
-                    album = segments[1].first
-                }
-            } else {
-                var collected: [YTArtist] = []
-                for seg in artistSegments {
-                    collected.append(contentsOf: seg.filter { ArtistCredits.isArtistName($0) }.map {
-                        YTArtist(name: ArtistCredits.cleanedName($0), id: creditId(for: $0))
-                    })
-                }
-                artists = collected
-                if album == nil {
-                    album = artistSegments.dropFirst().first?.first
-                }
-            }
-        } else {
-            artists = []
-        }
+        // Only the performer segment contains credits. Later segments describe
+        // the release or statistics, even if their text looks like a name.
+        let artistSegment = segments.first { $0.contains(where: ArtistCredits.isArtistName) } ?? []
+        let credits = ArtistCredits.parse(runs: runs)
+        artists = credits.filter { credit in
+            artistSegment.contains { ArtistCredits.cleanedName($0) == credit.name }
+        }.map { YTArtist(name: $0.name, id: $0.browseId) }
         let thumbnailUrl = extractResponsiveThumbnail(renderer)
         let stats = extractItemStats(from: segments)
         return SongItem(

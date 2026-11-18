@@ -1,123 +1,104 @@
 import Foundation
 
-/// Resolves artist profile photos from keyless sources.
-///
-/// Order: Deezer (`picture_xl`, 1000px) → Wikipedia/Wikimedia
-/// (`pageimages.original`) → the YouTube Music thumbnail we already have.
+/// Profile artwork belongs to an artist identity, not a display name. Preserve
+/// the image from that profile; use another catalogue only with track evidence.
 enum ArtistImageResolver {
     private actor Cache {
         static let shared = Cache()
-        private var hits: [String: URL] = [:]
-        private var misses: Set<String> = []
+        struct Entry {
+            let url: URL?
+            let expiresAt: Date
+        }
+        private var entries: [String: Entry] = [:]
 
-        func hit(_ key: String) -> URL? { hits[key] }
-        func isMiss(_ key: String) -> Bool { misses.contains(key) }
-
-        func store(_ key: String, _ url: URL) {
-            if hits.count >= 300 { hits.removeAll(keepingCapacity: true) }
-            hits[key] = url
+        func entry(_ key: String) -> Entry? {
+            guard let entry = entries[key], entry.expiresAt > Date() else {
+                entries[key] = nil
+                return nil
+            }
+            return entry
         }
 
-        func markMiss(_ key: String) { misses.insert(key) }
+        func store(_ key: String, _ url: URL?) {
+            if entries.count >= 300 { entries.removeAll(keepingCapacity: true) }
+            entries[key] = Entry(url: url, expiresAt: Date().addingTimeInterval(url == nil ? 900 : 86400))
+        }
     }
 
-    static func preferredImageURL(name: String, youTubeURL: URL?) async -> URL? {
-        let key = TextMatch.normalizeArtist(name)
-        guard !key.isEmpty else { return youTubeURL }
-
-        if let cached = await Cache.shared.hit(key) { return cached }
-        if await Cache.shared.isMiss(key) { return youTubeURL }
-
-        if let deezer = await deezerImage(name: name) {
-            await Cache.shared.store(key, deezer)
-            return deezer
+    static func preferredImageURL(
+        name: String,
+        youTubeURL: URL?,
+        artistID: String? = nil,
+        referenceTracks: [String] = []
+    ) async -> URL? {
+        // This URL was read from the requested artist's own page. Searching a
+        // different catalogue by name must never replace it with a namesake.
+        if let youTubeURL, ["https", "http"].contains(youTubeURL.scheme?.lowercased() ?? "") {
+            return youTubeURL
         }
-        if let wiki = await wikipediaImage(name: name) {
-            await Cache.shared.store(key, wiki)
-            return wiki
-        }
-        await Cache.shared.markMiss(key)
-        return youTubeURL
+        let tracks = Set(referenceTracks.map(TextMatch.normalizeTitle).filter { !$0.isEmpty })
+        guard !TextMatch.normalize(name).isEmpty, tracks.count >= 2 else { return nil }
+        let key = "verified-v1|\(artistID ?? "")|\(TextMatch.normalize(name))|\(tracks.sorted().joined(separator: "|"))"
+        if let cached = await Cache.shared.entry(key) { return cached.url }
+        let resolved = await deezerImage(name: name, referenceTracks: tracks)
+        guard !Task.isCancelled else { return nil }
+        await Cache.shared.store(key, resolved)
+        return resolved
     }
 
-    /// Lightweight avatar resolution for lists: Deezer 1000px → Wikimedia →
-    /// YouTube. Same artist photo as the hero, smaller sizes.
-    static func avatarImageURL(name: String, youTubeURL: URL?) async -> URL? {
-        let base = TextMatch.normalizeArtist(name)
-        guard !base.isEmpty else { return youTubeURL }
-        let key = base + "#avatar"
-        if let cached = await Cache.shared.hit(key) { return cached }
-        if await Cache.shared.isMiss(key) { return youTubeURL }
-        if let deezer = await deezerImage(name: name) {
-            await Cache.shared.store(key, deezer)
-            return deezer
-        }
-        if let wiki = await wikipediaImage(name: name) {
-            await Cache.shared.store(key, wiki)
-            return wiki
-        }
-        await Cache.shared.markMiss(key)
-        return youTubeURL
+    static func avatarImageURL(name: String, youTubeURL: URL?, artistID: String? = nil) async -> URL? {
+        await preferredImageURL(name: name, youTubeURL: youTubeURL, artistID: artistID)
     }
 
-    // MARK: - Deezer
+    // MARK: - Verified fallback
 
     private struct DeezerArtists: Decodable {
         struct Artist: Decodable {
+            let id: Int
             let name: String?
             let picture_xl: String?
         }
-        let data: [Artist]?
+        let data: [Artist]
     }
 
-    private static func deezerImage(name: String) async -> URL? {
+    private struct DeezerTracks: Decodable {
+        struct Track: Decodable {
+            struct Artist: Decodable { let id: Int }
+            let title: String
+            let artist: Artist
+        }
+        let data: [Track]
+    }
+
+    private static func deezerImage(name: String, referenceTracks: Set<String>) async -> URL? {
         var comps = URLComponents(string: "https://api.deezer.com/search/artist")
         comps?.queryItems = [
-            URLQueryItem(name: "q", value: TextMatch.queryArtist(name)),
+            URLQueryItem(name: "q", value: name),
             URLQueryItem(name: "limit", value: "5")
         ]
         guard let url = comps?.url,
               let decoded: DeezerArtists = try? await decode(url) else { return nil }
-        let best = decoded.data?.first { TextMatch.artistsMatch($0.name ?? "", name) }
-        return best?.picture_xl.flatMap(URL.init(string:))
-    }
-
-    // MARK: - Wikipedia / Wikimedia
-
-    private struct WikiQuery: Decodable {
-        struct Page: Decodable {
-            struct Original: Decodable { let source: String? }
-            let original: Original?
+        var verified: [URL] = []
+        for candidate in decoded.data {
+            guard !Task.isCancelled else { return nil }
+            guard TextMatch.normalize(candidate.name ?? "") == TextMatch.normalize(name),
+                  let image = candidate.picture_xl.flatMap(URL.init(string:)),
+                  let tracksURL = URL(string: "https://api.deezer.com/artist/\(candidate.id)/top?limit=50"),
+                  let tracks: DeezerTracks = try? await decode(tracksURL) else { continue }
+            let catalogueTitles = Set(tracks.data.filter { $0.artist.id == candidate.id }
+                .map { TextMatch.normalizeTitle($0.title) })
+            // Two distinct recordings must belong to this candidate's numeric
+            // artist id. An ambiguous result is not safe to use as a portrait.
+            if referenceTracks.intersection(catalogueTitles).count >= 2 {
+                verified.append(image)
+            }
         }
-        let pages: [String: Page]?
+        return verified.count == 1 ? verified.first : nil
     }
-
-    private static func wikipediaImage(name: String) async -> URL? {
-        var comps = URLComponents(string: "https://en.wikipedia.org/w/api.php")
-        comps?.queryItems = [
-            URLQueryItem(name: "action", value: "query"),
-            URLQueryItem(name: "generator", value: "search"),
-            URLQueryItem(name: "gsrsearch", value: "\(TextMatch.queryArtist(name)) musician"),
-            URLQueryItem(name: "gsrlimit", value: "1"),
-            URLQueryItem(name: "prop", value: "pageimages"),
-            URLQueryItem(name: "piprop", value: "original"),
-            URLQueryItem(name: "format", value: "json"),
-            URLQueryItem(name: "origin", value: "*")
-        ]
-        guard let url = comps?.url,
-              let decoded: WikiQuery = try? await decode(url),
-              let pages = decoded.pages else { return nil }
-        return pages.values
-            .compactMap { $0.original?.source }
-            .compactMap(URL.init(string:))
-            .first
-    }
-
-    // MARK: - Helpers
 
     private static func decode<T: Decodable>(_ url: URL) async throws -> T {
         var request = URLRequest(url: url)
-        request.timeoutInterval = 12
+        request.timeoutInterval = 8
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {

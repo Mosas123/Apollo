@@ -335,23 +335,32 @@ struct QueueSongRow: View {
     let song: SongItem
     var isCurrent = false
     var isPlayed = false
+    @State private var canonicalMetadata: ResolvedMetadata?
+    @State private var canonicalVideoID: String?
+
+    private var displayMetadata: ResolvedMetadata? {
+        canonicalVideoID == song.videoId ? canonicalMetadata : nil
+    }
 
     var body: some View {
         HStack(spacing: 12) {
-            AsyncImageView(url: song.thumbnailUrl)
+            SongArtworkView(song: song) { metadata in
+                canonicalVideoID = song.videoId
+                canonicalMetadata = metadata
+            }
                 .frame(width: 44, height: 44)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .opacity(isPlayed ? 0.5 : 1)
 
             VStack(alignment: .leading, spacing: 2) {
                 MarqueeText(
-                    text: song.title,
+                    text: displayMetadata?.title ?? song.title,
                     font: .subheadline.weight(isCurrent ? .semibold : .medium),
                     frameHeight: 20,
                     textColor: titleColor
                 )
 
-                let artistStr = song.artists.map(\.name).joined(separator: ", ")
+                let artistStr = displayMetadata?.artist ?? song.artists.map(\.name).joined(separator: ", ")
                 if !artistStr.isEmpty {
                     Text(artistStr)
                         .font(.caption)

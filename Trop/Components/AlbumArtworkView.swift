@@ -1,31 +1,34 @@
 import SwiftUI
 
-/// Shows the album cover (resolved once per album, cached) falling back to the
-/// song's YouTube thumbnail. Used in list rows so every track of an album shows
-/// the same cover without a request per row.
-struct AlbumArtworkView: View {
-    let album: String?
-    let artist: String?
-    let fallbackURL: String?
+/// One catalogue lookup policy for song rows and the player. Never interpret
+/// an arbitrary subtitle (duration, playlist name, etc.) as an album search.
+struct SongArtworkView: View {
+    let song: SongItem
+    var onMetadataResolved: ((ResolvedMetadata) -> Void)? = nil
 
     @State private var resolvedURL: String?
-
-    var body: some View {
-        AsyncImageView(url: resolvedURL ?? fallbackURL)
-            .task(id: taskKey) {
-                guard resolvedURL == nil,
-                      let album, !album.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-                guard let resolved = await AlbumCoverStore.shared.coverURL(
-                    album: album,
-                    artist: artist ?? ""
-                ) else { return }
-                if resolved.absoluteString != fallbackURL {
-                    resolvedURL = resolved.absoluteString
-                }
-            }
-    }
+    @State private var resolvedKey: String?
 
     private var taskKey: String {
-        "\(album ?? "")|\(artist ?? "")"
+        "\(song.videoId)|\(song.title)|\(song.artists.map(\.name).joined(separator: ", "))|\(song.album ?? "")|\(song.duration)"
+    }
+
+    var body: some View {
+        AsyncImageView(url: (resolvedKey == taskKey ? resolvedURL : nil) ?? song.thumbnailUrl)
+            .task(id: taskKey) {
+                resolvedURL = nil
+                resolvedKey = taskKey
+                guard song.contentKind == nil || song.contentKind == .music,
+                      !MusicPlaybackIdentity.isExternal(song.videoId) else { return }
+                let metadata = await MetadataResolver.enrich(
+                    title: song.title,
+                    artist: song.artists.map(\.name).joined(separator: ", "),
+                    album: song.album,
+                    duration: song.duration
+                )
+                guard !Task.isCancelled else { return }
+                resolvedURL = metadata?.artworkURL?.absoluteString
+                if let metadata { onMetadataResolved?(metadata) }
+            }
     }
 }

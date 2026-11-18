@@ -39,6 +39,12 @@ struct SongRowView: View {
 
     @State private var durations = DurationResolver()
     @State private var showSongMenu = false
+    @State private var canonicalMetadata: ResolvedMetadata?
+    @State private var canonicalVideoID: String?
+
+    private var displayMetadata: ResolvedMetadata? {
+        canonicalVideoID == song.videoId ? canonicalMetadata : nil
+    }
 
     var body: some View {
         HStack(spacing: DesignTokens.rowSpacing) {
@@ -49,22 +55,21 @@ struct SongRowView: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 24, alignment: .leading)
             } else {
-                AlbumArtworkView(
-                    album: song.album,
-                    artist: song.artists.first?.name,
-                    fallbackURL: song.thumbnailUrl
-                )
+                SongArtworkView(song: song) { metadata in
+                    canonicalVideoID = song.videoId
+                    canonicalMetadata = metadata
+                }
                 .frame(width: artSize, height: artSize)
                 .clipShape(RoundedRectangle(cornerRadius: artRadius, style: .continuous))
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(song.title)
+                Text(displayMetadata?.title ?? song.title)
                     .font(index == nil ? .headline : .body)
                     .foregroundColor(.primary)
                     .lineLimit(1)
 
-                Text(song.subtitleLine(duration: durations.effectiveDuration(known: song.duration)))
+                Text(subtitle)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
@@ -80,7 +85,7 @@ struct SongRowView: View {
             .sheet(isPresented: $showSongMenu) {
                 SongMenuSheet(
                     song: song,
-                    onNavigate: { onNavigate?($0) }
+                    onNavigate: onNavigate
                 )
             }
         }
@@ -96,9 +101,16 @@ struct SongRowView: View {
         }
     }
 
+    private var subtitle: String {
+        let duration = durations.effectiveDuration(known: song.duration)
+        guard let displayMetadata else { return song.subtitleLine(duration: duration) }
+        let time = duration.formattedDuration
+        return time.isEmpty ? displayMetadata.artist : "\(displayMetadata.artist) • \(time)"
+    }
+
     @ViewBuilder
     private var songContextMenu: some View {
-        SongContextMenuButtons(song: song)
+        SongContextMenuButtons(song: song, onNavigate: onNavigate)
         Button {
             Task { @MainActor in showSongMenu = true }
         } label: {

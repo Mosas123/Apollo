@@ -38,6 +38,7 @@ struct YTItemContextMenu: View {
 /// Song actions shared by row and card long-press menus.
 struct SongContextMenuButtons: View {
     let song: SongItem
+    var onNavigate: ((DetailRoute) -> Void)? = nil
 
     var body: some View {
         Button {
@@ -74,18 +75,28 @@ struct SongContextMenuButtons: View {
 
         if let artistId = song.artists.first(where: { $0.id != nil })?.id {
             Button {
-                AppRouter.shared.open(.artist(browseId: artistId))
+                navigate(.artist(browseId: artistId))
             } label: {
                 Label("Go to Artist", systemImage: "music.mic")
             }
         }
 
-        if let albumId = song.albumId, !albumId.isEmpty {
+        if MusicPlaybackIdentity.isYouTube(song.videoId) || song.firstAlbumBrowseId != nil {
             Button {
-                AppRouter.shared.open(.album(browseId: albumId))
+                if let albumId = song.firstAlbumBrowseId, !albumId.isEmpty {
+                    navigate(.album(browseId: albumId))
+                } else {
+                    navigate(.songAlbum(song))
+                }
             } label: {
                 Label("Go to Album", systemImage: "square.stack")
             }
+        }
+
+        Button {
+            navigate(.songDetails(song))
+        } label: {
+            Label("Details", systemImage: "info.circle")
         }
 
         if MusicPlaybackIdentity.isYouTube(song.videoId) {
@@ -101,5 +112,10 @@ struct SongContextMenuButtons: View {
                 Label("Share", systemImage: "square.and.arrow.up")
             }
         }
+    }
+
+    private func navigate(_ route: DetailRoute) {
+        if let onNavigate { onNavigate(route) }
+        else { AppRouter.shared.open(route) }
     }
 }

@@ -136,6 +136,7 @@ struct AsyncImageView: View {
         try? await Task.sleep(for: .milliseconds(400))
         guard !Task.isCancelled else { return }
         if let image = try? await ImagePipeline.shared.image(for: request) {
+            guard !Task.isCancelled else { return }
             StickyArtwork.store(image, for: normalized)
             loadedKey = normalized
             withAnimation(.easeInOut(duration: 0.2)) {

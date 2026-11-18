@@ -28,6 +28,10 @@ struct LRCLIBProvider: LyricsProvider {
         guard let url = components.url else { throw LyricsError.invalidURL }
         let json = try await LyricsHTTP.getJSON(URLRequest(url: url))
 
+        guard LyricsMatch.accepts(query, title: json["trackName"] as? String,
+                                  artists: [json["artistName"] as? String ?? ""],
+                                  duration: json["duration"] as? Double) else { throw LyricsError.notFound }
+
         if let instrumental = json["instrumental"] as? Bool, instrumental {
             return [LyricLine(text: "♪ Instrumental ♪", startTime: nil)]
         }

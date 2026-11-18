@@ -53,7 +53,7 @@ struct MusixmatchProvider: LyricsProvider {
         applyHeaders(to: &request)
 
         let json = try await LyricsHTTP.getJSON(request)
-        return try parse(json)
+        return try parse(json, query: query)
     }
 
     // MARK: - Token
@@ -80,7 +80,7 @@ struct MusixmatchProvider: LyricsProvider {
 
     // MARK: - Parsing
 
-    private func parse(_ json: [String: Any]) throws -> [LyricLine] {
+    private func parse(_ json: [String: Any], query: LyricsQuery) throws -> [LyricLine] {
         guard let message = json["message"] as? [String: Any],
               let body = message["body"] as? [String: Any],
               let macro = body["macro_calls"] as? [String: Any] else {
@@ -97,6 +97,9 @@ struct MusixmatchProvider: LyricsProvider {
 
         let mBody = mMessage["body"] as? [String: Any] ?? [:]
         let track = mBody["track"] as? [String: Any] ?? [:]
+        guard LyricsMatch.accepts(query, title: track["track_name"] as? String,
+                                  artists: [track["artist_name"] as? String ?? ""],
+                                  duration: track["track_length"] as? Double) else { throw LyricsError.notFound }
         if track["instrumental"] as? Bool == true {
             return [LyricLine(text: "♪ Instrumental ♪", startTime: nil)]
         }

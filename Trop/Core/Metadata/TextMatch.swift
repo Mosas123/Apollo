@@ -158,7 +158,7 @@ enum TextMatch {
     static func artistsMatch(_ lhs: String, _ rhs: String) -> Bool {
         let a = normalizeArtist(lhs)
         let b = normalizeArtist(rhs)
-        guard !a.isEmpty, !b.isEmpty else { return true }
+        guard !a.isEmpty, !b.isEmpty else { return false }
         if a == b { return true }
         let aTokens = a.split(separator: " ")
         let bTokens = b.split(separator: " ")
@@ -168,5 +168,66 @@ enum TextMatch {
             return a.contains(b) || b.contains(a)
         }
         return false
+    }
+}
+
+extension TextMatch {
+    struct RecordingQuery {
+        let title: String
+        let artist: String
+    }
+
+    /// Upload titles may identify the performers more accurately than the
+    /// uploader field. Interpret that format only with explicit video markers,
+    /// missing credits, or a prefix agreeing with the existing performer.
+    static func recordingQuery(title: String, artist: String) -> RecordingQuery {
+        let promotional = normalize(title)
+        let marked = ["official video", "official music video", "video oficial", "official audio",
+                      "audio oficial", "lyric video", "video lyric", "visualizer"].contains { promotional.contains($0) }
+        for separator in [" - ", " – ", " — "] {
+            guard let range = title.range(of: separator) else { continue }
+            let prefix = String(title[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let track = String(title[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !prefix.isEmpty, !track.isEmpty,
+               marked || artist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || artistsMatch(prefix, artist) {
+                return RecordingQuery(title: recordingTitle(track), artist: queryArtist(prefix))
+            }
+        }
+        return RecordingQuery(title: recordingTitle(title), artist: queryArtist(artist))
+    }
+
+    /// Remove upload labels, preserving meaningful recording versions such as
+    /// remix, live, acoustic, remaster and radio edit.
+    static func recordingTitle(_ title: String) -> String {
+        let label = #"(?:official(?:\s+music)?\s+(?:video|audio)|v[ií]deo\s+oficial|audio\s+oficial|lyric\s+video|lyrics?|letra|visuali[sz]er)"#
+        var value = title.replacingOccurrences(
+            of: #"\s*[\[(]\s*"# + label + #"\s*[\])]"#,
+            with: "", options: [.regularExpression, .caseInsensitive]
+        )
+        value = value.replacingOccurrences(
+            of: #"\s+(?:[-–—|]\s*)?"# + label + #"\s*$"#,
+            with: "", options: [.regularExpression, .caseInsensitive]
+        )
+        value = value.replacingOccurrences(
+            of: #"\s*[\[(]\s*(?:feat\.?|ft\.?|featuring)\s+[^\])]*[\])]"#,
+            with: "", options: [.regularExpression, .caseInsensitive]
+        )
+        value = value.replacingOccurrences(
+            of: #"\s+(?:feat\.?|ft\.?|featuring)\s+.*$"#,
+            with: "", options: [.regularExpression, .caseInsensitive]
+        )
+        return value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func recordingsMatch(_ lhs: String, _ rhs: String) -> Bool {
+        let a = normalize(recordingTitle(lhs))
+        let b = normalize(recordingTitle(rhs))
+        return !a.isEmpty && a == b
+    }
+
+    /// Catalogue text searches can return no hits when a video's comma-separated
+    /// list of performers is sent verbatim. Validate credits after retrieval.
+    static func catalogueArtist(_ artist: String) -> String {
+        queryArtist(artist.components(separatedBy: ",").first ?? artist)
     }
 }

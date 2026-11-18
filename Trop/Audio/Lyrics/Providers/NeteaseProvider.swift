@@ -43,10 +43,13 @@ struct NeteaseProvider: LyricsProvider {
         var bestScore = -Double.infinity
         for (i, song) in songs.enumerated() {
             let name = normalize(songName(song))
-            let artists = (song["artists"] as? [[String: Any]] ?? [])
+            let artists = ((song["artists"] ?? song["ar"]) as? [[String: Any]] ?? [])
                 .compactMap { ($0["name"] as? String).map(normalize) }
             let album = normalize(albumName(song))
             let sdur = songDuration(song)
+            let names = ((song["artists"] ?? song["ar"]) as? [[String: Any]] ?? []).compactMap { $0["name"] as? String }
+            guard LyricsMatch.accepts(query, title: songName(song), artists: names,
+                                      duration: Double(sdur) / 1000) else { continue }
 
             var score: Double = 0
             if name == cleanTitle {
@@ -116,11 +119,11 @@ struct NeteaseProvider: LyricsProvider {
     }
 
     private func albumName(_ song: [String: Any]) -> String {
-        (song["album"] as? [String: Any])?["name"] as? String ?? ""
+        ((song["album"] ?? song["al"]) as? [String: Any])?["name"] as? String ?? ""
     }
 
     private func songDuration(_ song: [String: Any]) -> Int {
-        song["duration"] as? Int ?? 0
+        song["duration"] as? Int ?? song["dt"] as? Int ?? 0
     }
 
     /// normalize: lowercase, trim, strip common extra info

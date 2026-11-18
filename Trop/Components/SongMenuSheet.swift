@@ -70,13 +70,17 @@ struct SongMenuSheet: View {
                             title: "View Artist",
                             subtitle: song.artistNamesDisplay
                         ) { handleViewArtist() }
-                        if let albumId = song.firstAlbumBrowseId {
-                            Divider()
-                            MenuRow(
-                                icon: "record.circle",
-                                title: "View Album",
-                                subtitle: song.album
-                            ) { navigate(.album(browseId: albumId)) }
+                        Divider()
+                        MenuRow(
+                            icon: "record.circle",
+                            title: "View Album",
+                            subtitle: song.album
+                        ) {
+                            if let albumId = song.firstAlbumBrowseId, !albumId.isEmpty {
+                                navigate(.album(browseId: albumId))
+                            } else {
+                                navigate(.songAlbum(song))
+                            }
                         }
                     }
                     MenuCard {
@@ -115,6 +119,11 @@ struct SongMenuSheet: View {
                         MenuRow(icon: "text.insert", title: "Play Next") { playNext() }
                         Divider()
                         MenuRow(icon: "list.bullet", title: "Add to Queue") { addToQueue() }
+                        Divider()
+                        NavigationLink(value: Destination.details) {
+                            MenuRowLabel(icon: "info.circle", title: "Details", subtitle: "Metadata & stream information")
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -180,7 +189,7 @@ struct SongMenuSheet: View {
 
     private var headerCard: some View {
         HStack(spacing: 12) {
-            AsyncImageView(url: song.thumbnailUrl)
+            SongArtworkView(song: song)
                 .frame(width: 48, height: 48)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
 
@@ -298,7 +307,8 @@ struct SongMenuSheet: View {
 
     private func navigate(_ route: DetailRoute) {
         dismiss()
-        onNavigate?(route)
+        if let onNavigate { onNavigate(route) }
+        else { AppRouter.shared.open(route) }
     }
 
     private func playSimilarAndExpand(_ similar: SongItem, in songs: [SongItem]) {

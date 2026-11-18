@@ -289,7 +289,7 @@ struct HomeScreenView: View {
 
     private func quickPickCell(_ song: SongItem, queue: [SongItem]) -> some View {
         HStack(spacing: 16) {
-            AsyncImageView(url: song.thumbnailUrl)
+            SongArtworkView(song: song)
                 .frame(width: 56, height: 56)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 

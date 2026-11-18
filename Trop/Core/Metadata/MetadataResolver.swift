@@ -16,11 +16,13 @@ struct ResolvedMetadata: Sendable, Codable {
 enum MetadataResolver {
     /// Resolve canonical metadata for a track. Tries iTunes, then MusicBrainz.
     static func enrich(title: String, artist: String, album: String? = nil, duration: Int? = nil) async -> ResolvedMetadata? {
-        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let artist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return nil }
+        let query = TextMatch.recordingQuery(title: title, artist: artist)
+        let title = query.title
+        let artist = query.artist
+        guard !title.isEmpty, !artist.isEmpty else { return nil }
 
-        let key = cacheKey(title: title, artist: artist)
+        let key = "track-v3|\(TextMatch.normalize(TextMatch.recordingTitle(title)))|\(TextMatch.normalize(TextMatch.queryArtist(artist)))"
+            + "|\(TextMatch.normalizeTitle(album ?? ""))|\(duration ?? 0)"
         if let cached = await MetadataCache.shared.lookup(key) {
             return cached.value
         }
@@ -32,7 +34,7 @@ enum MetadataResolver {
             resolved = await deezer(title: title, artist: artist, album: album, duration: duration)
         }
         if resolved == nil {
-            resolved = await musicBrainz(title: title, artist: artist)
+            resolved = await musicBrainz(title: title, artist: artist, duration: duration)
         }
         await MetadataCache.shared.store(key, resolved)
         return resolved
@@ -85,9 +87,9 @@ enum MetadataResolver {
     private static func iTunes(title: String, artist: String, album: String?, duration: Int?) async -> ResolvedMetadata? {
         var components = URLComponents(string: "https://itunes.apple.com/search")
         components?.queryItems = [
-            URLQueryItem(name: "term", value: "\(TextMatch.queryArtist(artist)) \(TextMatch.queryTitle(title))"),
+            URLQueryItem(name: "term", value: "\(TextMatch.catalogueArtist(artist)) \(TextMatch.recordingTitle(title))"),
             URLQueryItem(name: "entity", value: "song"),
-            URLQueryItem(name: "limit", value: "5")
+            URLQueryItem(name: "limit", value: "15")
         ]
         guard let url = components?.url,
               let response: ITunesResponse = try? await decode(url, headers: [:]) else {
@@ -96,7 +98,7 @@ enum MetadataResolver {
 
         let candidates = response.results.filter { result in
             guard let track = result.trackName, let name = result.artistName else { return false }
-            guard TextMatch.titlesMatch(track, title), TextMatch.artistsMatch(name, artist) else { return false }
+            guard TextMatch.recordingsMatch(track, title), TextMatch.artistsMatch(name, artist) else { return false }
             let querySuspicious = TextMatch.isSuspiciousVersion(title)
             if !querySuspicious, TextMatch.isSuspiciousVersion(track) { return false }
             if let duration, duration > 0, let millis = result.trackTimeMillis {
@@ -129,6 +131,10 @@ enum MetadataResolver {
 
     private struct MusicBrainzResponse: Decodable {
         struct Recording: Decodable {
+            struct Credit: Decodable {
+                struct Artist: Decodable { let name: String }
+                let artist: Artist
+            }
             struct Release: Decodable {
                 let id: String
                 let title: String?
@@ -137,14 +143,22 @@ enum MetadataResolver {
             let title: String?
             let firstReleaseDate: String?
             let releases: [Release]?
+            let artistCredit: [Credit]?
+            let length: Int?
+
+            enum CodingKeys: String, CodingKey {
+                case title, releases, length
+                case firstReleaseDate = "first-release-date"
+                case artistCredit = "artist-credit"
+            }
         }
         let recordings: [Recording]
     }
 
-    private static func musicBrainz(title: String, artist: String) async -> ResolvedMetadata? {
+    private static func musicBrainz(title: String, artist: String, duration: Int?) async -> ResolvedMetadata? {
         var components = URLComponents(string: "https://musicbrainz.org/ws/2/recording/")
         components?.queryItems = [
-            URLQueryItem(name: "query", value: "recording:\"\(TextMatch.queryTitle(title))\" AND artist:\"\(TextMatch.queryArtist(artist))\""),
+            URLQueryItem(name: "query", value: "recording:\"\(TextMatch.recordingTitle(title))\" AND artist:\"\(TextMatch.catalogueArtist(artist))\""),
             URLQueryItem(name: "fmt", value: "json"),
             URLQueryItem(name: "limit", value: "1")
         ]
@@ -155,6 +169,14 @@ enum MetadataResolver {
               let recording = response.recordings.first else {
             return nil
         }
+
+        guard TextMatch.recordingsMatch(recording.title ?? "", title),
+              recording.artistCredit?.contains(where: { TextMatch.artistsMatch($0.artist.name, artist) }) == true else {
+            return nil
+        }
+
+        if let duration, duration > 0, let milliseconds = recording.length,
+           abs(milliseconds / 1000 - duration) > 15 { return nil }
 
         let release = recording.releases?.first
         let year = (release?.date ?? recording.firstReleaseDate).flatMap { Int($0.prefix(4)) }
@@ -191,10 +213,10 @@ enum MetadataResolver {
 
     private static func deezer(title: String, artist: String, album: String?, duration: Int?) async -> ResolvedMetadata? {
         var components = URLComponents(string: "https://api.deezer.com/search")
-        let query = artist.isEmpty ? TextMatch.queryTitle(title) : "\(TextMatch.queryArtist(artist)) \(TextMatch.queryTitle(title))"
+        let query = artist.isEmpty ? TextMatch.recordingTitle(title) : "\(TextMatch.catalogueArtist(artist)) \(TextMatch.recordingTitle(title))"
         components?.queryItems = [
             URLQueryItem(name: "q", value: query),
-            URLQueryItem(name: "limit", value: "5")
+            URLQueryItem(name: "limit", value: "15")
         ]
         guard let url = components?.url,
               let response: DeezerResponse = try? await decode(url, headers: [:]) else {
@@ -202,7 +224,7 @@ enum MetadataResolver {
         }
         let candidates = response.data.filter { track in
             guard let trackTitle = track.title else { return false }
-            guard TextMatch.titlesMatch(trackTitle, title),
+            guard TextMatch.recordingsMatch(trackTitle, title),
                   TextMatch.artistsMatch(track.artist?.name ?? "", artist) else { return false }
             let querySuspicious = TextMatch.isSuspiciousVersion(title)
             if !querySuspicious, TextMatch.isSuspiciousVersion(trackTitle) { return false }

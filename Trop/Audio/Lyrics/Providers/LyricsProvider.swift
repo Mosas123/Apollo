@@ -90,3 +90,34 @@ enum LyricsParsing {
         lines.map(\.text).filter { !$0.isEmpty }.joined(separator: "\n")
     }
 }
+
+/// Automatic selection must identify the recording, not merely its album or
+/// artist. A missing match is safer than lyrics from another track.
+enum LyricsMatch {
+    static func titleKey(_ value: String) -> String {
+        var text = value.replacingOccurrences(
+            of: #"(?i)\s*[\[(](?:official(?: music)? (?:video|audio)|lyrics?|visualizer)[^\])]*[\])]"#,
+            with: "", options: .regularExpression
+        )
+        text = text.replacingOccurrences(of: #"(?i)\s+(?:feat\.?|ft\.?|featuring)\s+.*$"#, with: "", options: .regularExpression)
+        return text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
+    }
+
+    static func accepts(_ query: LyricsQuery, title: String?, artists: [String], duration: TimeInterval? = nil) -> Bool {
+        guard let title, !titleKey(query.title).isEmpty,
+              titleKey(title) == titleKey(query.title) else { return false }
+        let lead = query.artist.components(separatedBy: ",").first ?? query.artist
+        let expected = titleKey(lead)
+        guard !expected.isEmpty, artists.contains(where: { candidate in
+            // Provider artist fields may combine collaborators in one string.
+            let parts = candidate.components(separatedBy: CharacterSet(charactersIn: ",&、"))
+            return parts.contains { titleKey($0) == expected }
+        }) else { return false }
+        if query.duration > 0, let duration, duration > 0 {
+            let tolerance = max(8, min(15, query.duration * 0.04))
+            guard abs(duration - query.duration) <= tolerance else { return false }
+        }
+        return true
+    }
+}

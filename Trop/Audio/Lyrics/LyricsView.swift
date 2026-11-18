@@ -27,6 +27,7 @@ struct LyricsView<ProgressSlider: View>: View {
     @State private var timedLineIndex: [Int] = []
     @State private var timedLineStarts: [TimeInterval] = []
     @State private var romanizedLines: [String?] = []
+    @State private var lyricsLoadGeneration = UUID()
 
     struct InstrumentalGap {
         let afterIndex: Int
@@ -130,6 +131,17 @@ struct LyricsView<ProgressSlider: View>: View {
                             Spacer().frame(height: geo.size.height * 0.38)
                         }
                         .padding(.vertical, 8)
+                        .onGeometryChange(for: CGFloat.self) { content in
+                            content.size.height
+                        } action: { height in
+                            // Scroll only after the line IDs exist in the layout.
+                            // Re-read playback time: loading may have taken seconds.
+                            guard height > 0, !hasPositionedInitialLyrics,
+                                  isAutoScrollEnabled, !userHasScrolled else { return }
+                            scrollProxy = proxy
+                            updateActiveLine()
+                            scrollToActive(animated: false)
+                        }
                     }
                     .scrollIndicators(.hidden)
                     .mask {
@@ -148,12 +160,8 @@ struct LyricsView<ProgressSlider: View>: View {
                     .onAppear { scrollProxy = proxy }
                     .onChange(of: activeIndex) { _, newIndex in
                         guard lines.indices.contains(newIndex) else { return }
-                        if isAutoScrollEnabled && !userHasScrolled {
-                            if hasPositionedInitialLyrics {
-                                scrollToActive()
-                            } else {
-                                hasPositionedInitialLyrics = true
-                            }
+                        if hasPositionedInitialLyrics && isAutoScrollEnabled && !userHasScrolled {
+                            scrollToActive()
                         }
                     }
                 }
@@ -208,11 +216,21 @@ struct LyricsView<ProgressSlider: View>: View {
     /// Centers the active line via the proxy only — writing the
     /// scrollPosition binding here would top-align the line and fight the
     /// center anchor.
-    private func scrollToActive() {
-        guard lines.indices.contains(activeIndex) else { return }
+    private func scrollToActive(animated: Bool = true) {
+        guard !timedLineStarts.isEmpty, lines.indices.contains(activeIndex),
+              let scrollProxy else { return }
         let targetID = lines[activeIndex].id
-        withAnimation(.easeInOut(duration: 0.4)) {
-            scrollProxy?.scrollTo(targetID, anchor: .center)
+        hasPositionedInitialLyrics = true
+        if animated {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                scrollProxy.scrollTo(targetID, anchor: .center)
+            }
+        } else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                scrollProxy.scrollTo(targetID, anchor: .center)
+            }
         }
     }
 
@@ -467,6 +485,8 @@ struct LyricsView<ProgressSlider: View>: View {
     // MARK: - Data
 
     private func loadLyrics() async {
+        let generation = UUID()
+        lyricsLoadGeneration = generation
         guard let videoId = np.videoId else {
             lines = []
             return
@@ -483,7 +503,8 @@ struct LyricsView<ProgressSlider: View>: View {
         guard !Task.isCancelled else { return }
         do {
             let result = try await LyricsService.shared.fetchLyrics(videoId: videoId)
-            guard !result.isEmpty else { return }
+            guard !Task.isCancelled, lyricsLoadGeneration == generation,
+                  np.videoId == videoId, !result.isEmpty else { return }
             let withoutMarkers = result.filter { !Self.isInstrumentalMarker($0) }
             lines = withoutMarkers.isEmpty ? result : withoutMarkers
             instrumentalGaps = detectGaps(in: result)

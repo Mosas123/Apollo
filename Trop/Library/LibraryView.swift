@@ -304,7 +304,8 @@ struct LibraryView: View {
                 NavigationLink(value: DetailRoute.artist(browseId: artist.id)) {
                     artistCell(
                         url: artist.thumbnailUrl,
-                        name: artist.name
+                        name: artist.name,
+                        artistID: artist.id
                     )
                 }
                 .buttonStyle(.plain)
@@ -429,9 +430,9 @@ struct LibraryView: View {
         }
     }
 
-    private func artistCell(url: String?, name: String) -> some View {
+    private func artistCell(url: String?, name: String, artistID: String) -> some View {
         VStack(spacing: 8) {
-            ArtistAvatarImageView(name: name, fallbackURL: url)
+            ArtistAvatarImageView(name: name, fallbackURL: url, artistID: artistID)
                 .frame(width: 120, height: 120)
                 .clipShape(Circle())
             Text(name).lineLimit(1).font(.callout)

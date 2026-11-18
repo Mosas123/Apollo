@@ -41,11 +41,21 @@ final class ArtistDetailViewModel {
             Self.preloadHeroArtwork(for: parsed.thumbnailUrl)
             artist = parsed
             isLoading = false
-            // Prefer a better profile photo (Apple 1800px → Deezer → Wikimedia)
-            // and fall back to the YouTube Music thumbnail.
+            // Preserve the requested profile's photo. A fallback must match
+            // its recordings as well as the artist's display name.
             let ytURL = ArtworkURLs.sized(parsed.thumbnailUrl, width: 1200, height: 1200)
                 .flatMap { URL(string: $0) }
-            if let resolved = await ArtistImageResolver.preferredImageURL(name: parsed.name, youTubeURL: ytURL) {
+            let referenceTracks = parsed.songs.filter { song in
+                song.artists.contains { $0.id == browseId }
+            }.map(\.title)
+            let resolved = await ArtistImageResolver.preferredImageURL(
+                name: parsed.name,
+                youTubeURL: ytURL,
+                artistID: browseId,
+                referenceTracks: referenceTracks
+            )
+            guard !Task.isCancelled else { return }
+            if let resolved {
                 artist?.heroImageURL = resolved.absoluteString
             }
             // Unblock the hero either way (falls back to the YouTube thumbnail).
@@ -70,6 +80,7 @@ extension ArtistDetailViewModel {
         var subscriberCountText: String?
         var descriptionText: String?
         var isSubscribed = false
+        var subscriptionChannelId: String?
         var songs: [SongItem] = []
         var buckets = ArtistCarouselBuckets()
 
@@ -83,6 +94,7 @@ extension ArtistDetailViewModel {
                 let subscription = extractSubscriptionDetails(from: immersive)
                 isSubscribed = subscription.isSubscribed ?? false
                 subscriberCountText = subscription.subscriberCountText
+                subscriptionChannelId = subscription.channelId
                 if let descDict = immersive["description"] as? [String: Any] {
                     let shelf = descDict["musicDescriptionShelfRenderer"] as? [String: Any]
                     descriptionText = (shelf?["description"] as? [String: Any]).flatMap { InnerTubeJSON.runsText($0) }
@@ -94,6 +106,7 @@ extension ArtistDetailViewModel {
                 let subscription = extractSubscriptionDetails(from: responsive)
                 isSubscribed = subscription.isSubscribed ?? false
                 subscriberCountText = subscription.subscriberCountText
+                subscriptionChannelId = subscription.channelId
                 if descriptionText == nil, let descDict = responsive["description"] as? [String: Any] {
                     let shelf = descDict["musicDescriptionShelfRenderer"] as? [String: Any]
                     descriptionText = (shelf?["description"] as? [String: Any]).flatMap { InnerTubeJSON.runsText($0) }
@@ -166,7 +179,8 @@ extension ArtistDetailViewModel {
             singles: buckets.singles,
             videos: buckets.videos,
             playlists: buckets.playlists,
-            relatedArtists: buckets.relatedArtists
+            relatedArtists: buckets.relatedArtists,
+            subscriptionChannelId: subscriptionChannelId
         )
     }
 
@@ -245,7 +259,7 @@ extension ArtistDetailViewModel {
     /// the count in `subscriptionButton2`, and older responses include a notification toggle.
     private static func extractSubscriptionDetails(
         from header: [String: Any]
-    ) -> (isSubscribed: Bool?, subscriberCountText: String?) {
+    ) -> (isSubscribed: Bool?, subscriberCountText: String?, channelId: String?) {
         var isSubscribed: Bool?
         var subscriberCountText: String?
 
@@ -280,7 +294,20 @@ extension ArtistDetailViewModel {
             }
         }
 
-        return (isSubscribed, subscriberCountText)
+        // Restrict the walk to the subscription button, not related artists.
+        func channel(in value: Any) -> String? {
+            if let dictionary = value as? [String: Any] {
+                if let id = dictionary["channelId"] as? String, !id.isEmpty { return id }
+                if let ids = dictionary["channelIds"] as? [String], let id = ids.first, !id.isEmpty { return id }
+                for key in dictionary.keys.sorted() {
+                    if let nested = dictionary[key], let id = channel(in: nested) { return id }
+                }
+            } else if let array = value as? [Any] {
+                for item in array { if let id = channel(in: item) { return id } }
+            }
+            return nil
+        }
+        return (isSubscribed, subscriberCountText, buttons.compactMap { channel(in: $0) }.first)
     }
 
     /// Extracts the title from a musicCarouselShelfBasicHeaderRenderer.
@@ -308,6 +335,7 @@ struct ArtistDetailView: View {
     @State private var showInfo = false
     @State private var isUpdatingSubscription = false
     @State private var showSubscriptionError = false
+    @State private var subscriptionErrorMessage = ""
     @State private var infoGenre: String?
     @State private var infoBio: ArtistBioResolver.Bio?
     @State private var backdropColors: [Color] = []
@@ -370,7 +398,7 @@ struct ArtistDetailView: View {
         .alert("Couldn't update favorite", isPresented: $showSubscriptionError) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("Your previous selection was restored. Please try again.")
+            Text(subscriptionErrorMessage)
         }
         .onDisappear { linkResetTask?.cancel() }
     }
@@ -1035,6 +1063,7 @@ struct ArtistDetailView: View {
 
         Task { @MainActor in
             defer { isUpdatingSubscription = false }
+            var failureStage = "local storage"
             do {
                 let previous = try await DatabaseService.shared.fetchOne(ArtistEntity.self, key: artist.browseId)
                 var entity = previous ?? ArtistEntity(
@@ -1043,12 +1072,14 @@ struct ArtistDetailView: View {
                     isPodcastChannel: false, channelId: artist.browseId
                 )
                 entity.bookmarkedAt = desiredState ? Date() : nil
-                let channelId = entity.channelId ?? artist.browseId
+                let channelId = artist.subscriptionChannelId ?? entity.channelId ?? artist.browseId
                 entity.channelId = channelId
                 do {
-                    try await DatabaseService.shared.insertOrReplace(entity)
+                    try await DatabaseService.shared.save(entity)
                     // Guest favorites belong to this device, not a Google account.
                     if await CookieStore().isLoggedIn() {
+                        failureStage = "YouTube Music sync"
+                        await AuthService.shared.loadPersistedSession()
                         if desiredState {
                             try await SyncBridge.mutations.subscribeArtist(channelId: channelId, artistId: artist.browseId)
                         } else {
@@ -1057,22 +1088,44 @@ struct ArtistDetailView: View {
                     }
                 } catch {
                     if let previous {
-                        try? await DatabaseService.shared.insertOrReplace(previous)
+                        try? await DatabaseService.shared.save(previous)
                     } else {
                         entity.bookmarkedAt = nil
-                        try? await DatabaseService.shared.insertOrReplace(entity)
+                        try? await DatabaseService.shared.save(entity)
                     }
                     throw error
                 }
                 NotificationCenter.default.post(name: .personalizationDataUpdated, object: nil)
             } catch {
-                Log.artistDetail.error("Update artist favorite failed: \(error)")
+                Log.artistDetail.error("Artist favorite failed stage=\(failureStage) artistId=\(artist.browseId) target=\(desiredState) error=\(error)")
                 if viewModel.artist?.browseId == artist.browseId {
                     viewModel.artist?.isSubscribed = artist.isSubscribed
+                    subscriptionErrorMessage = failureStage == "local storage"
+                        ? "Couldn't save the favorite on this device. Your previous selection was restored."
+                        : Self.subscriptionFailureMessage(error)
                     showSubscriptionError = true
                 }
             }
         }
+    }
+
+    private static func subscriptionFailureMessage(_ error: Error) -> String {
+        if let apiError = error as? InnerTubeError {
+            switch apiError {
+            case .sessionExpired:
+                return "Your YouTube Music session has expired. Sign in again to update your subscription."
+            case .httpError(let code, _):
+                if code == 401 || code == 403 {
+                    return "YouTube Music couldn't authorize this change. Sign in again and retry."
+                }
+                return "YouTube Music rejected the change (HTTP \(code)). Your previous selection was restored."
+            default: break
+            }
+        }
+        if error is URLError {
+            return "Couldn't connect to YouTube Music. Check your connection and try again."
+        }
+        return "Couldn't save the change. Your previous selection was restored. Please try again."
     }
 
 }

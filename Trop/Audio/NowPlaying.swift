@@ -653,14 +653,13 @@ final class NowPlaying {
     /// and publishes it if it clearly matches. Returns whether it published.
     private func resolveCanonicalArtwork(videoId: String) async -> Bool {
         guard !MusicPlaybackIdentity.isExternal(videoId) else { return false }
-        var title = title
-        var artist = artist
-        // "Artist - Title" uploads often have no artist field.
-        if artist.isEmpty, let separator = title.range(of: " - ") {
-            artist = String(title[..<separator.lowerBound]).trimmingCharacters(in: .whitespaces)
-            title = String(title[separator.upperBound...]).trimmingCharacters(in: .whitespaces)
-        }
         let song = queueSongs.first { $0.videoId == videoId }
+        let query = TextMatch.recordingQuery(
+            title: song?.title ?? title,
+            artist: song.map { $0.artists.map(\.name).joined(separator: ", ") } ?? artist
+        )
+        let title = query.title
+        let artist = query.artist
         let album = song?.album
         let duration = song?.duration
         guard !title.isEmpty else { return false }
@@ -668,20 +667,17 @@ final class NowPlaying {
             title: title, artist: artist, album: album, duration: duration, seconds: 2.5
         )
         guard let resolved, !Task.isCancelled, lastLoadedVideoId == videoId else { return false }
-        guard TextMatch.titlesMatch(resolved.title, title) else { return false }
+        guard TextMatch.recordingsMatch(resolved.title, title) else { return false }
         if !artist.isEmpty {
             guard TextMatch.artistsMatch(resolved.artist, artist) else { return false }
         }
         if !resolved.title.isEmpty { self.title = resolved.title }
         if !resolved.artist.isEmpty { self.artist = resolved.artist }
         if let album = resolved.album, !album.isEmpty { self.albumTitle = album }
-        // One cover per album: every track of the same album shows the same art.
-        var coverURL = resolved.artworkURL
-        if let album, !album.isEmpty,
-           let albumCover = await AlbumCoverStore.shared.coverURL(album: album, artist: artist) {
-            coverURL = albumCover
-        }
-        guard let artworkString = ArtworkURLs.highRes(coverURL?.absoluteString),
+        PlayerController.shared.setNowPlayingMetadata()
+        // Use the same validated track result as the rows. A stale album field
+        // must not replace this with an unrelated release's artwork.
+        guard let artworkString = ArtworkURLs.highRes(resolved.artworkURL?.absoluteString),
               let artworkURL = URL(string: artworkString),
               let image = try? await ArtworkLoader.image(for: artworkURL) else { return false }
         guard lastLoadedVideoId == videoId else { return false }
@@ -726,7 +722,8 @@ final class NowPlaying {
         guard replaceArtwork else { return }
         let title = title
         let artist = artist
-        let kind = queueSongs.first { $0.videoId == videoId }?.contentKind
+        let song = queueSongs.first { $0.videoId == videoId }
+        let kind = song?.contentKind
         guard !title.isEmpty else { return }
         enrichTask?.cancel()
         enrichTask = Task {
@@ -735,7 +732,7 @@ final class NowPlaying {
             if kind == .episode || kind == .podcast {
                 resolved = await PodcastMetadataResolver.enrich(title: title, author: artist)
             } else {
-                resolved = await MetadataResolver.enrich(title: title, artist: artist)
+                resolved = await MetadataResolver.enrich(title: title, artist: artist, album: song?.album, duration: song?.duration)
             }
             guard let resolved else { return }
             guard !Task.isCancelled, lastLoadedVideoId == videoId else { return }
@@ -745,9 +742,10 @@ final class NowPlaying {
                 if !resolved.artist.isEmpty { self.artist = resolved.artist }
                 if let album = resolved.album, !album.isEmpty { self.albumTitle = album }
             } else {
-                guard TextMatch.titlesMatch(resolved.title, title) else { return }
+                let query = TextMatch.recordingQuery(title: title, artist: artist)
+                guard TextMatch.recordingsMatch(resolved.title, query.title) else { return }
                 if !artist.isEmpty {
-                    guard TextMatch.artistsMatch(resolved.artist, artist) else { return }
+                    guard TextMatch.artistsMatch(resolved.artist, query.artist) else { return }
                 }
                 if !resolved.title.isEmpty { self.title = resolved.title }
                 if !resolved.artist.isEmpty { self.artist = resolved.artist }
