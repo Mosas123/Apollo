@@ -119,7 +119,7 @@ struct DJMixView: View {
         .miniPlayerTracksScroll()
         .fileImporter(
             isPresented: $importing,
-            allowedContentTypes: [.audio, .wav, .mpeg4Audio],
+            allowedContentTypes: [.audio, .wav, .mpeg4Audio, UTType(filenameExtension: "flac") ?? .audio],
             allowsMultipleSelection: true
         ) { result in
             if case .success(let urls) = result {
