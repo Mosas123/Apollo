@@ -100,6 +100,9 @@ public enum FormatSelector: Sendable {
         downloadQuality: DownloadQuality = .high,
         standardTargetBitrate: Int = 96_000
     ) -> Format? {
+        // YouTube's audio formats are lossy. A lossless request must be
+        // resolved by a real lossless provider, never by picking a high bitrate.
+        guard downloadQuality != .lossless else { return nil }
         guard !formats.isEmpty else {
             SwiftyTubeLog.debug("No formats to select from (download)")
             return nil

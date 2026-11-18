@@ -46,6 +46,10 @@ struct SongRowView: View {
         canonicalVideoID == song.videoId ? canonicalMetadata : nil
     }
 
+    private var playbackMetadata: PlaybackMetadataSnapshot? {
+        NowPlaying.shared.metadataSnapshot(for: song.videoId)
+    }
+
     var body: some View {
         HStack(spacing: DesignTokens.rowSpacing) {
             if let index {
@@ -64,7 +68,7 @@ struct SongRowView: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(displayMetadata?.title ?? song.title)
+                Text(playbackMetadata?.title ?? displayMetadata?.title ?? song.title)
                     .font(index == nil ? .headline : .body)
                     .foregroundColor(.primary)
                     .lineLimit(1)
@@ -103,9 +107,11 @@ struct SongRowView: View {
 
     private var subtitle: String {
         let duration = durations.effectiveDuration(known: song.duration)
-        guard let displayMetadata else { return song.subtitleLine(duration: duration) }
+        guard let artist = playbackMetadata?.artist ?? displayMetadata?.artist else {
+            return song.subtitleLine(duration: duration)
+        }
         let time = duration.formattedDuration
-        return time.isEmpty ? displayMetadata.artist : "\(displayMetadata.artist) • \(time)"
+        return time.isEmpty ? artist : "\(artist) • \(time)"
     }
 
     @ViewBuilder

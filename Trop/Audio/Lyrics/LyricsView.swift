@@ -414,7 +414,7 @@ struct LyricsView<ProgressSlider: View>: View {
             .accessibilityLabel("Back to player")
 
             PlayerTitleBlock(
-                title: np.title, artist: np.displayArtist,
+                title: np.displayTitle, artist: np.displayArtist,
                 titleFont: .subheadline.weight(.semibold), titleHeight: 20,
                 artistFont: .caption
             )

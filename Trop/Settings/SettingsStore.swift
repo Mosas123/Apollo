@@ -98,6 +98,7 @@ extension DownloadQuality: SettingsOption {
     public var displayName: String {
         switch self {
         case .auto: return "Auto"
+        case .lossless: return "Lossless (FLAC)"
         case .high: return "High (128–192 kbps)"
         case .standard: return "Standard (64–96 kbps)"
         }

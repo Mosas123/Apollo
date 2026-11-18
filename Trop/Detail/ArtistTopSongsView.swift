@@ -40,7 +40,7 @@ struct ArtistTopSongsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(song.title)
+                Text(NowPlaying.shared.metadataSnapshot(for: song.videoId)?.title ?? song.title)
                     .font(.headline)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
@@ -66,10 +66,11 @@ struct ArtistTopSongsView: View {
     }
 
     private func subtitle(for song: SongItem) -> String {
+        let metadata = NowPlaying.shared.metadataSnapshot(for: song.videoId)
         var parts: [String] = []
-        if let album = song.album, !album.isEmpty { parts.append(album) }
+        if let album = metadata?.album ?? song.album, !album.isEmpty { parts.append(album) }
         if let year = song.year { parts.append(String(year)) }
-        if parts.isEmpty { parts.append(song.artistNamesDisplay) }
+        if parts.isEmpty { parts.append(metadata?.artist ?? song.artistNamesDisplay) }
         return parts.joined(separator: " · ")
     }
 }

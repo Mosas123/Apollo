@@ -223,6 +223,22 @@ actor PlaybackManager {
         )
     }
 
+    /// Download quality is independent of playback preference. Do not fall
+    /// back to a lossy stream or require this song to be in the playback queue.
+    func resolveLosslessDownload(song: SongItem) async throws -> PlaybackResult {
+        try Task.checkCancellation()
+        guard !MusicPlaybackIdentity.isExternal(song.videoId),
+              song.contentKind == nil || song.contentKind == .music else {
+            throw DownloadError.losslessUnavailable
+        }
+        let result = await resolveLosslessUpgrade(videoId: song.videoId, downloadSong: song)
+        try Task.checkCancellation()
+        guard let result, result.mimeType.lowercased() == "audio/flac" else {
+            throw DownloadError.losslessUnavailable
+        }
+        return result
+    }
+
     // MARK: - Automatic lossless upgrade
 
     private let pencariCooldownKey = "pencari.cooldownUntil"
@@ -260,18 +276,21 @@ actor PlaybackManager {
     /// bundled PencariMusic addon and resolve a FLAC stream. Returns nil on any
     /// miss/failure so the caller falls back to YouTube. A short cooldown after
     /// a failure avoids slowing every subsequent play while the origin is down.
-    private func resolveLosslessUpgrade(videoId: String) async -> PlaybackResult? {
-        guard upgradeMode == .lossless else { return nil }
+    private func resolveLosslessUpgrade(videoId: String, downloadSong: SongItem? = nil) async -> PlaybackResult? {
+        let forDownload = downloadSong != nil
+        guard forDownload || upgradeMode == .lossless else { return nil }
         guard !MusicPlaybackIdentity.isExternal(videoId) else { return nil }
         if isPencariCoolingDown { return nil }
-        guard let song = await queueSong(for: videoId) else { return nil }
-        let title = song.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let queued = downloadSong == nil ? await queueSong(for: videoId) : nil
+        guard let song = downloadSong ?? queued else { return nil }
+        let identity = TrackIdentity.make(from: song)
+        let title = (forDownload ? identity.title : song.title).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return nil }
-        let artist = song.artists.first?.name ?? ""
+        let artist = forDownload ? identity.artist : (song.artists.first?.name ?? "")
         guard let client = await PencariMusicClient.configured() else { return nil }
 
         let pencariId: String
-        if let cached = pencariMatchCache[videoId] {
+        if !forDownload, let cached = pencariMatchCache[videoId] {
             pencariId = cached
         } else {
             let query = artist.isEmpty ? title : "\(artist) \(title)"
@@ -284,7 +303,13 @@ actor PlaybackManager {
                 markPencariCooldown(120)
                 return nil
             }
-            guard let best = Self.bestPencariMatch(tracks, title: title, artist: artist) else { return nil }
+            let best = forDownload ? tracks.first { candidate in
+                candidate.isStreamable && TextMatch.recordingsMatch(candidate.title, title)
+                    && TextMatch.artistsMatch(candidate.artist, artist)
+                    && (song.duration <= 0 || candidate.durationSeconds <= 0
+                        || abs(candidate.durationSeconds - song.duration) <= 15)
+            } : Self.bestPencariMatch(tracks, title: title, artist: artist)
+            guard let best else { return nil }
             pencariId = best.id.rawValue
             if pencariMatchCache.count >= 500 { pencariMatchCache.removeAll(keepingCapacity: true) }
             pencariMatchCache[videoId] = pencariId
@@ -670,7 +695,7 @@ actor PlaybackManager {
             return PlaybackResult(
                 streamUrl: localPath.absoluteString,
                 itag: 0,
-                mimeType: "audio/mp4",
+                mimeType: localPath.pathExtension.lowercased() == "flac" ? "audio/flac" : "audio/mp4",
                 bitrate: 0,
                 audioQuality: "local",
                 videoId: videoId,
@@ -862,7 +887,7 @@ actor PlaybackManager {
     /// Stable per-launch session id for PoToken minting.
     static let sessionId: String = UUID().uuidString
     /// Resolve a video without playing. Useful for previews / testing.
-    func resolve(videoId: String, preferredFormat: Format? = nil, forDownload: Bool = false) async throws -> PlaybackResult {
+    func resolve(videoId: String, preferredFormat: Format? = nil, forDownload: Bool = false, downloadQuality: DownloadQuality? = nil) async throws -> PlaybackResult {
         if MusicPlaybackIdentity.isExternal(videoId) {
             guard !forDownload else { throw MusicCatalogError.unavailableTrack }
             if MusicPlaybackIdentity.isQobuz(videoId) {
@@ -883,24 +908,26 @@ actor PlaybackManager {
             return cached
         }
 
+        let quality = downloadQuality ?? SettingsStore.shared.downloadQuality
         let key = resolutionKey(videoId: videoId, forDownload: forDownload)
+            + (forDownload ? ":\(quality.rawValue)" : "")
         if let existing = inflightResolutions[key] {
             return try await existing.value
         }
 
         let task = Task { [self] in
-            try await resolveFromNetwork(videoId: videoId, preferredFormat: preferredFormat, forDownload: forDownload)
+            try await resolveFromNetwork(videoId: videoId, preferredFormat: preferredFormat, forDownload: forDownload, downloadQuality: quality)
         }
         inflightResolutions[key] = task
         defer { clearInflight(key: key) }
         return try await task.value
     }
 
-    private func resolveFromNetwork(videoId: String, preferredFormat: Format?, forDownload: Bool) async throws -> PlaybackResult {
+    private func resolveFromNetwork(videoId: String, preferredFormat: Format?, forDownload: Bool, downloadQuality: DownloadQuality) async throws -> PlaybackResult {
         var request = forDownload ? StreamResolveRequest.download(videoId: videoId) : .playback(videoId: videoId)
         request.options.preferredFormat = preferredFormat
         request.options.audioQuality = SettingsStore.shared.audioQuality
-        request.options.downloadQuality = SettingsStore.shared.downloadQuality
+        request.options.downloadQuality = downloadQuality
         return try await StreamFallback.resolveFirstValid(
             request,
             using: InnerTubeClient.tropShared,

@@ -71,12 +71,12 @@ struct LyricsMenuSheet: View {
             LyricsOffsetSheet()
         }
         .sheet(isPresented: $showEditSheet) {
-            EditLyricsSheet(videoId: np.videoId ?? "", songTitle: np.title)
+            EditLyricsSheet(videoId: np.videoId ?? "", songTitle: np.displayTitle)
         }
         .sheet(isPresented: $showSearchSheet) {
             SearchLyricsSheet(
                 videoId: np.videoId ?? "",
-                defaultTitle: np.title,
+                defaultTitle: np.displayTitle,
                 defaultArtist: np.displayArtist,
                 duration: np.duration
             )

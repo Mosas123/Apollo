@@ -281,17 +281,17 @@ struct FullPlayerView: View {
     private var navigationSong: SongItem? {
         guard np.playbackKind == .music, let videoID = np.videoId else { return nil }
         var song = currentSong ?? SongItem(
-            videoId: videoID, title: np.title,
-            artists: np.artists.isEmpty ? [YTArtist(name: np.artist)] : np.artists,
-            album: np.albumTitle.isEmpty ? nil : np.albumTitle,
+            videoId: videoID, title: np.displayTitle,
+            artists: np.artists.isEmpty ? [YTArtist(name: np.displayArtist)] : np.artists,
+            album: np.displayAlbumTitle.isEmpty ? nil : np.displayAlbumTitle,
             duration: np.duration.isFinite ? Int(max(0, np.duration)) : 0,
             thumbnailUrl: nil, isExplicit: false
         )
-        if song.artists.isEmpty, !np.artist.isEmpty {
-            song.artists = [YTArtist(name: np.artist)]
+        if song.artists.isEmpty, !np.displayArtist.isEmpty {
+            song.artists = [YTArtist(name: np.displayArtist)]
         }
-        if song.album?.isEmpty != false, !np.albumTitle.isEmpty {
-            song.album = np.albumTitle
+        if song.album?.isEmpty != false, !np.displayAlbumTitle.isEmpty {
+            song.album = np.displayAlbumTitle
         }
         return song
     }
@@ -304,12 +304,12 @@ struct FullPlayerView: View {
     private var canOpenArtist: Bool {
         guard let song = navigationSong else { return false }
         return song.artists.contains { $0.id?.isEmpty == false }
-            || !np.artist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !np.displayArtist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !song.artistNamesDisplay.isEmpty
     }
 
     private var currentAlbumSubtitle: String? {
-        if !np.albumTitle.isEmpty { return np.albumTitle }
+        if !np.displayAlbumTitle.isEmpty { return np.displayAlbumTitle }
         if let album = currentSong?.album, !album.isEmpty { return album }
         return nil
     }
@@ -387,7 +387,7 @@ struct FullPlayerView: View {
         if let id = song.artists.first(where: { $0.id?.isEmpty == false })?.id {
             pendingRoute = .artist(browseId: id)
         } else {
-            let name = np.artist.isEmpty ? song.artistNamesDisplay : np.artist
+            let name = np.displayArtist.isEmpty ? song.artistNamesDisplay : np.displayArtist
             pendingRoute = .songArtist(song, name: name)
         }
     }
@@ -538,7 +538,7 @@ struct FullPlayerView: View {
                         .foregroundStyle(.white.opacity(0.6))
                 }
                 PlayerTitleBlock(
-                    title: np.title,
+                    title: np.displayTitle,
                     artist: playerArtistLine,
                     spacing: 5,
                     titleFont: .title2.weight(.bold),
@@ -648,9 +648,9 @@ struct FullPlayerView: View {
                     artworkImage
                     CanvasVideoView(
                         videoId: np.videoId,
-                        title: np.title,
-                        artist: np.artist,
-                        album: np.albumTitle.isEmpty ? nil : np.albumTitle,
+                        title: np.displayTitle,
+                        artist: np.displayArtist,
+                        album: np.displayAlbumTitle.isEmpty ? nil : np.displayAlbumTitle,
                         isPlaying: np.isPlaying,
                         enabled: settings.canvasEnabled,
                         onDominantColorsChange: { canvasDominantColors = $0 }

@@ -219,16 +219,17 @@ actor LyricsService {
         let info = await MainActor.run {
             let np = NowPlaying.shared
             return (
-                title: np.title,
+                title: np.displayTitle,
                 artist: np.displayArtist,
-                album: np.albumTitle.isEmpty ? nil : np.albumTitle,
+                album: np.displayAlbumTitle.isEmpty ? nil : np.displayAlbumTitle,
                 duration: np.duration,
                 currentId: np.videoId,
-                queue: np.queueSongs
+                queue: np.queueSongs,
+                metadata: np.metadataSnapshot(for: videoId)
             )
         }
 
-        let (npTitle, npArtist, npAlbum, npDuration, currentId, queue) = info
+        let (npTitle, npArtist, npAlbum, npDuration, currentId, queue, metadata) = info
 
         let title: String
         let artist: String
@@ -237,7 +238,13 @@ actor LyricsService {
 
         // Queue metadata is tied to this exact ID. NowPlaying can briefly
         // still contain the previous song's title while the next one resolves.
-        if let song = queue.first(where: { $0.videoId == videoId }) {
+        if let metadata {
+            title = metadata.title
+            artist = metadata.artist
+            album = metadata.album
+            let knownDuration = queue.first { $0.videoId == videoId }?.duration ?? DurationCache.get(videoId) ?? 0
+            duration = npDuration > 0 ? npDuration : TimeInterval(max(0, knownDuration))
+        } else if let song = queue.first(where: { $0.videoId == videoId }) {
             let identity = TrackIdentity.make(from: song)
             title = identity.title
             artist = identity.artist

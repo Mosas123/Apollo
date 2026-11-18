@@ -121,7 +121,7 @@ final class LastFMIntegration {
                 // Fallback to NowPlaying title/artist
                 let fallback = SongItem(
                     videoId: videoId,
-                    title: NowPlaying.shared.title,
+                    title: NowPlaying.shared.displayTitle,
                     artists: NowPlaying.shared.artists,
                     album: NowPlaying.shared.albumTitle.isEmpty ? nil : NowPlaying.shared.albumTitle,
                     albumId: nil,

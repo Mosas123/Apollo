@@ -14,7 +14,18 @@ struct SongArtworkView: View {
     }
 
     var body: some View {
-        AsyncImageView(url: (resolvedKey == taskKey ? resolvedURL : nil) ?? song.thumbnailUrl)
+        GeometryReader { geometry in
+            if let image = NowPlaying.shared.artwork(for: song.videoId) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+            } else {
+                AsyncImageView(url: NowPlaying.shared.metadataSnapshot(for: song.videoId)?.artworkURL
+                               ?? (resolvedKey == taskKey ? resolvedURL : nil) ?? song.thumbnailUrl)
+            }
+        }
             .task(id: taskKey) {
                 resolvedURL = nil
                 resolvedKey = taskKey
@@ -34,7 +45,10 @@ struct SongArtworkView: View {
                 }
                 guard !Task.isCancelled else { return }
                 resolvedURL = coverURL?.absoluteString
-                if let metadata { onMetadataResolved?(metadata) }
+                if let metadata {
+                    NowPlaying.shared.acceptResolvedMetadata(metadata, videoId: song.videoId)
+                    onMetadataResolved?(metadata)
+                }
             }
     }
 }

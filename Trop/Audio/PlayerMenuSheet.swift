@@ -477,8 +477,16 @@ struct SongDetailsView: View {
     @State private var viewCountText: String?
     @State private var resolvedDuration: Int = 0
 
+    private var playbackMetadata: PlaybackMetadataSnapshot? {
+        NowPlaying.shared.metadataSnapshot(for: song.videoId)
+    }
+
     private var effectiveDuration: Int {
-        song.duration > 0 ? song.duration : resolvedDuration
+        if playbackMetadata != nil {
+            let duration = NowPlaying.shared.duration
+            if duration.isFinite, duration > 0 { return Int(duration) }
+        }
+        return song.duration > 0 ? song.duration : resolvedDuration
     }
 
     var body: some View {
@@ -504,6 +512,7 @@ struct SongDetailsView: View {
             )
             guard !Task.isCancelled else { return }
             canonicalMetadata = resolved
+            if let resolved { NowPlaying.shared.acceptResolvedMetadata(resolved, videoId: song.videoId) }
         }
     }
 
@@ -511,17 +520,22 @@ struct SongDetailsView: View {
 
     private var trackSection: some View {
         section("Track") {
-            row("Title", canonicalMetadata?.title ?? song.title)
-            row("Artists", canonicalMetadata?.artist ?? song.artistNamesDisplay)
-            if let album = canonicalMetadata?.album ?? song.album {
+            row("Title", playbackMetadata?.title ?? canonicalMetadata?.title ?? song.title)
+            row("Artists", playbackMetadata?.artist ?? canonicalMetadata?.artist ?? song.artistNamesDisplay)
+            if let album = playbackMetadata?.album ?? canonicalMetadata?.album ?? song.album {
                 row("Album", album)
             }
             row("Duration", effectiveDuration.formattedDuration)
+            if playbackMetadata != nil, song.duration > 0, abs(effectiveDuration - song.duration) > 1 {
+                row("Original duration", song.duration.formattedDuration)
+            }
             row("Video ID", song.videoId, monospaced: true)
-            if let canonicalMetadata {
-                row("Metadata source", canonicalMetadata.source)
-                if canonicalMetadata.title != song.title { row("Video title", song.title) }
-                if canonicalMetadata.artist != song.artistNamesDisplay { row("Channel / original credits", song.artistNamesDisplay) }
+            if let source = playbackMetadata?.source ?? canonicalMetadata?.source {
+                row("Metadata source", source)
+                if (playbackMetadata?.title ?? canonicalMetadata?.title) != song.title { row("Video title", song.title) }
+                if (playbackMetadata?.artist ?? canonicalMetadata?.artist) != song.artistNamesDisplay {
+                    row("Channel / original credits", song.artistNamesDisplay)
+                }
             }
         }
     }

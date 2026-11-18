@@ -148,7 +148,7 @@ struct MiniPlayerBarView: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 MarqueeText(
-                    text: song.title,
+                    text: np.metadataSnapshot(for: song.videoId)?.title ?? song.title,
                     font: .system(size: 13, weight: .semibold),
                     frameHeight: 16,
                     textColor: titleColor
@@ -285,7 +285,7 @@ struct MiniPlayerBarView: View {
             ))
 
             VStack(alignment: .leading, spacing: 0) {
-                Text(np.title)
+                Text(np.displayTitle)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -316,9 +316,9 @@ struct MiniPlayerBarView: View {
     /// (what the big player shows via `displayArtist`) when the queued item
     /// carries no artist runs — e.g. videos or cache-repaired songs.
     private func artistLine(for song: SongItem) -> String {
+        if let metadata = np.metadataSnapshot(for: song.videoId) { return metadata.artist }
         let own = artistDisplayString(from: song.artists)
         if !own.isEmpty { return own }
-        if song.videoId == np.videoId { return np.displayArtist }
         return own
     }
 

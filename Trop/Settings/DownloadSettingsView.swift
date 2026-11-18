@@ -34,6 +34,9 @@ struct DownloadSettingsView: View {
                 Text("Preferences")
             } footer: {
                 Text("Auto-download saves liked songs for offline playback. Wi-Fi Only blocks downloads on cellular data.")
+                if settings.downloadQuality == .lossless {
+                    Text("Lossless downloads use more storage and require an available FLAC source. If unavailable, choose another download quality.")
+                }
             }
         }
         .navigationTitle("Download Settings")

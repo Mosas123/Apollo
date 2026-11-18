@@ -1145,9 +1145,9 @@ extension PlayerController {
         } ?? 0
         let elapsed = livePos > 0 ? livePos : np.currentTime
 
-        nowPlayingInfo[MPMediaItemPropertyTitle] = np.title
-        nowPlayingInfo[MPMediaItemPropertyArtist] = np.artist
-        nowPlayingInfo[MPMediaItemPropertyAlbumTitle] = np.albumTitle
+        nowPlayingInfo[MPMediaItemPropertyTitle] = np.displayTitle
+        nowPlayingInfo[MPMediaItemPropertyArtist] = np.displayArtist
+        nowPlayingInfo[MPMediaItemPropertyAlbumTitle] = np.displayAlbumTitle
         nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = np.isPlaying ? 1 : 0
         nowPlayingInfo[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.audio.rawValue
         nowPlayingInfo[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1
@@ -1161,7 +1161,7 @@ extension PlayerController {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
         MPNowPlayingInfoCenter.default().playbackState = np.isPlaying ? .playing : .paused
         Log.player.info(
-            "NOW_PLAYING_PUBLISH title='\(np.title)' artist='\(np.artist)' " +
+            "NOW_PLAYING_PUBLISH title='\(np.displayTitle)' artist='\(np.displayArtist)' " +
             "duration=\(duration) rate=\(nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] ?? 0) " +
             "artwork=\(np.thumbnailUIImage != nil) keys=\(nowPlayingInfo.keys.count)"
         )

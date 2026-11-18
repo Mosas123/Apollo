@@ -108,7 +108,7 @@ enum LyricsMatch {
     static func accepts(_ query: LyricsQuery, title: String?, artists: [String], duration: TimeInterval? = nil) -> Bool {
         guard let title, !titleKey(query.title).isEmpty,
               titleKey(title) == titleKey(query.title) else { return false }
-        let lead = query.artist.components(separatedBy: ",").first ?? query.artist
+        let lead = query.artist.components(separatedBy: CharacterSet(charactersIn: ",&、")).first ?? query.artist
         let expected = titleKey(lead)
         guard !expected.isEmpty, artists.contains(where: { candidate in
             // Provider artist fields may combine collaborators in one string.

@@ -288,17 +288,18 @@ struct HomeScreenView: View {
     }
 
     private func quickPickCell(_ song: SongItem, queue: [SongItem]) -> some View {
-        HStack(spacing: 16) {
+        let metadata = NowPlaying.shared.metadataSnapshot(for: song.videoId)
+        return HStack(spacing: 16) {
             SongArtworkView(song: song)
                 .frame(width: 56, height: 56)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(song.title)
+                Text(metadata?.title ?? song.title)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                Text(quickPickSubtitle(song))
+                Text(metadata?.artist ?? quickPickSubtitle(song))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

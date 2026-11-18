@@ -138,7 +138,7 @@ struct QueueView<ProgressSlider: View>: View {
                     .frame(width: 64, height: 64)
             }
 
-            PlayerTitleBlock(title: np.title, artist: np.displayArtist)
+            PlayerTitleBlock(title: np.displayTitle, artist: np.displayArtist)
 
             Spacer()
 
@@ -342,6 +342,10 @@ struct QueueSongRow: View {
         canonicalVideoID == song.videoId ? canonicalMetadata : nil
     }
 
+    private var playbackMetadata: PlaybackMetadataSnapshot? {
+        NowPlaying.shared.metadataSnapshot(for: song.videoId)
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             SongArtworkView(song: song) { metadata in
@@ -354,13 +358,13 @@ struct QueueSongRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 MarqueeText(
-                    text: displayMetadata?.title ?? song.title,
+                    text: playbackMetadata?.title ?? displayMetadata?.title ?? song.title,
                     font: .subheadline.weight(isCurrent ? .semibold : .medium),
                     frameHeight: 20,
                     textColor: titleColor
                 )
 
-                let artistStr = displayMetadata?.artist ?? song.artists.map(\.name).joined(separator: ", ")
+                let artistStr = playbackMetadata?.artist ?? displayMetadata?.artist ?? song.artists.map(\.name).joined(separator: ", ")
                 if !artistStr.isEmpty {
                     Text(artistStr)
                         .font(.caption)
