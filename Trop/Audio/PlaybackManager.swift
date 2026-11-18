@@ -856,7 +856,9 @@ actor PlaybackManager {
             let upgrade = cached.result
             // Prefetch already verified a fresh URL; skipping the extra Range
             // request removes the startup delay on cached lossless.
-            if cached.age < 90 || await Self.verifyStream(upgrade.streamUrl) {
+            var usable = cached.age < 90
+            if !usable { usable = await Self.verifyStream(upgrade.streamUrl) }
+            if usable {
                 await playNetworkResult(upgrade, videoId: videoId)
                 scheduleUpgradePrefetch(videoId: videoId)
                 return upgrade
