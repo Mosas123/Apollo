@@ -154,6 +154,9 @@ struct LibraryView: View {
         }
         .scrollIndicators(.automatic)
         .miniPlayerTracksScroll(headerOffset: quantizedHeaderOffset).scrollEdgeEffectHidden(true, for: .bottom)
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("trop.likeChanged"))) { _ in
+            Task { await loadContent() }
+        }
     }
 
     /// Coalesces scroll-offset writes into ~8pt steps so the list isn't

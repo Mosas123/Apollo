@@ -61,6 +61,7 @@ class LikeStore: ObservableObject {
             if !artist.isEmpty, !track.isEmpty {
                 Task { await LastFMIntegration.shared.handleLove(artist: artist, track: track, love: target) }
             }
+            NotificationCenter.default.post(name: Notification.Name("trop.likeChanged"), object: nil)
         } catch {
             var reverted = liked
             reverted[videoId] = !target
