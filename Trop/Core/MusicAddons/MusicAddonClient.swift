@@ -48,6 +48,15 @@ struct AddonTrack: Sendable, Equatable {
     var durationSeconds: Int? = nil
 }
 
+struct AddonAlbum: Sendable, Equatable {
+    let installationKey: String
+    let id: String
+    let title: String
+    let artist: String?
+    let trackCount: Int?
+    let year: Int?
+}
+
 struct AddonStream: Sendable {
     enum Kind: Sendable {
         case url(URL)
@@ -58,6 +67,47 @@ struct AddonStream: Sendable {
     let bitrate: Int
     /// "Lossless" / "High" / "Standard" derived from the stream metadata.
     let qualityTier: String
+    /// The addon warns the file needs its own decryption; refuse it.
+    var isEncrypted: Bool = false
+    var sampleRateHz: Int? = nil
+    var bitDepth: Int? = nil
+    /// 24-bit / >48 kHz copy (the addon reports "hires"), as opposed to CD.
+    var isHiRes: Bool = false
+    /// Declared file size, when the addon reports it.
+    var sizeBytes: Int? = nil
+}
+
+/// Short-lived cache for addon search/album responses. Stream URLs are never
+/// cached: they are short-lived and must be minted per playback/download.
+actor AddonResponseCache {
+    static let shared = AddonResponseCache()
+
+    private struct Entry {
+        let data: Data
+        let at: Date
+    }
+
+    private var entries: [String: Entry] = [:]
+    private let ttl: TimeInterval = 300
+    private let maxEntries = 64
+
+    func data(for key: String) -> Data? {
+        guard let entry = entries[key] else { return nil }
+        guard Date().timeIntervalSince(entry.at) < ttl else {
+            entries[key] = nil
+            return nil
+        }
+        return entry.data
+    }
+
+    func store(_ data: Data, for key: String) {
+        if entries.count >= maxEntries {
+            let cutoff = Date().addingTimeInterval(-ttl)
+            entries = entries.filter { $0.value.at >= cutoff }
+            if entries.count >= maxEntries { entries.removeAll(keepingCapacity: true) }
+        }
+        entries[key] = Entry(data: data, at: Date())
+    }
 }
 
 /// Read-only client for Stremio music addons. It only calls `catalog/.../search`
@@ -88,12 +138,33 @@ actor MusicAddonClient {
         }
         let preferredCatalogs = searchable.filter { finalTypes.contains($0.type.lowercased()) }
         self.searchCatalogs = preferredCatalogs.isEmpty ? searchable : preferredCatalogs
+        // NullBeat (and other Eclipse addons) also publish browse catalogs with
+        // no search extra; the `search` resource is what tells them apart from
+        // Stremio addons, which always search through a catalog.
         self.eclipseMode = descriptor.resources.contains { $0.name == "search" }
-            && descriptor.catalogs.isEmpty
+            && searchable.isEmpty
     }
 
     var installationKey: String { installation.key }
     var name: String { installation.manifest.name }
+
+    /// Some addons advertise `contentType: music` but their search catalog is
+    /// a movie/series index (PencariMovie does exactly that). Only music items
+    /// are safe to show, play or download.
+    static let musicTypes: Set<String> = ["track", "music", "audio", "song"]
+
+    /// Music addons that wrap tracks as `movie`/`series` items (the Stremio
+    /// convention PencariMusic uses). Only trust that when the manifest says
+    /// its content type is music, so film addons stay out.
+    private var allowsWrappedTrackTypes: Bool {
+        (installation.manifest.stremio?.contentType ?? "").lowercased() == "music"
+    }
+
+    private func isMusicItemType(_ type: String) -> Bool {
+        let lower = type.lowercased()
+        if Self.musicTypes.contains(lower) { return true }
+        return allowsWrappedTrackTypes && (lower == "movie" || lower == "series")
+    }
 
     func search(_ query: String, limit: Int = 20) async throws -> [AddonTrack] {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -114,7 +185,7 @@ actor MusicAddonClient {
                 .appendingPathComponent(catalog.type)
                 .appendingPathComponent(catalog.id)
                 .appendingPathComponent("search=\(encoded).json")
-            guard let data = await fetch(url),
+            guard let data = await cachedFetch(url, key: "catalog|\(url.absoluteString)"),
                   let object = try? JSONSerialization.jsonObject(with: data),
                   let root = object as? [String: Any],
                   let metas = root["metas"] as? [[String: Any]] else { continue }
@@ -122,20 +193,32 @@ actor MusicAddonClient {
                 guard let id = meta["id"] as? String,
                       let name = meta["name"] as? String,
                       !name.isEmpty else { continue }
-                let type = (meta["type"] as? String) ?? catalog.type
+                let type = ((meta["type"] as? String) ?? catalog.type).lowercased()
+                guard isMusicItemType(type) else { continue }
                 let key = "\(type)|\(id)"
                 guard seen.insert(key).inserted else { continue }
                 let posterString = (meta["poster"] as? String) ?? (meta["logo"] as? String)
                 let detail = (meta["description"] as? String)?
                     .trimmingCharacters(in: .whitespacesAndNewlines)
+                // Wrapper addons title tracks as "Artist - Title" and put the
+                // duration in the description ("FLAC · LOSSLESS · 25 MB · 4:04").
+                var title = name
+                var artist: String? = nil
+                if allowsWrappedTrackTypes, let split = Self.splitArtistTitle(name) {
+                    artist = split.artist
+                    title = split.title
+                }
+                let duration = Self.parseDurationSeconds(meta["duration"])
+                    ?? (allowsWrappedTrackTypes ? Self.durationFromDescription(detail) : nil)
                 tracks.append(AddonTrack(
                     installationKey: installation.key,
                     type: type,
                     id: id,
-                    title: name,
+                    title: title,
                     poster: posterString.flatMap(URL.init(string:)),
                     detail: (detail?.isEmpty == false) ? detail : nil,
-                    durationSeconds: Self.parseDurationSeconds(meta["duration"])
+                    artist: artist,
+                    durationSeconds: duration
                 ))
                 if tracks.count >= limit { return tracks }
             }
@@ -149,11 +232,12 @@ actor MusicAddonClient {
             resolvingAgainstBaseURL: false
         )
         var items = [URLQueryItem(name: "q", value: term)]
-        if SettingsStore.shared.musicQualityMode == .lossless {
+        if SettingsStore.shared.musicQualityMode.prefersLossless {
             items.append(URLQueryItem(name: "quality", value: "lossless"))
         }
         components?.queryItems = items
-        guard let url = components?.url, let data = await fetch(url),
+        guard let url = components?.url,
+              let data = await cachedFetch(url, key: "search|\(url.absoluteString)"),
               let object = try? JSONSerialization.jsonObject(with: data),
               let root = object as? [String: Any],
               let tracks = root["tracks"] as? [[String: Any]] else { return [] }
@@ -193,6 +277,69 @@ actor MusicAddonClient {
         }
     }
 
+    /// Albums returned by the same search call (Eclipse addons only).
+    func searchAlbums(_ query: String, limit: Int = 8) async -> [AddonAlbum] {
+        guard eclipseMode else { return [] }
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty else { return [] }
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("search"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "q", value: term)]
+        guard let url = components?.url,
+              let data = await cachedFetch(url, key: "search|\(url.absoluteString)"),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let root = object as? [String: Any],
+              let raw = root["albums"] as? [[String: Any]] else { return [] }
+        var albums: [AddonAlbum] = []
+        for album in raw.prefix(limit) {
+            guard let id = album["id"] as? String,
+                  let title = album["title"] as? String,
+                  !title.isEmpty else { continue }
+            albums.append(AddonAlbum(
+                installationKey: installation.key,
+                id: id,
+                title: title,
+                artist: album["artist"] as? String,
+                trackCount: album["trackCount"] as? Int,
+                year: album["year"] as? Int
+            ))
+        }
+        return albums
+    }
+
+    /// Full track list for an album (Eclipse addons cap it at 20 tracks).
+    func albumTracks(id: String) async throws -> [AddonTrack] {
+        guard eclipseMode,
+              let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+            return []
+        }
+        let url = baseURL.appendingPathComponent("album").appendingPathComponent(encoded)
+        guard let data = await cachedFetch(url, key: "album|\(url.absoluteString)"),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let root = object as? [String: Any],
+              let raw = root["tracks"] as? [[String: Any]] else {
+            throw MusicAddonClientError.noResults
+        }
+        return raw.compactMap { track in
+            guard let trackId = track["id"] as? String,
+                  let title = track["title"] as? String,
+                  !title.isEmpty else { return nil }
+            return AddonTrack(
+                installationKey: installation.key,
+                type: "track",
+                id: trackId,
+                title: title,
+                poster: (track["artworkURL"] as? String).flatMap(URL.init(string:)),
+                detail: track["album"] as? String,
+                artist: track["artist"] as? String,
+                album: track["album"] as? String,
+                durationSeconds: Self.parseDurationSeconds(track["duration"])
+            )
+        }
+    }
+
     func resolveStream(type: String, id: String) async throws -> AddonStream {
         if eclipseMode {
             return try await eclipseStream(id: id)
@@ -215,17 +362,66 @@ actor MusicAddonClient {
         let format = ((root["format"] as? String) ?? (root["codec"] as? String) ?? "")
             .lowercased()
         let quality = ((root["quality"] as? String) ?? "").lowercased()
+        let encrypted = (root["encrypted"] as? Bool) ?? false
+        let bitDepth = root["bitDepth"] as? Int
+        let sampleRate = root["sampleRate"] as? Int
+        let hiRes = quality.contains("hires") || quality.contains("hi-res")
+            || (bitDepth ?? 0) >= 24 || (sampleRate ?? 0) > 48_000
+        let size = root["size"] as? Int
         let haystack = format + " " + quality
+        if haystack.contains("atmos") {
+            return AddonStream(
+                kind: .url(streamURL),
+                mimeType: "audio/mp4",
+                bitrate: 768_000,
+                qualityTier: "Atmos",
+                isEncrypted: encrypted,
+                sampleRateHz: sampleRate,
+                bitDepth: bitDepth,
+                sizeBytes: size
+            )
+        }
         if haystack.contains("flac") || haystack.contains("lossless") || haystack.contains("hires") || haystack.contains("hi-res") {
-            return AddonStream(kind: .url(streamURL), mimeType: "audio/flac", bitrate: 0, qualityTier: "Lossless")
+            return AddonStream(
+                kind: .url(streamURL),
+                mimeType: "audio/flac",
+                bitrate: 0,
+                qualityTier: "Lossless",
+                isEncrypted: encrypted,
+                sampleRateHz: sampleRate,
+                bitDepth: bitDepth,
+                isHiRes: hiRes,
+                sizeBytes: size
+            )
         }
         if haystack.contains("320") {
-            return AddonStream(kind: .url(streamURL), mimeType: "audio/mp4", bitrate: 320_000, qualityTier: "High")
+            return AddonStream(
+                kind: .url(streamURL),
+                mimeType: "audio/mp4",
+                bitrate: 320_000,
+                qualityTier: "High",
+                isEncrypted: encrypted,
+                sampleRateHz: sampleRate,
+                bitDepth: bitDepth,
+                sizeBytes: size
+            )
         }
-        return AddonStream(kind: .url(streamURL), mimeType: "audio/mpeg", bitrate: 0, qualityTier: "Standard")
+        return AddonStream(
+            kind: .url(streamURL),
+            mimeType: "audio/mpeg",
+            bitrate: 0,
+            qualityTier: "Standard",
+            isEncrypted: encrypted,
+            sampleRateHz: sampleRate,
+            bitDepth: bitDepth,
+            sizeBytes: size
+        )
     }
 
     private func stremioStream(type: String, id: String) async throws -> AddonStream {
+        guard isMusicItemType(type) else {
+            throw MusicAddonClientError.noStream
+        }
         let url = baseURL
             .appendingPathComponent("stream")
             .appendingPathComponent(type)
@@ -239,7 +435,7 @@ actor MusicAddonClient {
         var best: (AddonStream, Int)?
         for stream in streams {
             if let ytId = stream["ytId"] as? String, !ytId.isEmpty {
-                let candidate = AddonStream(kind: .youtube(ytId), mimeType: "audio/mp4", bitrate: 0, qualityTier: "Standard")
+                let candidate = AddonStream(kind: .youtube(ytId), mimeType: "audio/mp4", bitrate: 0, qualityTier: "Standard", isEncrypted: (stream["encrypted"] as? Bool) ?? false)
                 if best == nil { best = (candidate, 0) }
                 continue
             }
@@ -249,17 +445,23 @@ actor MusicAddonClient {
                   scheme == "http" || scheme == "https" else { continue }
             let hints = Self.describe(stream)
             let quality = Self.quality(from: hints, url: streamURL)
+            let hiRes = hints.contains("hi-res") || hints.contains("hires")
+                || hints.contains("24bit") || hints.contains("24-bit")
             let rank: Int
             switch quality.tier {
             case "Lossless": rank = 3
             case "High": rank = 2
             default: rank = 1
             }
+            let hintsObject = stream["behaviorHints"] as? [String: Any]
             let candidate = AddonStream(
                 kind: .url(streamURL),
                 mimeType: quality.mime,
                 bitrate: quality.bitrate,
-                qualityTier: quality.tier
+                qualityTier: quality.tier,
+                isEncrypted: (stream["encrypted"] as? Bool) ?? false,
+                isHiRes: hiRes,
+                sizeBytes: hintsObject?["videoSize"] as? Int
             )
             if best == nil || rank > best!.1 { best = (candidate, rank) }
         }
@@ -268,6 +470,36 @@ actor MusicAddonClient {
     }
 
     // MARK: - Helpers
+
+    /// "Artist - Title" → (artist, title). Wrapper addons use this format.
+    private static func splitArtistTitle(_ name: String) -> (artist: String, title: String)? {
+        guard let separator = name.range(of: " - ") else { return nil }
+        let artist = name[..<separator.lowerBound].trimmingCharacters(in: .whitespaces)
+        let title = name[separator.upperBound...].trimmingCharacters(in: .whitespaces)
+        guard !artist.isEmpty, !title.isEmpty else { return nil }
+        return (artist, title)
+    }
+
+    /// Last mm:ss / h:mm:ss in a description, e.g. "FLAC · LOSSLESS · 25 MB · 4:04".
+    private static func durationFromDescription(_ text: String?) -> Int? {
+        guard let text, !text.isEmpty,
+              let regex = try? NSRegularExpression(pattern: #"\b(\d{1,2}):(\d{2})\b"#) else {
+            return nil
+        }
+        let string = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: string.length))
+        guard let last = matches.last, last.numberOfRanges == 3 else { return nil }
+        let minutes = Int(string.substring(with: last.range(at: 1))) ?? 0
+        let seconds = Int(string.substring(with: last.range(at: 2))) ?? 0
+        return minutes * 60 + seconds
+    }
+
+    private func cachedFetch(_ url: URL, key: String) async -> Data? {
+        if let cached = await AddonResponseCache.shared.data(for: key) { return cached }
+        guard let data = await fetch(url) else { return nil }
+        await AddonResponseCache.shared.store(data, for: key)
+        return data
+    }
 
     private func fetch(_ url: URL) async -> Data? {
         var request = URLRequest(url: url)
@@ -302,9 +534,9 @@ actor MusicAddonClient {
             let digits = haystack[match].prefix { $0.isNumber }
             bitrate = (Int(digits) ?? 0) * 1000
         } else {
-            bitrate = 0
+            bitrate = haystack.contains("high") ? 256_000 : 0
         }
-        let tier = bitrate >= 160_000 ? "High" : "Standard"
+        let tier = (bitrate >= 160_000 || haystack.contains("high")) ? "High" : "Standard"
         switch ext {
         case "mp3": return (tier, "audio/mpeg", bitrate)
         case "aac": return (tier, "audio/aac", bitrate)

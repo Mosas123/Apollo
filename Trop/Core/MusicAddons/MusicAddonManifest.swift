@@ -47,6 +47,9 @@ struct StremioDescriptor: Codable, Sendable, Equatable {
     let resources: [Resource]
     let types: [String]
     let catalogs: [Catalog]
+    /// Stremio manifests that carry music wrap tracks as movie/series items;
+    /// the declared content type is the only way to tell them apart.
+    var contentType: String? = nil
 }
 
 enum MusicAddonError: Error, Equatable, LocalizedError {
@@ -155,6 +158,7 @@ struct MusicAddonPackage: Sendable {
             let resources: [RawResource]
             let types: [String]?
             let catalogs: [StremioDescriptor.Catalog]?
+            let contentType: String?
         }
         guard let raw = try? JSONDecoder().decode(RawManifest.self, from: data) else { return nil }
         let resources = raw.resources.map { StremioDescriptor.Resource(name: $0.name.lowercased()) }
@@ -180,7 +184,8 @@ struct MusicAddonPackage: Sendable {
             stremio: StremioDescriptor(
                 resources: resources,
                 types: raw.types ?? [],
-                catalogs: catalogs
+                catalogs: catalogs,
+                contentType: raw.contentType
             )
         )
         return MusicAddonPackage(manifestURL: url, manifest: manifest)

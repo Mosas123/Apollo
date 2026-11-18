@@ -395,12 +395,29 @@ final class SearchViewModel {
     /// Music Add-ons (Stremio, read-only): search every enabled addon and map
     /// its items into playable catalogue tracks.
     private func fetchAddonTracks(query: String) async -> [MusicCatalogTrack] {
-        let installations = MusicAddonsStore.shared.enabledStremioInstallations
+        let installations = Array(MusicAddonsStore.shared.enabledStremioInstallations.prefix(4))
         guard !installations.isEmpty else { return [] }
+
+        // Every addon is queried at once; order is restored afterwards so the
+        // section stays stable between searches.
+        var perAddon = [[AddonTrack]](repeating: [], count: installations.count)
+        await withTaskGroup(of: (Int, [AddonTrack]).self) { group in
+            for (index, installation) in installations.enumerated() {
+                group.addTask {
+                    guard let client = try? MusicAddonClient(installation: installation),
+                          let found = try? await client.search(query, limit: 10) else {
+                        return (index, [])
+                    }
+                    return (index, found)
+                }
+            }
+            for await (index, found) in group {
+                perAddon[index] = found
+            }
+        }
+
         var tracks: [MusicCatalogTrack] = []
-        for installation in installations.prefix(4) {
-            guard let client = try? MusicAddonClient(installation: installation),
-                  let found = try? await client.search(query, limit: 10) else { continue }
+        for found in perAddon {
             for item in found {
                 var title = item.title
                 var artist = item.artist ?? ""
