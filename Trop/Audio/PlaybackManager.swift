@@ -204,14 +204,14 @@ actor PlaybackManager {
         let client = try MusicAddonClient(installation: installation)
         let mode = SettingsStore.shared.musicQualityMode
         let atmos = mode == .auto && SettingsStore.shared.preferAtmos
-        let quality: AddonStreamQuality = atmos
+        let streamQuality: AddonStreamQuality = atmos
             ? .max
             : (mode == .cd ? .lossless : (SettingsStore.shared.preferHiRes ? .hires : .lossless))
         let stream = try await client.resolveStream(
             type: ref.t,
             id: ref.i,
             preferAtmos: atmos,
-            quality: quality
+            quality: streamQuality
         )
         guard !stream.isEncrypted else { throw MusicCatalogError.unavailableTrack }
         resolvedSourceNames[videoId] = installation.manifest.name
@@ -598,9 +598,10 @@ actor PlaybackManager {
             qualityLabel: newLabel,
             startAt: position
         )
+        let upgradeSourceName = sourceName(for: result, videoId: videoId)
         await MainActor.run {
             NowPlaying.shared.currentResult = result
-            NowPlaying.shared.currentSourceName = sourceName(for: result, videoId: videoId)
+            NowPlaying.shared.currentSourceName = upgradeSourceName
         }
         // Stay muted while the new stream buffers; fade in only once audio is
         // actually advancing. Fading during buffering made it enter abruptly
@@ -917,8 +918,9 @@ actor PlaybackManager {
                 losslessLabel: Self.losslessLabel(result),
                 qualityLabel: Self.qualityLabel(result)
             )
+            let externalSourceName = sourceName(for: result, videoId: videoId)
             await MainActor.run {
-                NowPlaying.shared.currentSourceName = sourceName(for: result, videoId: videoId)
+                NowPlaying.shared.currentSourceName = externalSourceName
                 NowPlaying.shared.currentResult = result
             }
             return result
