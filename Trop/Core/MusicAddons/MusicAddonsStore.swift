@@ -207,11 +207,11 @@ final class MusicAddonsStore {
               let cached = try? JSONDecoder().decode([MusicAddonInstallation].self, from: data) else { return }
         var restored = MusicAddonRegistry()
         for entry in cached.prefix(MusicAddonRegistry.maxInstalled) {
-            guard let encoded = try? JSONEncoder().encode(entry.manifest),
-                  (try? restored.install(data: encoded, from: entry.manifestURL)) != nil else { continue }
+            let before = restored.installations.count
+            restored.restore(entry)
+            guard restored.installations.count > before else { continue }
             if entry.isEnabled {
-                let key = "\(entry.manifestURL.absoluteString)#\(entry.manifest.id)"
-                try? restored.setEnabled(true, for: key)
+                try? restored.setEnabled(true, for: entry.key)
             }
         }
         registry = restored
