@@ -13,6 +13,25 @@ struct SongArtworkView: View {
         "\(song.videoId)|\(song.title)|\(song.artists.map(\.name).joined(separator: ", "))|\(song.album ?? "")|\(song.duration)"
     }
 
+    /// Saved-library rows store `SongEntity`; map it to the player item shape.
+    init(song entity: SongEntity, onMetadataResolved: ((ResolvedMetadata) -> Void)? = nil) {
+        self.init(
+            song: SongItem(
+                videoId: entity.id,
+                title: entity.title,
+                artists: entity.artistName.map { [YTArtist(name: $0, id: nil)] } ?? [],
+                album: entity.albumName,
+                albumId: nil,
+                duration: entity.duration,
+                thumbnailUrl: entity.thumbnailUrl,
+                isExplicit: false,
+                playlistId: nil,
+                likeStatus: nil
+            ),
+            onMetadataResolved: onMetadataResolved
+        )
+    }
+
     var body: some View {
         AsyncImageView(url: (resolvedKey == taskKey ? resolvedURL : nil) ?? song.thumbnailUrl)
             .task(id: taskKey) {
