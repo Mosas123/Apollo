@@ -527,6 +527,13 @@ actor PlaybackManager {
     /// Resolve a video and start playback. Returns the result used, or throws.
     @discardableResult
     func resolveAndPlay(videoId: String) async throws -> PlaybackResult {
+        // Metadata already switched; stop the previous track so its audio
+        // doesn't keep playing while the new stream resolves.
+        let previous = await MainActor.run { PlayerController.shared.currentVideoId }
+        let isPlaying = await MainActor.run { NowPlaying.shared.isPlaying }
+        if isPlaying, let previous, previous != videoId {
+            await MainActor.run { PlayerController.shared.setPaused(true) }
+        }
         if MusicPlaybackIdentity.isExternal(videoId) {
             let result: PlaybackResult
             if MusicPlaybackIdentity.isQobuz(videoId) {
