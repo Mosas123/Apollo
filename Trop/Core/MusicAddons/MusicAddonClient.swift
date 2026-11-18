@@ -134,7 +134,8 @@ actor MusicAddonClient {
                     id: id,
                     title: name,
                     poster: posterString.flatMap(URL.init(string:)),
-                    detail: (detail?.isEmpty == false) ? detail : nil
+                    detail: (detail?.isEmpty == false) ? detail : nil,
+                    durationSeconds: Self.parseDurationSeconds(meta["duration"])
                 ))
                 if tracks.count >= limit { return tracks }
             }
@@ -161,7 +162,7 @@ actor MusicAddonClient {
                   let title = track["title"] as? String else { return nil }
             let artist = track["artist"] as? String
             let album = track["album"] as? String
-            let duration = track["duration"] as? Int ?? (track["duration"] as? Double).map(Int.init)
+            let duration = Self.parseDurationSeconds(track["duration"])
             let artwork = (track["artworkURL"] as? String) ?? (track["coverURL"] as? String)
             return AddonTrack(
                 installationKey: installation.key,
@@ -174,6 +175,21 @@ actor MusicAddonClient {
                 album: album,
                 durationSeconds: duration
             )
+        }
+    }
+
+    /// Addons disagree on durations: numbers, "370", "6:10" or "1:02:03".
+    private static func parseDurationSeconds(_ value: Any?) -> Int? {
+        switch value {
+        case let seconds as Int: return seconds
+        case let seconds as Double: return Int(seconds)
+        case let text as String:
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let seconds = Int(trimmed) { return seconds }
+            let parts = trimmed.split(separator: ":").compactMap { Int($0) }
+            guard (1...3).contains(parts.count) else { return nil }
+            return parts.reduce(0) { $0 * 60 + $1 }
+        default: return nil
         }
     }
 
