@@ -25,6 +25,9 @@ struct SettingsView: View {
                 SettingsNavigationRow("Player", icon: "play.circle.fill") {
                     PlayerSettingsView()
                 }
+                SettingsNavigationRow("DJ Mix (offline)", icon: "waveform.path.ecg") {
+                    DJMixView()
+                }
                 SettingsNavigationRow("Storage", icon: "internaldrive.fill") {
                     StorageSettingsView()
                 }
