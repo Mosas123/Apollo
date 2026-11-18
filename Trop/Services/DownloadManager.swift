@@ -90,19 +90,25 @@ final class DownloadManager: ObservableObject {
 
     // MARK: - Paths
 
-    func fileURL(for song: SongItem) async -> URL {
+    func fileURL(for song: SongItem, fileExtension: String = "m4a") async -> URL {
         await displayDestinationURL(
             title: song.title,
             artist: song.artists.map(\.name).joined(separator: ", "),
-            videoId: song.videoId
+            videoId: song.videoId,
+            fileExtension: fileExtension
         )
     }
 
-    func displayDestinationURL(title: String, artist: String, videoId: String) async -> URL {
+    func displayDestinationURL(
+        title: String,
+        artist: String,
+        videoId: String,
+        fileExtension: String = "m4a"
+    ) async -> URL {
         ensureDirectories()
         let rawStem = title.isEmpty ? videoId : (artist.isEmpty ? title : "\(artist) - \(title)")
         let stem = Self.sanitizeFileName(rawStem)
-        return downloadsDir.appendingPathComponent("\(stem) [\(videoId)].m4a")
+        return downloadsDir.appendingPathComponent("\(stem) [\(videoId)].\(fileExtension)")
     }
 
     /// Strips characters illegal on filesystems, trims whitespace/dots and
@@ -247,7 +253,7 @@ final class DownloadManager: ObservableObject {
     /// Extracts the video id from `Artist - Title [<id>].m4a`.
     nonisolated static func videoId(from fileName: String) -> String? {
         let base = (fileName as NSString).deletingPathExtension
-        guard let range = base.range(of: #"\[([A-Za-z0-9_-]{6,})\]$"#, options: .regularExpression) else {
+        guard let range = base.range(of: #"\[([A-Za-z0-9_:-]{6,})\]$"#, options: .regularExpression) else {
             return nil
         }
         let bracketed = base[range]
@@ -256,7 +262,7 @@ final class DownloadManager: ObservableObject {
 
     nonisolated private static func displayTitle(from url: URL) -> String {
         var base = (url.lastPathComponent as NSString).deletingPathExtension
-        if let range = base.range(of: #"\s*\[[A-Za-z0-9_-]{6,}\]$"#, options: .regularExpression) {
+        if let range = base.range(of: #"\s*\[[A-Za-z0-9_:-]{6,}\]$"#, options: .regularExpression) {
             base.removeSubrange(range)
         }
         return base.isEmpty ? url.lastPathComponent : base
@@ -331,37 +337,31 @@ extension DownloadManager {
         }
 
         setProgress(0.02, for: videoId)
-
-        let fileURL = await fileURL(for: song)
+        var destinationURL: URL?
         do {
-            if fileManager.fileExists(atPath: fileURL.path) {
-                try? fileManager.removeItem(at: fileURL)
-            }
-
             async let artworkData = prefetchArtwork(for: song)
 
             setProgress(0.05, for: videoId)
             let resolveStart = CFAbsoluteTimeGetCurrent()
-            let result = try await PlaybackManager.shared.resolve(
-                videoId: videoId,
-                forDownload: true
-            )
+            let source = try await downloadSource(for: song)
             let resolveElapsed = CFAbsoluteTimeGetCurrent() - resolveStart
-            let streamURL = result.streamUrl
-            let isAACStream = result.mimeType.lowercased().contains("mp4a")
-                || result.mimeType.lowercased().contains("aac")
-            Log.downloadManager.debug("RESOLVE \(String(format: "%.1f", resolveElapsed))s codec=\(result.mimeType) isAAC=\(isAACStream)")
+            let format = source.format
+            Log.downloadManager.debug(
+                "RESOLVE \(String(format: "%.1f", resolveElapsed))s codec=\(source.mimeType) format=\(format.fileExtension)"
+            )
 
-            guard let url = URL(string: streamURL) else {
-                throw DownloadError.invalidStreamURL
+            let fileURL = await fileURL(for: song, fileExtension: format.fileExtension)
+            destinationURL = fileURL
+            if fileManager.fileExists(atPath: fileURL.path) {
+                try? fileManager.removeItem(at: fileURL)
             }
 
             let tempDownload = fileManager.temporaryDirectory
-                .appendingPathComponent("\(UUID().uuidString).\(isAACStream ? "m4a" : "webm")")
+                .appendingPathComponent("\(UUID().uuidString).\(format.tempExtension)")
             defer { try? fileManager.removeItem(at: tempDownload) }
             let dlStart = CFAbsoluteTimeGetCurrent()
             try await downloadToFile(
-                from: url,
+                from: source.url,
                 to: tempDownload,
                 videoId: videoId
             )
@@ -374,7 +374,34 @@ extension DownloadManager {
             ensureDirectories()
             setProgress(0.88, for: videoId)
             let ffmpegStart = CFAbsoluteTimeGetCurrent()
-            if isAACStream {
+            switch format {
+            case .flac:
+                // Lossless stays bit-perfect: no transcode, metadata only.
+                try validateFLACFile(at: tempDownload)
+                do {
+                    try await attachMetadata(
+                        to: tempDownload,
+                        fileExtension: "flac",
+                        title: song.title,
+                        artist: artist,
+                        artworkData: nil,
+                        videoId: videoId
+                    )
+                } catch {
+                    Log.downloadManager.debug("FLAC tag step skipped: \(error.localizedDescription)")
+                }
+                try fileManager.moveItem(at: tempDownload, to: fileURL)
+            case .mp3:
+                try await attachMetadata(
+                    to: tempDownload,
+                    fileExtension: "mp3",
+                    title: song.title,
+                    artist: artist,
+                    artworkData: artwork,
+                    videoId: videoId
+                )
+                try fileManager.moveItem(at: tempDownload, to: fileURL)
+            case .aac:
                 // AVFoundation can open AAC/MP4; validate before remux.
                 let validateStart = CFAbsoluteTimeGetCurrent()
                 try await validateDownloadedFile(at: tempDownload)
@@ -383,13 +410,14 @@ extension DownloadManager {
                 Log.downloadManager.debug("FFMPEG remux (AAC passthrough)...")
                 try await attachMetadata(
                     to: tempDownload,
+                    fileExtension: "m4a",
                     title: song.title,
                     artist: artist,
                     artworkData: artwork,
                     videoId: videoId
                 )
                 try fileManager.moveItem(at: tempDownload, to: fileURL)
-            } else {
+            case .other:
                 // WebM/Opus is not readable by AVFoundation — transcode first,
                 // then validate the generated .m4a.
                 Log.downloadManager.debug("FFMPEG transcode (Opus -> AAC)...")
@@ -440,22 +468,196 @@ extension DownloadManager {
         } catch is CancellationError {
             cancelledDownloadIds.remove(videoId)
             clearProgress(for: videoId)
-            try? fileManager.removeItem(at: fileURL)
+            if let destinationURL { try? fileManager.removeItem(at: destinationURL) }
             downloads[videoId] = .notStarted
         } catch {
             if cancelledDownloadIds.contains(videoId) || (error as? URLError)?.code == .cancelled {
                 cancelledDownloadIds.remove(videoId)
                 clearProgress(for: videoId)
-                try? fileManager.removeItem(at: fileURL)
+                if let destinationURL { try? fileManager.removeItem(at: destinationURL) }
                 downloads[videoId] = .notStarted
                 return
             }
-            if downloads[videoId] != .completed {
-                try? fileManager.removeItem(at: fileURL)
+            if downloads[videoId] != .completed, let destinationURL {
+                try? fileManager.removeItem(at: destinationURL)
             }
             downloads[videoId] = .failed(userFacingDownloadError(error))
             clearProgress(for: videoId)
             Log.downloadManager.error("Failed download \(videoId): \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Source selection
+
+    private enum DownloadFormat {
+        case flac
+        case mp3
+        case aac
+        case other
+
+        var fileExtension: String {
+            switch self {
+            case .flac: return "flac"
+            case .mp3: return "mp3"
+            case .aac: return "m4a"
+            case .other: return "m4a"
+            }
+        }
+
+        var tempExtension: String {
+            switch self {
+            case .flac: return "flac"
+            case .mp3: return "mp3"
+            case .aac: return "m4a"
+            case .other: return "webm"
+            }
+        }
+    }
+
+    private struct DownloadSource {
+        let url: URL
+        let mimeType: String
+        let format: DownloadFormat
+    }
+
+    /// Picks what to download: an add-on track resolves its own stream; a
+    /// YouTube song tries a lossless add-on match when the user prefers
+    /// lossless, and falls back to the YouTube stream.
+    private func downloadSource(for song: SongItem) async throws -> DownloadSource {
+        if let ref = AddonPlaybackID.decode(song.videoId) {
+            guard let installation = MusicAddonsStore.shared.installation(key: ref.k) else {
+                throw MusicCatalogError.unavailableTrack
+            }
+            let client = try MusicAddonClient(installation: installation)
+            let stream = try await client.resolveStream(type: ref.t, id: ref.i)
+            switch stream.kind {
+            case .youtube(let youTubeId):
+                let resolved = try await PlaybackManager.shared.resolve(videoId: youTubeId, forDownload: true)
+                guard let url = URL(string: resolved.streamUrl) else { throw DownloadError.invalidStreamURL }
+                return DownloadSource(
+                    url: url,
+                    mimeType: resolved.mimeType,
+                    format: Self.format(mime: resolved.mimeType, url: url)
+                )
+            case .url(let url):
+                return DownloadSource(
+                    url: url,
+                    mimeType: stream.mimeType,
+                    format: Self.format(mime: stream.mimeType, url: url)
+                )
+            }
+        }
+
+        if SettingsStore.shared.musicQualityMode == .lossless,
+           let pencari = await withTimeout(seconds: 12, { await pencariDownloadSource(for: song) }) {
+            Log.downloadManager.debug("Pencari lossless source for \(song.videoId)")
+            return pencari
+        }
+
+        if SettingsStore.shared.musicQualityMode == .lossless,
+           let match = await bestAddonMatch(for: song),
+           match.stream.qualityTier == "Lossless",
+           case .url(let url) = match.stream.kind,
+           await probeAudioURL(url) {
+            Log.downloadManager.debug("Add-on lossless source for \(song.videoId)")
+            return DownloadSource(
+                url: url,
+                mimeType: match.stream.mimeType,
+                format: .flac
+            )
+        }
+
+        let resolved = try await PlaybackManager.shared.resolve(videoId: song.videoId, forDownload: true)
+        guard let url = URL(string: resolved.streamUrl) else { throw DownloadError.invalidStreamURL }
+        return DownloadSource(
+            url: url,
+            mimeType: resolved.mimeType,
+            format: Self.format(mime: resolved.mimeType, url: url)
+        )
+    }
+
+    private static func format(mime: String, url: URL) -> DownloadFormat {
+        let type = mime.lowercased()
+        let ext = url.pathExtension.lowercased()
+        if type.contains("flac") || ext == "flac" { return .flac }
+        if type.contains("mpeg") || ext == "mp3" { return .mp3 }
+        if type.contains("mp4a") || type.contains("aac") || ext == "m4a" || ext == "mp4" {
+            return .aac
+        }
+        return .other
+    }
+
+    /// Same track on the bundled PencariMusic lossless source. Returns nil on
+    /// any miss so the addon/YouTube paths still run.
+    private func pencariDownloadSource(for song: SongItem) async -> DownloadSource? {
+        guard !MusicPlaybackIdentity.isExternal(song.videoId) else { return nil }
+        guard let client = PencariMusicClient.configured() else { return nil }
+        let title = song.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return nil }
+        let artist = song.artists.first?.name ?? ""
+        let query = artist.isEmpty ? title : "\(artist) \(title)"
+        guard let tracks = try? await client.searchTracks(query: query, limit: 8),
+              let best = tracks.first(where: {
+                  TextMatch.titlesMatch($0.title, title)
+                      && (artist.isEmpty || TextMatch.artistsMatch($0.artist, artist))
+              }),
+              let url = try? await client.resolveStreamURLFast(for: best.id.rawValue),
+              await probeAudioURL(url) else { return nil }
+        return DownloadSource(url: url, mimeType: "audio/flac", format: .flac)
+    }
+
+    /// Bounded add-on lookup so a slow addon can't stall the download; without
+    /// a match the YouTube stream is used.
+    private func bestAddonMatch(for song: SongItem, seconds: Double = 12) async -> AddonSourceResolver.Match? {
+        await withTimeout(seconds: seconds) { await AddonSourceResolver.bestMatch(for: song) }
+    }
+
+    /// Runs an optional lookup with a deadline; nil on timeout.
+    private func withTimeout<T: Sendable>(
+        seconds: Double,
+        _ operation: @escaping @Sendable () async -> T?
+    ) async -> T? {
+        await withTaskGroup(of: T?.self) { group in
+            group.addTask { await operation() }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(seconds))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+    }
+
+    /// Cheap reachability check so a dead add-on URL doesn't kill the download
+    /// instead of falling back to YouTube. HEAD only: a Range GET would pull the
+    /// whole FLAC when the server ignores the header.
+    private func probeAudioURL(_ url: URL) async -> Bool {
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = 8
+        guard let (_, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse else { return false }
+        // Signed URLs often reject HEAD (403/405) while GET works, so only
+        // treat clearly dead targets as failures.
+        switch http.statusCode {
+        case 404, 410, 500...599: return false
+        default: return true
+        }
+    }
+
+    private func validateFLACFile(at url: URL) throws {
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        guard size >= Self.minimumAudioBytes else {
+            Log.downloadManager.error("Downloaded FLAC too small (\(size) bytes)")
+            throw DownloadError.invalidStreamURL
+        }
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        let magic = try handle.read(upToCount: 4) ?? Data()
+        guard magic == Data("fLaC".utf8) else {
+            Log.downloadManager.error("Downloaded file is not FLAC — rejecting as invalid stream")
+            throw DownloadError.invalidStreamURL
         }
     }
 
@@ -910,13 +1112,18 @@ extension DownloadManager {
     /// `-c copy` avoids re-encoding — just copies the audio stream and injects metadata atoms.
     private func attachMetadata(
         to fileURL: URL,
+        fileExtension: String,
         title: String,
         artist: String,
         artworkData: Data?,
         videoId: String
     ) async throws {
-        let tempOutput = fileManager.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).m4a")
-        let artworkURL = try writeTempArtwork(artworkData)
+        let tempOutput = fileManager.temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString).\(fileExtension)")
+        // FLAC artwork needs a picture metadata block; the app already shows the
+        // cover from the DB, so keep the lossless file simple and bit-perfect.
+        let canEmbedArtwork = fileExtension == "m4a" || fileExtension == "mp3"
+        let artworkURL = canEmbedArtwork ? try writeTempArtwork(artworkData) : nil
         defer {
             try? fileManager.removeItem(at: tempOutput)
             if let artworkURL {

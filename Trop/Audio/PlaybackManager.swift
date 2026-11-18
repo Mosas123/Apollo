@@ -630,6 +630,45 @@ actor PlaybackManager {
         return tracks.first { normalizedMatchKey($0.title) == key }
     }
 
+    /// Plays a downloaded copy if one exists, no matter which source it came
+    /// from. Returns nil when the track isn't available offline.
+    private func playLocalFile(videoId: String) async -> PlaybackResult? {
+        guard let localPath = await DownloadManager.shared.localURL(for: videoId) else { return nil }
+        let isFLAC = localPath.pathExtension.lowercased() == "flac"
+        let song = await MainActor.run { NowPlaying.shared.queueSongs.first { $0.videoId == videoId } }
+        await PlayerController.shared.play(
+            url: localPath.absoluteString,
+            title: song?.title,
+            artist: song?.artists.map(\.name).joined(separator: ", "),
+            videoId: videoId,
+            duration: song.map { TimeInterval($0.duration) },
+            artists: song?.artists ?? [],
+            thumbnailUrl: song?.thumbnailUrl,
+            losslessLabel: isFLAC ? "FLAC" : nil,
+            qualityLabel: isFLAC ? "Lossless" : "Standard"
+        )
+        await MainActor.run {
+            NowPlaying.shared.updateVideoAvailability()
+        }
+        return PlaybackResult(
+            streamUrl: localPath.absoluteString,
+            itag: 0,
+            mimeType: isFLAC ? "audio/flac" : "audio/mp4",
+            bitrate: 0,
+            audioQuality: "local",
+            videoId: videoId,
+            title: song?.title,
+            author: song?.artists.map(\.name).joined(separator: ", "),
+            duration: song?.duration,
+            expiresInSeconds: Int.max,
+            clientName: "local",
+            musicVideoType: nil,
+            hasVideoContent: false,
+            muxedStreamUrl: nil,
+            loudnessDb: nil
+        )
+    }
+
     /// Resolve a video and start playback. Returns the result used, or throws.
     @discardableResult
     func resolveAndPlay(videoId: String) async throws -> PlaybackResult {
@@ -641,6 +680,11 @@ actor PlaybackManager {
             await PlayerController.shared.fadeVolume(to: 0, duration: 0.12)
             await MainActor.run { PlayerController.shared.setPaused(true) }
             await MainActor.run { PlayerController.shared.setVolumeOverride(nil) }
+        }
+        // Downloaded files win over every network source, including add-ons:
+        // an add-on track saved for offline use must play without the addon.
+        if let local = await playLocalFile(videoId: videoId) {
+            return local
         }
         if MusicPlaybackIdentity.isExternal(videoId) {
             let result: PlaybackResult
@@ -670,41 +714,6 @@ actor PlaybackManager {
             return result
         }
         await MainActor.run { SponsorBlockIntegration.shared.warm(for: videoId) }
-        if let localPath = await DownloadManager.shared.localURL(for: videoId) {
-            let song = await MainActor.run { NowPlaying.shared.queueSongs.first { $0.videoId == videoId } }
-            let artists = song?.artists ?? []
-            await PlayerController.shared.play(
-                url: localPath.absoluteString,
-                title: song?.title,
-                artist: song?.artists.map(\.name).joined(separator: ", "),
-                videoId: videoId,
-                duration: song.map { TimeInterval($0.duration) },
-                artists: artists,
-                thumbnailUrl: song?.thumbnailUrl,
-                losslessLabel: localPath.pathExtension.lowercased() == "flac" ? "FLAC" : nil,
-                qualityLabel: localPath.pathExtension.lowercased() == "flac" ? "Lossless" : "Standard"
-            )
-            await MainActor.run {
-                NowPlaying.shared.updateVideoAvailability()
-            }
-            return PlaybackResult(
-                streamUrl: localPath.absoluteString,
-                itag: 0,
-                mimeType: "audio/mp4",
-                bitrate: 0,
-                audioQuality: "local",
-                videoId: videoId,
-                title: song?.title,
-                author: song?.artists.map(\.name).joined(separator: ", "),
-                duration: song?.duration,
-                expiresInSeconds: Int.max,
-                clientName: "local",
-                musicVideoType: nil,
-                hasVideoContent: false,
-                muxedStreamUrl: nil,
-                loudnessDb: nil
-            )
-        }
 
         if let cached = await StreamCache.shared.get(videoId: videoId) {
             // A prefetched upgrade can still be better than the cached stream.
@@ -884,7 +893,11 @@ actor PlaybackManager {
     /// Resolve a video without playing. Useful for previews / testing.
     func resolve(videoId: String, preferredFormat: Format? = nil, forDownload: Bool = false) async throws -> PlaybackResult {
         if MusicPlaybackIdentity.isExternal(videoId) {
-            guard !forDownload else { throw MusicCatalogError.unavailableTrack }
+            // Add-on tracks can be saved offline: the stream URL is direct.
+            // The other external sources are streaming-only for now.
+            guard !forDownload || MusicPlaybackIdentity.isAddon(videoId) else {
+                throw MusicCatalogError.unavailableTrack
+            }
             if MusicPlaybackIdentity.isQobuz(videoId) {
                 return try await resolveQobuz(videoId: videoId)
             }
