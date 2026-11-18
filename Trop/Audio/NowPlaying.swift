@@ -225,6 +225,12 @@ final class NowPlaying {
         originalQueue = nil
         isShuffleOn = false
         persistQueueState()
+        queueDidChange()
+    }
+
+    /// Posted after any queue mutation so playback can warm the new next songs.
+    func queueDidChange() {
+        NotificationCenter.default.post(name: .tropQueueChanged, object: nil)
     }
 
     /// Ensures `queueIndex` points at a valid entry
@@ -266,6 +272,7 @@ final class NowPlaying {
         queueIndex = prefix.count
         isShuffleOn = true
         persistQueueState()
+        queueDidChange()
     }
 
     /// Restore the original (unshuffled) queue order.
@@ -282,6 +289,7 @@ final class NowPlaying {
         originalQueue = nil
         isShuffleOn = false
         persistQueueState()
+        queueDidChange()
     }
 
     func moveQueueSongs(from source: IndexSet, to destination: Int) {
@@ -289,6 +297,7 @@ final class NowPlaying {
         queueSongs.move(fromOffsets: source, toOffset: destination)
         repairQueueIndex()
         persistQueueState()
+        queueDidChange()
     }
 
     func repeatCurrent() {
@@ -507,6 +516,7 @@ final class NowPlaying {
             queueSongs = items
             queueIndex = 0
             isShuffleOn = false
+            queueDidChange()
             let first = items[0]
             update(with: first)
             try? await PlaybackManager.shared.resolveAndPlay(videoId: first.videoId)
@@ -530,6 +540,7 @@ final class NowPlaying {
                 self.queueSongs = songs
                 self.queueIndex = 0
                 self.isShuffleOn = false
+                self.queueDidChange()
                 let first = songs[0]
                 update(with: first)
                 try await PlaybackManager.shared.resolveAndPlay(videoId: first.videoId)
@@ -1145,4 +1156,9 @@ private func _isJunkArtistSegment(_ segment: String) -> Bool {
         return true
     }
     return false
+}
+
+
+extension Notification.Name {
+    static let tropQueueChanged = Notification.Name("trop.queueChanged")
 }

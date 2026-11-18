@@ -55,6 +55,7 @@ enum PlaybackQueue {
             guard NowPlaying.shared.videoId == song.videoId else { return }
             NowPlaying.shared.queueSongs = preservingArtists(radio.songs, over: NowPlaying.shared.queueSongs)
             NowPlaying.shared.queueIndex = radio.currentIndex
+            NowPlaying.shared.queueDidChange()
         }
     }
 
@@ -75,6 +76,7 @@ enum PlaybackQueue {
                   NowPlaying.shared.videoId == song.videoId else { return }
             NowPlaying.shared.queueSongs = preservingArtists(radio.songs, over: NowPlaying.shared.queueSongs)
             NowPlaying.shared.queueIndex = radio.currentIndex
+            NowPlaying.shared.queueDidChange()
         }
     }
 

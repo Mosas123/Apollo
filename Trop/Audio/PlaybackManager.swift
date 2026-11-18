@@ -275,6 +275,9 @@ actor PlaybackManager {
     private var upgradeResultCache: [String: (result: PlaybackResult, at: Date)] = [:]
     private var upgradePrefetchInFlight: Set<String> = []
     private var resolvedSourceNames: [String: String] = [:]
+    private var queueObserver: NSObjectProtocol?
+    private var queueChangeTask: Task<Void, Never>?
+    private var prefetchRefreshTask: Task<Void, Never>?
 
     private struct AddonQualityPreference: Sendable {
         let requireCD: Bool
@@ -357,10 +360,11 @@ actor PlaybackManager {
     private func resolvePreferredUpgrade(
         videoId: String,
         interactive: Bool = false,
-        budget: Double? = nil
+        budget: Double? = nil,
+        ignoreCache: Bool = false
     ) async -> PlaybackResult? {
         guard let preference = addonPreference else { return nil }
-        let cached = upgradeResultCache[videoId].flatMap {
+        let cached = ignoreCache ? nil : upgradeResultCache[videoId].flatMap {
             Date().timeIntervalSince($0.at) < upgradeTTL(for: $0.result) ? $0.result : nil
         }
         if let cached, Self.resultMatches(cached, preference: preference) {
@@ -666,6 +670,35 @@ actor PlaybackManager {
         await verifiedStreamURL(urlString) != nil
     }
 
+    /// Starts listening for queue mutations (radio fill, shuffle, reorder) so
+    /// the new next songs get warmed without waiting for a track change.
+    func startQueueObserver() {
+        guard queueObserver == nil else { return }
+        queueObserver = NotificationCenter.default.addObserver(
+            forName: .tropQueueChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { await self?.handleQueueChanged() }
+        }
+    }
+
+    private func handleQueueChanged() {
+        queueChangeTask?.cancel()
+        queueChangeTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(900))
+            guard !Task.isCancelled else { return }
+            await self?.prefetchForCurrentTrack()
+        }
+    }
+
+    private func prefetchForCurrentTrack() async {
+        let jiosaavnOnly = addonPreference == nil && SettingsStore.shared.audioQuality == .jiosaavn
+        guard addonPreference != nil || jiosaavnOnly else { return }
+        guard let current = await MainActor.run(body: { NowPlaying.shared.videoId }) else { return }
+        await prefetchUpcomingUpgrades(after: current, count: 2)
+    }
+
     /// Boundary-only upgrade: warm this track (for replays) and the next one
     /// so it *starts* in the better source. Never swaps mid-track.
     private func scheduleUpgradePrefetch(videoId: String) {
@@ -695,6 +728,25 @@ actor PlaybackManager {
                 _ = await self.resolvePreferredUpgrade(videoId: videoId, budget: 20)
             }
         }
+        schedulePrefetchRefresh(videoId: videoId)
+    }
+
+    /// URLs from addons expire; re-warm the next songs before this track ends.
+    private func schedulePrefetchRefresh(videoId: String) {
+        prefetchRefreshTask?.cancel()
+        prefetchRefreshTask = Task { [weak self] in
+            let duration = await MainActor.run { NowPlaying.shared.duration }
+            let delay = duration > 0 ? max(20, duration - 90) : 120
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self else { return }
+            let stillCurrent = await MainActor.run { NowPlaying.shared.videoId == videoId }
+            guard stillCurrent else { return }
+            await self.prefetchUpcomingUpgrades(
+                after: videoId,
+                count: 2,
+                refreshSoonExpiring: true
+            )
+        }
     }
 
     /// Warms catalogue metadata + album cover for the next queue track.
@@ -720,7 +772,11 @@ actor PlaybackManager {
     /// start straight in the better source instead of waiting for the search.
     /// Runs off the play path, sequentially, with a longer budget for the cold
     /// addon lookups.
-    private func prefetchUpcomingUpgrades(after videoId: String, count: Int = 2) async {
+    private func prefetchUpcomingUpgrades(
+        after videoId: String,
+        count: Int = 2,
+        refreshSoonExpiring: Bool = false
+    ) async {
         let jiosaavnOnly = addonPreference == nil && SettingsStore.shared.audioQuality == .jiosaavn
         guard addonPreference != nil || jiosaavnOnly else { return }
         let queue = await MainActor.run { NowPlaying.shared.queueSongs }
@@ -730,9 +786,9 @@ actor PlaybackManager {
         var targets: [String] = []
         for id in upcoming {
             guard !MusicPlaybackIdentity.isExternal(id) else { continue }
-            if let cached = upgradeResultCache[id],
-               Date().timeIntervalSince(cached.at) < upgradeTTL(for: cached.result) {
-                continue
+            if let cached = upgradeResultCache[id] {
+                let maxAge = refreshSoonExpiring ? 90 : upgradeTTL(for: cached.result)
+                if Date().timeIntervalSince(cached.at) < maxAge { continue }
             }
             guard upgradePrefetchInFlight.insert(id).inserted else { continue }
             targets.append(id)
@@ -754,7 +810,11 @@ actor PlaybackManager {
             guard stillUpcoming else { continue }
             await MainActor.run { SponsorBlockIntegration.shared.warm(for: id) }
             if addonPreference != nil {
-                _ = await resolvePreferredUpgrade(videoId: id, budget: 30)
+                _ = await resolvePreferredUpgrade(
+                    videoId: id,
+                    budget: 30,
+                    ignoreCache: refreshSoonExpiring
+                )
             } else if let jiosaavn = await resolveJioSaavnFallback(videoId: id) {
                 if upgradeResultCache.count >= 100 {
                     upgradeResultCache.removeAll(keepingCapacity: true)
@@ -887,6 +947,7 @@ actor PlaybackManager {
         // Downloaded files win over every network source, including add-ons:
         // an add-on track saved for offline use must play without the addon.
         if let local = await playLocalFile(videoId: videoId) {
+            scheduleUpgradePrefetch(videoId: videoId)
             return local
         }
         if MusicPlaybackIdentity.isLegacyPencari(videoId) {
@@ -923,6 +984,7 @@ actor PlaybackManager {
                 NowPlaying.shared.currentSourceName = externalSourceName
                 NowPlaying.shared.currentResult = result
             }
+            scheduleUpgradePrefetch(videoId: videoId)
             return result
         }
         await MainActor.run { SponsorBlockIntegration.shared.warm(for: videoId) }
