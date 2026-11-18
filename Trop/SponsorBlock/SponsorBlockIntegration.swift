@@ -65,7 +65,7 @@ final class SponsorBlockIntegration {
             return 0
         }
         guard SponsorBlock.isEnabled,
-              let first = found.first,
+              let first = found.min(by: { $0.start < $1.start }),
               first.start < 0.5
         else { return 0 }
         return first.end
@@ -80,7 +80,7 @@ final class SponsorBlockIntegration {
             segments = []
             skipped = []
             if let found = prefetchedSegments[id] {
-                segments = found
+                segments = found.sorted { $0.start < $1.start }
             } else {
                 _ = fetchTask(for: id)
             }
@@ -113,7 +113,7 @@ final class SponsorBlockIntegration {
             let found = await task.value
             guard let self else { return }
             self.fetchTasks.removeValue(forKey: videoId)
-            self.prefetchedSegments[videoId] = found
+            self.prefetchedSegments[videoId] = found.sorted { $0.start < $1.start }
             if !self.prefetchOrder.contains(videoId) {
                 self.prefetchOrder.append(videoId)
             }
@@ -122,7 +122,7 @@ final class SponsorBlockIntegration {
                 self.prefetchedSegments.removeValue(forKey: oldest)
             }
             if self.videoId == videoId {
-                self.segments = found
+                self.segments = found.sorted { $0.start < $1.start }
             }
         }
         return task
