@@ -255,7 +255,7 @@ enum AddonSourceResolver {
             album: albumName
         )
         if let cached = await AddonAlbumCache.shared.get(key), !cached.isEmpty {
-            return Self.filterAlbumTracks(cached, criteria: criteria)
+            return Self.filterAlbumTracks(cached, criteria: criteria, preferAtmos: preferAtmos)
         }
         let query = [criteria.artist, TextMatch.queryTitle(albumName)]
             .filter { !$0.isEmpty }
