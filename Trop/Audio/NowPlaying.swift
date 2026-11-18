@@ -654,14 +654,17 @@ final class NowPlaying {
     private func resolveCanonicalArtwork(videoId: String) async -> Bool {
         guard !MusicPlaybackIdentity.isExternal(videoId) else { return false }
         let song = queueSongs.first { $0.videoId == videoId }
-        let query = TextMatch.recordingQuery(
-            title: song?.title ?? title,
-            artist: song.map { $0.artists.map(\.name).joined(separator: ", ") } ?? artist
+        let identity = song.map(TrackIdentity.make(from:)) ?? TrackIdentity(
+            videoId: videoId,
+            title: TextMatch.queryTitle(title),
+            artist: TextMatch.queryArtist(artist),
+            album: nil,
+            durationSeconds: nil
         )
-        let title = query.title
-        let artist = query.artist
-        let album = song?.album
-        let duration = song?.duration
+        let title = identity.title
+        let artist = identity.artist
+        let album = identity.album
+        let duration = identity.durationSeconds
         guard !title.isEmpty else { return false }
         let resolved = await Self.resolveMetadataWithTimeout(
             title: title, artist: artist, album: album, duration: duration, seconds: 2.5
