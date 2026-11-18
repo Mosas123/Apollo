@@ -8,6 +8,7 @@ enum AddonSourceResolver {
         let stream: AddonStream
     }
 
+    @MainActor
     static func bestMatch(for song: SongItem) async -> Match? {
         let installations = MusicAddonsStore.shared.enabledStremioInstallations
         guard !installations.isEmpty else { return nil }
