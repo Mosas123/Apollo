@@ -12,9 +12,6 @@ struct IntegrationsSettingsView: View {
                 SettingsNavigationRow("Music Addons", icon: "puzzlepiece.extension") {
                     MusicAddonsSettingsView()
                 }
-                SettingsNavigationRow("PencariMusic", icon: "waveform.path") {
-                    PencariMusicSettingsView()
-                }
                 SettingsNavigationRow("Qobuz", icon: "waveform") {
                     QobuzSettingsView()
                 }

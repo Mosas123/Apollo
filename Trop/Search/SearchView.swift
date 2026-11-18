@@ -298,13 +298,6 @@ struct SearchView: View {
                     }
                 }
 
-                if viewModel.showsPencariResults && !viewModel.pencariTracks.isEmpty {
-                    sectionHeader("Lossless")
-                    ForEach(viewModel.pencariTracks, id: \.id) { track in
-                        externalTrackRow(track, from: viewModel.pencariTracks)
-                    }
-                }
-
                 if viewModel.showsJioSaavnResults && !viewModel.jiosaavnTracks.isEmpty {
                     sectionHeader("JioSaavn")
                     ForEach(viewModel.jiosaavnTracks, id: \.id) { track in
