@@ -2,16 +2,16 @@ import Observation
 import SwiftUI
 import UniformTypeIdentifiers
 
+struct DJMixItem: Identifiable {
+    let id = UUID()
+    let track: DJSourceTrack
+    var analysis: DJTrackAnalysis?
+}
+
 @MainActor
 @Observable
 final class DJMixViewModel {
-    struct Item: Identifiable {
-        let id = UUID()
-        let track: DJSourceTrack
-        var analysis: DJTrackAnalysis?
-    }
-
-    var items: [Item] = []
+    var items: [DJMixItem] = []
     var useAI = false
     var isWorking = false
     var status: String?
@@ -27,7 +27,7 @@ final class DJMixViewModel {
                 fileURL: url,
                 duration: 0
             )
-            items.append(Item(track: track))
+            items.append(DJMixItem(track: track))
         }
         await analyzePending()
     }
@@ -43,7 +43,7 @@ final class DJMixViewModel {
                     id: track.id, title: track.title, artist: track.artist,
                     fileURL: track.fileURL, duration: analysis.duration
                 )
-                items[index] = Item(track: track, analysis: analysis)
+                items[index] = DJMixItem(track: track, analysis: analysis)
             } catch {
                 status = "No se pudo analizar \(items[index].track.title)."
             }
@@ -82,10 +82,11 @@ struct DJMixView: View {
     @State private var importing = false
 
     var body: some View {
+        @Bindable var bindable = model
         List {
             Section {
                 Button("Add audio files") { importing = true }
-                Toggle("AI plan (uses your AI key)", isOn: $model.useAI)
+                Toggle("AI plan (uses your AI key)", isOn: $bindable.useAI)
                 if model.isWorking { ProgressView() }
                 ForEach(model.items) { item in
                     VStack(alignment: .leading) {
