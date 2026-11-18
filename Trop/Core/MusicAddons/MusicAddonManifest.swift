@@ -20,6 +20,33 @@ struct MusicAddonManifest: Codable, Sendable, Equatable {
     let capabilities: [MusicAddonCapability]
     /// Keys are capability names; values are same-origin absolute paths.
     let endpoints: [String: String]
+    /// Present for Stremio addons; nil for native Trop v1 manifests.
+    var protocolKind: MusicAddonProtocolKind? = nil
+    var stremio: StremioDescriptor? = nil
+}
+
+enum MusicAddonProtocolKind: String, Codable, Sendable, Equatable {
+    case tropV1
+    case stremio
+}
+
+/// The subset of a Stremio manifest needed to search and resolve audio.
+struct StremioDescriptor: Codable, Sendable, Equatable {
+    struct Resource: Codable, Sendable, Equatable {
+        let name: String
+    }
+    struct Extra: Codable, Sendable, Equatable {
+        let name: String
+    }
+    struct Catalog: Codable, Sendable, Equatable {
+        let type: String
+        let id: String
+        let name: String?
+        let extra: [Extra]?
+    }
+    let resources: [Resource]
+    let types: [String]
+    let catalogs: [Catalog]
 }
 
 enum MusicAddonError: Error, Equatable, LocalizedError {
@@ -80,13 +107,8 @@ struct MusicAddonPackage: Sendable {
         guard !data.isEmpty, data.count <= 64 * 1024 else {
             throw MusicAddonError.invalidManifest
         }
-        // Stremio's resources/types/catalogs format is not Trop's
-        // capabilities/endpoints format. Do not suggest a broken install.
-        if let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           payload["id"] is String,
-           payload["resources"] is [Any],
-           payload["types"] is [Any] {
-            throw MusicAddonError.incompatibleStremioProtocol
+        if let stremio = Self.parseStremio(data, at: canonical) {
+            return stremio
         }
         guard let manifest = try? JSONDecoder().decode(MusicAddonManifest.self, from: data) else {
             throw MusicAddonError.invalidManifest
@@ -110,6 +132,63 @@ struct MusicAddonPackage: Sendable {
             throw MusicAddonError.unsafeEndpoint
         }
         return MusicAddonPackage(manifestURL: canonical, manifest: manifest)
+    }
+
+    /// Accepts a Stremio addon manifest (resources/types/catalogs) and maps it
+    /// to the internal capability model. Read-only: no scripts, no code.
+    private static func parseStremio(_ data: Data, at url: URL) -> MusicAddonPackage? {
+        struct RawResource: Decodable {
+            let name: String
+            init(from decoder: Decoder) throws {
+                if let container = try? decoder.singleValueContainer(),
+                   let value = try? container.decode(String.self) {
+                    name = value
+                    return
+                }
+                struct Object: Decodable { let name: String }
+                name = try Object(from: decoder).name
+            }
+        }
+        struct RawManifest: Decodable {
+            let id: String
+            let name: String
+            let version: String
+            let description: String?
+            let resources: [RawResource]
+            let types: [String]
+            let catalogs: [StremioDescriptor.Catalog]
+        }
+        guard let raw = try? JSONDecoder().decode(RawManifest.self, from: data) else { return nil }
+        let resources = raw.resources.map { StremioDescriptor.Resource(name: $0.name.lowercased()) }
+        let names = Set(resources.map(\.name))
+        let hasSearch = raw.catalogs.contains { catalog in
+            catalog.extra?.contains { $0.name.lowercased() == "search" } == true
+        }
+        var capabilities: [MusicAddonCapability] = []
+        if hasSearch || names.contains("catalog") { capabilities.append(.search) }
+        if names.contains("stream") { capabilities.append(.stream) }
+        if names.contains("meta") { capabilities.append(.metadata) }
+        guard !capabilities.isEmpty else { return nil }
+        let manifest = MusicAddonManifest(
+            schemaVersion: 1,
+            id: raw.id,
+            name: raw.name,
+            version: Self.normalizedVersion(raw.version),
+            description: raw.description,
+            capabilities: capabilities,
+            endpoints: [:],
+            protocolKind: .stremio,
+            stremio: StremioDescriptor(
+                resources: resources,
+                types: raw.types,
+                catalogs: raw.catalogs
+            )
+        )
+        return MusicAddonPackage(manifestURL: url, manifest: manifest)
+    }
+
+    private static func normalizedVersion(_ version: String) -> String {
+        parseVersion(version) == nil ? "1.0.0" : version
     }
 
     private static func validIdentifier(_ id: String) -> Bool {
