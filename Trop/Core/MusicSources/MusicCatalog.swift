@@ -72,7 +72,9 @@ enum MusicPlaybackIdentity {
         playbackID?.hasPrefix("qobuz:") == true
     }
 
-    static func isPencari(_ playbackID: String?) -> Bool {
+    /// PencariMusic was removed from the app; ids still saved in queues and
+    /// libraries are played through the installed add-ons instead.
+    static func isLegacyPencari(_ playbackID: String?) -> Bool {
         playbackID?.hasPrefix("pencari:") == true
     }
 
@@ -88,7 +90,7 @@ enum MusicPlaybackIdentity {
     /// client). Shown in the player menu.
     static func sourceLabel(_ playbackID: String?) -> String {
         if isQobuz(playbackID) { return "Qobuz" }
-        if isPencari(playbackID) { return "PencariMusic" }
+        if isLegacyPencari(playbackID) { return "PencariMusic (legacy)" }
         if isJioSaavn(playbackID) { return "JioSaavn" }
         if isAddon(playbackID) { return "Music Add-on" }
         if isAudius(playbackID) { return "Audius" }
@@ -96,7 +98,7 @@ enum MusicPlaybackIdentity {
     }
 
     static func isExternal(_ playbackID: String?) -> Bool {
-        isAudius(playbackID) || isQobuz(playbackID) || isPencari(playbackID)
+        isAudius(playbackID) || isQobuz(playbackID)
             || isJioSaavn(playbackID) || isAddon(playbackID)
     }
 

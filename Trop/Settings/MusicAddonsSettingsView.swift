@@ -223,6 +223,15 @@ struct MusicAddonsSettingsView: View {
         }
     }
 
+    private func audioQualitySummary(_ caps: AddonCapabilities) -> String {
+        var parts: [String] = []
+        if caps.cd { parts.append("FLAC CD") }
+        if caps.hiRes { parts.append("Hi-Res") }
+        if caps.aac320 { parts.append("AAC 320") }
+        if caps.atmos { parts.append("Atmos") }
+        return parts.isEmpty ? "Audio: unknown" : "Audio: " + parts.joined(separator: " · ")
+    }
+
     private var installedSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeading("Installed Addons")
@@ -287,6 +296,9 @@ struct MusicAddonsSettingsView: View {
                     .foregroundStyle(.secondary)
             }
             Text(entry.manifest.capabilities.map(capabilityTitle).joined(separator: " · "))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(audioQualitySummary(entry.audioCapabilities))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

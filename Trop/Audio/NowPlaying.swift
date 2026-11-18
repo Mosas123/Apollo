@@ -70,6 +70,11 @@ final class NowPlaying {
     /// Current stream URL + lossless label, kept to roll back a failed upgrade.
     var currentStreamURL: String?
     var currentLosslessLabel: String?
+    /// Human name of the source currently feeding the player (add-on name,
+    /// "Qobuz", "Downloaded"…), used by the details sheet.
+    var currentSourceName: String?
+    /// The stream actually playing, so details never show a stale cached one.
+    var currentResult: PlaybackResult?
     var currentTime: TimeInterval = 0
     var duration: TimeInterval = 0
     var progress: Float {
@@ -143,6 +148,9 @@ final class NowPlaying {
     private var lastFailureAt: [String: Date] = [:]
 
     private static let queueKey = "nowPlaying.queue"
+    private static let positionKey = "nowPlaying.lastPosition"
+    private var pendingResumePosition: TimeInterval?
+    private var pendingResumeAt: Date?
     private static let queueIndexKey = "nowPlaying.queueIndex"
     private static let shuffleKey = "nowPlaying.shuffle"
     private static let repeatKey = "nowPlaying.repeat"
@@ -159,6 +167,17 @@ final class NowPlaying {
     }
 
     // MARK: - Persistent queue
+
+    /// Consumes a saved position for the first play after launch.
+    func takeResumePosition(for videoId: String?) -> TimeInterval? {
+        guard let videoId, videoId == self.videoId,
+              let position = pendingResumePosition,
+              let savedAt = pendingResumeAt,
+              Date().timeIntervalSince(savedAt) < 86_400 else { return nil }
+        pendingResumePosition = nil
+        pendingResumeAt = nil
+        return position
+    }
 
     private func restoreQueueIfNeeded() {
         guard SettingsStore.shared.persistQueue,
@@ -178,6 +197,17 @@ final class NowPlaying {
         isRepeatOn = UserDefaults.standard.bool(forKey: Self.repeatKey)
         queueIndex = max(0, queueIndex)
         lastPersistedQueue = songs
+        if let saved = UserDefaults.standard.dictionary(forKey: Self.positionKey),
+           let savedId = saved["videoId"] as? String,
+           let position = saved["position"] as? Double,
+           let at = saved["at"] as? Double,
+           queueSongs.indices.contains(queueIndex),
+           queueSongs[queueIndex].videoId == savedId,
+           Date().timeIntervalSince1970 - at < 86_400 {
+            pendingResumePosition = position
+            pendingResumeAt = Date(timeIntervalSince1970: at)
+            currentTime = position
+        }
     }
 
     func persistQueueState() {
@@ -209,6 +239,12 @@ final class NowPlaying {
         originalQueue = nil
         isShuffleOn = false
         persistQueueState()
+        queueDidChange()
+    }
+
+    /// Posted after any queue mutation so playback can warm the new next songs.
+    func queueDidChange() {
+        NotificationCenter.default.post(name: .tropQueueChanged, object: nil)
     }
 
     /// Ensures `queueIndex` points at a valid entry
@@ -250,6 +286,7 @@ final class NowPlaying {
         queueIndex = prefix.count
         isShuffleOn = true
         persistQueueState()
+        queueDidChange()
     }
 
     /// Restore the original (unshuffled) queue order.
@@ -266,6 +303,7 @@ final class NowPlaying {
         originalQueue = nil
         isShuffleOn = false
         persistQueueState()
+        queueDidChange()
     }
 
     func moveQueueSongs(from source: IndexSet, to destination: Int) {
@@ -273,6 +311,7 @@ final class NowPlaying {
         queueSongs.move(fromOffsets: source, toOffset: destination)
         repairQueueIndex()
         persistQueueState()
+        queueDidChange()
     }
 
     func repeatCurrent() {
@@ -538,6 +577,7 @@ final class NowPlaying {
             queueSongs = items
             queueIndex = 0
             isShuffleOn = false
+            queueDidChange()
             let first = items[0]
             update(with: first)
             try? await PlaybackManager.shared.resolveAndPlay(videoId: first.videoId)
@@ -561,6 +601,7 @@ final class NowPlaying {
                 self.queueSongs = songs
                 self.queueIndex = 0
                 self.isShuffleOn = false
+                self.queueDidChange()
                 let first = songs[0]
                 update(with: first)
                 try await PlaybackManager.shared.resolveAndPlay(videoId: first.videoId)
@@ -997,6 +1038,14 @@ final class NowPlaying {
         // `updateNowPlayingProgress`; polling it every tick doubled the
         // synchronous mpv reads on the main actor.
         progressTick += 1
+        if progressTick % 20 == 0, isPlaying, let videoId {
+            let payload: [String: Any] = [
+                "videoId": videoId,
+                "position": currentTime,
+                "at": Date().timeIntervalSince1970
+            ]
+            UserDefaults.standard.set(payload, forKey: Self.positionKey)
+        }
         if progressTick % 4 == 0 {
             PlayerController.shared.updateNowPlayingProgress()
         }
@@ -1164,4 +1213,9 @@ private func _isJunkArtistSegment(_ segment: String) -> Bool {
         return true
     }
     return false
+}
+
+
+extension Notification.Name {
+    static let tropQueueChanged = Notification.Name("trop.queueChanged")
 }

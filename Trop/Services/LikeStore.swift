@@ -33,7 +33,6 @@ class LikeStore: ObservableObject {
     }
 
     func toggle(song: SongItem) async {
-        guard MusicPlaybackIdentity.isYouTube(song.videoId) else { return }
         let videoId = song.videoId
         let target = !isLiked(videoId: videoId)
 
@@ -42,13 +41,22 @@ class LikeStore: ObservableObject {
         liked = updated
 
         do {
-            if target {
-                try await SyncBridge.mutations.likeSong(videoId: videoId)
-                if SettingsStore.shared.autoDownloadOnLike {
+            if MusicPlaybackIdentity.isYouTube(videoId) {
+                // Guests and offline sessions keep their likes on this device; only
+                // mirror to YouTube Music when there is a real session.
+                let syncRemote = await CookieStore().isLoggedIn()
+                if target {
+                    try await SyncBridge.mutations.likeSong(videoId: videoId, syncRemote: syncRemote)
+                } else {
+                    try await SyncBridge.mutations.unlikeSong(videoId: videoId, syncRemote: syncRemote)
+                }
+                if target, SettingsStore.shared.autoDownloadOnLike {
                     await DownloadManager.shared.download(song: song)
                 }
             } else {
-                try await SyncBridge.mutations.unlikeSong(videoId: videoId)
+                // Radio, Audius and add-on tracks have no YouTube counterpart;
+                // they live only in the device library.
+                try await saveLocal(song: song, liked: target)
             }
             let primaryArtist = song.artists.first?.name ?? song.artistNamesDisplay
             if target {
@@ -61,11 +69,36 @@ class LikeStore: ObservableObject {
             if !artist.isEmpty, !track.isEmpty {
                 Task { await LastFMIntegration.shared.handleLove(artist: artist, track: track, love: target) }
             }
+            NotificationCenter.default.post(name: Notification.Name("trop.likeChanged"), object: nil)
         } catch {
             var reverted = liked
             reverted[videoId] = !target
             liked = reverted
             Log.sync.error("toggleLike failed for videoId=\(videoId) target=\(target) error: \(error) (\(error.localizedDescription))")
         }
+    }
+
+    /// Stores a like for a non-YouTube track (radio, Audius, add-ons) straight
+    /// into the local library.
+    private func saveLocal(song: SongItem, liked target: Bool) async throws {
+        let artistName = song.artists.isEmpty
+            ? song.artistNamesDisplay
+            : song.artists.map(\.name).joined(separator: ", ")
+        let existing = try await DatabaseService.shared.fetchOne(SongEntity.self, key: song.videoId)
+        var entity = SongEntity.merging(
+            existing: existing,
+            id: song.videoId,
+            title: song.title,
+            artistName: artistName,
+            albumName: song.album,
+            duration: song.duration,
+            thumbnailUrl: song.thumbnailUrl,
+            liked: target
+        )
+        entity.liked = target
+        if target, entity.inLibrary == nil {
+            entity.inLibrary = Date()
+        }
+        try await DatabaseService.shared.save(entity)
     }
 }

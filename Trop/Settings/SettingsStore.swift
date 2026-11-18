@@ -226,19 +226,26 @@ final class SettingsStore: @unchecked Sendable {
         didSet { Self.defaults.set(podcastIndexSecret, forKey: Keys.podcastIndexSecret) }
     }
 
-    // MARK: - PencariMusic (Stremio/Eclipse music addon)
-
-    /// Tokenized addon base, e.g.
-    /// `https://stream.pencarimovie.com/<token>`. Empty disables the source.
-    /// Search lives at `/music/search`, streams at `/music/stream/<id>`.
-    var pencariMusicBaseURL: String {
-        didSet { Self.defaults.set(pencariMusicBaseURL, forKey: Keys.pencariMusicBaseURL) }
-    }
-
     /// Source preference for a track: Auto / High / Lossless. Upgrades are
     /// prefetched at track boundaries and never block playback.
     var musicQualityMode: MusicQualityMode {
         didSet { Self.defaults.set(musicQualityMode.rawValue, forKey: Keys.musicQualityMode) }
+    }
+
+    /// Mirrors whether any music add-on is enabled. FLAC/CD/Atmos need one as
+    /// their search engine, so they are hidden and ignored without it.
+    var hasMusicAddons: Bool = false
+
+    /// Resolve and prefer 24-bit copies. Off by default: hi-res needs an
+    /// external DAC and is several times larger than CD.
+    var preferHiRes: Bool {
+        didSet { Self.defaults.set(preferHiRes, forKey: Keys.preferHiRes) }
+    }
+
+    /// Take the Dolby Atmos copy (E-AC3 5.1, downmixed to stereo by iOS) when an
+    /// addon offers one. Off by default: it is a preference, not "better".
+    var preferAtmos: Bool {
+        didSet { Self.defaults.set(preferAtmos, forKey: Keys.preferAtmos) }
     }
 
     /// When on, the app may switch to a better source *during* playback. The
@@ -383,6 +390,11 @@ final class SettingsStore: @unchecked Sendable {
         didSet { Self.defaults.set(downloadQuality.rawValue, forKey: Keys.downloadQuality) }
     }
 
+    /// Try the installed add-ons before the YouTube stream so downloads can be FLAC.
+    var losslessDownloads: Bool {
+        didSet { Self.defaults.set(losslessDownloads, forKey: Keys.losslessDownloads) }
+    }
+
     var wifiOnlyDownloads: Bool {
         didSet { Self.defaults.set(wifiOnlyDownloads, forKey: Keys.wifiOnlyDownloads) }
     }
@@ -444,8 +456,10 @@ final class SettingsStore: @unchecked Sendable {
         static let showExploreTab = "settings.showExploreTab"
         static let glassStyle = "settings.glassStyle"
         static let podcastIndexKey = "settings.podcastIndexKey"
-        static let pencariMusicBaseURL = "settings.pencariMusicBaseURL"
         static let musicQualityMode = "settings.musicQualityMode"
+        static let preferAtmos = "settings.preferAtmos"
+        static let preferHiRes = "settings.preferHiRes"
+        static let legacyPreferLossless = "settings.preferLossless"
         static let upgradeDuringPlayback = "settings.upgradeDuringPlayback"
         static let aiProvider = "settings.aiProvider"
         static let aiKey = "settings.aiKey"
@@ -478,6 +492,7 @@ final class SettingsStore: @unchecked Sendable {
         static let trackSearchHistory = "settings.trackSearchHistory"
         static let trackPlayHistory = "settings.trackPlayHistory"
         static let downloadQuality = "settings.downloadQuality"
+        static let losslessDownloads = "settings.losslessDownloads"
         static let wifiOnlyDownloads = "settings.wifiOnlyDownloads"
         static let autoDownloadOnLike = "settings.autoDownloadOnLike"
         static let autoDownloadNewEpisodes = "settings.autoDownloadNewEpisodes"
@@ -525,8 +540,12 @@ final class SettingsStore: @unchecked Sendable {
         showExploreTab = Self.load(Keys.showExploreTab, default: false)
         glassStyle = Self.loadEnum(Keys.glassStyle, default: .regular)
         podcastIndexKey = Self.loadString(Keys.podcastIndexKey, default: "")
-        pencariMusicBaseURL = Self.loadString(Keys.pencariMusicBaseURL, default: PencariMusicClient.defaultBase)
         musicQualityMode = Self.loadEnum(Keys.musicQualityMode, default: .auto)
+        preferAtmos = Self.load(Keys.preferAtmos, default: false)
+        preferHiRes = Self.load(
+            Keys.preferHiRes,
+            default: (d.object(forKey: Keys.legacyPreferLossless) as? Bool) ?? false
+        )
         upgradeDuringPlayback = Self.load(Keys.upgradeDuringPlayback, default: false)
         aiProvider = Self.loadString(Keys.aiProvider, default: AIProvider.off.rawValue)
         aiKey = Self.loadString(Keys.aiKey, default: "")
@@ -563,6 +582,7 @@ final class SettingsStore: @unchecked Sendable {
         trackSearchHistory = Self.load(Keys.trackSearchHistory, default: true)
         trackPlayHistory = Self.load(Keys.trackPlayHistory, default: true)
         downloadQuality = Self.loadEnum(Keys.downloadQuality, default: .auto)
+        losslessDownloads = Self.load(Keys.losslessDownloads, default: true)
         wifiOnlyDownloads = Self.load(Keys.wifiOnlyDownloads, default: false)
         autoDownloadOnLike = Self.load(Keys.autoDownloadOnLike, default: false)
         autoDownloadNewEpisodes = Self.load(Keys.autoDownloadNewEpisodes, default: false)

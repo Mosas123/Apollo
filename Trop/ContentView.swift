@@ -16,6 +16,7 @@ struct ContentView: View {
     @State private var selectedTab = SettingsStore.shared.defaultTab
     @State private var sheet = PlayerSheetState.shared
     @State private var scrollState = MiniPlayerScrollState()
+    @ObservedObject private var downloadManager = DownloadManager.shared
     @Namespace private var playerArtworkNamespace
 
     var body: some View {
@@ -65,6 +66,28 @@ struct ContentView: View {
             withAnimation(.smooth(duration: 0.3)) {
                 sheet.isExpanded = true
             }
+        }
+        .alert(
+            "Download lossless file?",
+            isPresented: Binding(
+                get: { downloadManager.largeDownloadRequest != nil },
+                set: { presented in
+                    if !presented { downloadManager.cancelLargeDownload() }
+                }
+            )
+        ) {
+            Button("Download") { downloadManager.confirmLargeDownload() }
+            Button("Cancel", role: .cancel) { downloadManager.cancelLargeDownload() }
+        } message: {
+            if let request = downloadManager.largeDownloadRequest {
+                Text("\(request.artist) — \(request.title)\n\(request.quality ?? "FLAC") · ~\(request.megabytes) MB")
+            }
+        }
+        .task {
+            // Load installed add-ons early: FLAC/CD/Atmos settings depend on it.
+            _ = MusicAddonsStore.shared
+            await PlaybackManager.shared.startQueueObserver()
+            await MusicAddonsStore.shared.refreshAll()
         }
         .simultaneousGesture(backSwipeGesture)
     }

@@ -26,17 +26,27 @@ struct DownloadSettingsView: View {
             }
 
             Section {
-                SettingsPickerRow("Download Quality", icon: "waveform", selection: $settings.downloadQuality)
+                SettingsPickerRow(
+                    "Download Quality",
+                    icon: "waveform",
+                    options: [.auto, .high, .standard],
+                    selection: Binding(
+                        get: {
+                            settings.downloadQuality == .lossless ? .auto : settings.downloadQuality
+                        },
+                        set: { settings.downloadQuality = $0 }
+                    )
+                )
+                if settings.hasMusicAddons {
+                    SettingsToggleRow("Lossless When Available", icon: "waveform.path", isOn: $settings.losslessDownloads)
+                }
                 SettingsToggleRow("Wi-Fi Only", icon: "wifi", isOn: $settings.wifiOnlyDownloads)
                 SettingsToggleRow("Auto-Download on Like", icon: "heart.fill", isOn: $settings.autoDownloadOnLike)
                 SettingsToggleRow("Auto-Download New Episodes", icon: "antenna.radiowaves.left.and.right", isOn: $settings.autoDownloadNewEpisodes)
             } header: {
                 Text("Preferences")
             } footer: {
-                Text("Auto-download saves liked songs for offline playback. Wi-Fi Only blocks downloads on cellular data.")
-                if settings.downloadQuality == .lossless {
-                    Text("Lossless downloads use more storage and require an available FLAC source. If unavailable, choose another download quality.")
-                }
+                Text("Auto-download saves liked songs for offline playback. Lossless tries your music add-ons first and saves FLAC; without add-ons it uses the quality above. Wi-Fi Only blocks downloads on cellular data.")
             }
         }
         .navigationTitle("Download Settings")

@@ -155,12 +155,20 @@ final class MusicAddonsStore {
         installations.first { $0.key == key && $0.isEnabled }
     }
     var enabledCount: Int { installations.filter(\.isEnabled).count }
+
+    /// Union of what the enabled addons say they can serve.
+    var availableAudioCapabilities: AddonCapabilities {
+        enabledStremioInstallations.reduce(into: AddonCapabilities()) { result, installation in
+            result.formUnion(installation.audioCapabilities)
+        }
+    }
     var streamCapabilityCount: Int {
         installations.filter { $0.manifest.capabilities.contains(.stream) }.count
     }
 
     private init() {
         restoreValidatedEntries()
+        syncAddonAvailability()
     }
 
     func install(_ data: Data, from url: URL) throws {
@@ -187,6 +195,15 @@ final class MusicAddonsStore {
         save()
     }
 
+    /// Re-reads every installed manifest once so new settings (declared audio
+    /// qualities) show up without the user refreshing each addon by hand.
+    func refreshAll() async {
+        let keys = installations.filter { !Self.isSample($0) }.map(\.key)
+        for key in keys {
+            try? await refresh(key: key)
+        }
+    }
+
     func refresh(key: String) async throws {
         guard let previous = registry.installations.first(where: { $0.key == key }) else {
             throw MusicAddonError.notInstalled
@@ -200,6 +217,14 @@ final class MusicAddonsStore {
     private func save() {
         guard let encoded = try? JSONEncoder().encode(registry.installations) else { return }
         UserDefaults.standard.set(encoded, forKey: storageKey)
+        syncAddonAvailability()
+    }
+
+    private func syncAddonAvailability() {
+        let hasAddons = installations.contains { $0.isEnabled && $0.manifest.protocolKind == .stremio }
+        if SettingsStore.shared.hasMusicAddons != hasAddons {
+            SettingsStore.shared.hasMusicAddons = hasAddons
+        }
     }
 
     private func restoreValidatedEntries() {

@@ -237,6 +237,9 @@ struct PlayerMenuSheet: View {
                 MenuRow(icon: "checkmark.circle.fill", title: "Remove Download", destructive: true) {
                     Task { await downloadManager.delete(videoId: song.videoId) }
                 }
+            case .preparing:
+                MenuRow(icon: "waveform", title: "Preparing FLAC…") {}
+                    .disabled(true)
             case .downloading:
                 MenuRow(icon: "arrow.down.circle", title: "Downloading…") {}
                     .disabled(true)
@@ -541,25 +544,42 @@ struct SongDetailsView: View {
     }
 
     @ViewBuilder
+    private var effectiveStream: PlaybackResult? {
+        if let current = NowPlaying.shared.currentResult,
+           current.videoId == song.videoId {
+            return current
+        }
+        return stream
+    }
+
     private var streamSection: some View {
         section("Stream") {
-            if let s = stream {
-                row("Source", MusicPlaybackIdentity.sourceLabel(song.videoId))
+            if let s = effectiveStream {
+                row("Source", NowPlaying.shared.currentSourceName
+                    ?? MusicPlaybackIdentity.sourceLabel(song.videoId))
                 row("Client", s.clientName)
                 row("ITAG", "\(s.itag)", monospaced: true)
-                row("Bitrate", "\(s.bitrate / 1000) kbps")
+                if s.bitrate > 0 {
+                    row("Bitrate", "\(s.bitrate / 1000) kbps")
+                } else if NowPlaying.shared.currentLosslessLabel != nil {
+                    row("Bitrate", "VBR (lossless)")
+                } else {
+                    row("Bitrate", "—")
+                }
                 row("Audio quality", s.audioQuality.replacingOccurrences(of: "AUDIO_QUALITY_", with: ""))
                 if let loudness = s.loudnessDb {
                     row("Loudness", String(format: "%.1f dB", loudness))
                 }
                 row("Expires in", "\(s.expiresInSeconds)s")
             } else if let f = formatEntity {
-                row("Source", "Cached format")
+                row("Source", NowPlaying.shared.currentSourceName ?? "YouTube · cached")
                 row("ITAG", "\(f.itag)", monospaced: true)
                 row("Bitrate", "\(f.bitrate / 1000) kbps")
                 if f.contentLength > 0 {
                     row("Size", ByteCountFormatter.string(fromByteCount: f.contentLength, countStyle: .file))
                 }
+            } else if let sourceName = NowPlaying.shared.currentSourceName {
+                row("Source", sourceName)
             } else {
                 row("Status", "Not resolved yet")
             }
