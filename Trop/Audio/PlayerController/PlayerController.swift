@@ -1185,7 +1185,7 @@ extension PlayerController {
         let elapsed = Int((now - start) * 1000)
         let postEnd = recoveryEnd.map { Int((now - $0) * 1000) } ?? -1
         let uptimeMs = Int(now * 1000)
-        Log.player.info("AUDIO_RECOVERY id=\(self.recoveryID) event=\(event, privacy: .public) uptimeMs=\(uptimeMs) sinceBeginMs=\(elapsed) sinceEndMs=\(postEnd)")
+        Log.player.info("AUDIO_RECOVERY id=\(self.recoveryID) event=\(event) uptimeMs=\(uptimeMs) sinceBeginMs=\(elapsed) sinceEndMs=\(postEnd)")
     }
 
     func assertAudioSession(reason: String = "unspecified") {
@@ -1202,13 +1202,13 @@ extension PlayerController {
             try session.setActive(true)
             let ms = Int((ProcessInfo.processInfo.systemUptime - start) * 1000)
             let uptimeMs = Int(ProcessInfo.processInfo.systemUptime * 1000)
-            Log.player.info("AUDIO_SESSION_ACTIVATION reason=\(reason, privacy: .public) result=success ms=\(ms) uptimeMs=\(uptimeMs)")
+            Log.player.info("AUDIO_SESSION_ACTIVATION reason=\(reason) result=success ms=\(ms) uptimeMs=\(uptimeMs)")
             traceRecovery("activation.success.\(reason)")
         } catch {
             let ms = Int((ProcessInfo.processInfo.systemUptime - start) * 1000)
             let code = (error as NSError).code
             let uptimeMs = Int(ProcessInfo.processInfo.systemUptime * 1000)
-            Log.player.error("AUDIO_SESSION_ACTIVATION reason=\(reason, privacy: .public) result=failed stage=\(stage, privacy: .public) code=\(code) ms=\(ms) uptimeMs=\(uptimeMs)")
+            Log.player.error("AUDIO_SESSION_ACTIVATION reason=\(reason) result=failed stage=\(stage) code=\(code) ms=\(ms) uptimeMs=\(uptimeMs)")
             traceRecovery("activation.failed.\(reason)")
             Log.player.error("Failed to assert audio session: \(error)")
         }
@@ -1227,39 +1227,9 @@ extension PlayerController {
             name: AVAudioSession.routeChangeNotification,
             object: nil
         )
-        // iOS 27 lifecycle is observation-only; do NOT make resume decisions here.
-        if #available(iOS 27.0, *) {
-            let session = AVAudioSession.sharedInstance()
-            for name in [
-                AVAudioSession.didBecomeInactiveNotification,
-                AVAudioSession.resumptionRecommendationNotification,
-                AVAudioSession.didBecomeActiveNotification
-            ] {
-                NotificationCenter.default.addObserver(
-                    self, selector: #selector(traceModernAudioLifecycle),
-                    name: name, object: session
-                )
-            }
-        }
-    }
-
-    @objc private func traceModernAudioLifecycle(_ notification: Notification) {
-        guard #available(iOS 27.0, *) else { return }
-        let at = Int(ProcessInfo.processInfo.systemUptime * 1000)
-        if notification.name == AVAudioSession.didBecomeInactiveNotification {
-            let context = notification.userInfo?[AVAudioSession.deactivationContextKey] as? AVAudioSession.DeactivationContext
-            let source = context.map { String(describing: $0.source) } ?? "unavailable"
-            Log.player.info("AUDIO_RECOVERY_OS inactive source=\(source, privacy: .public) uptimeMs=\(at)")
-            traceRecovery("osInactive")
-        } else if notification.name == AVAudioSession.resumptionRecommendationNotification {
-            let context = notification.userInfo?[AVAudioSession.resumptionContextKey] as? AVAudioSession.ResumptionContext
-            let recommendation = context.map { String(describing: $0.recommendation) } ?? "unavailable"
-            Log.player.info("AUDIO_RECOVERY_OS recommendation=\(recommendation, privacy: .public) uptimeMs=\(at)")
-            traceRecovery("osResumeRecommendation")
-        } else if notification.name == AVAudioSession.didBecomeActiveNotification {
-            Log.player.info("AUDIO_RECOVERY_OS active uptimeMs=\(at)")
-            traceRecovery("osActive")
-        }
+        // Modern iOS 27 AVAudioSession APIs are unavailable in the
+        // Xcode 26.6 / iOS 26.5 SDK used by CI. Legacy interruption,
+        // UIKit lifecycle and renderer timing remain fully instrumented.
     }
 
     @objc private func handleInterruption(_ notification: Notification) {
