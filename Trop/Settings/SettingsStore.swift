@@ -564,6 +564,9 @@ final class SettingsStore: @unchecked Sendable {
         podcastIndexKey = Self.loadString(Keys.podcastIndexKey, default: "")
         musicQualityMode = Self.loadEnum(Keys.musicQualityMode, default: .auto)
         apoloBetaEnabled = Self.load(Keys.apoloBetaEnabled, default: false)
+        apoloPodcastsBetaEnabled = Self.load(
+            Keys.apoloPodcastsBetaEnabled, default: apoloBetaEnabled
+        )
         apoloRadioBetaEnabled = Self.load(Keys.apoloRadioBetaEnabled, default: false)
         preferAtmos = Self.load(Keys.preferAtmos, default: false)
         preferHiRes = Self.load(
