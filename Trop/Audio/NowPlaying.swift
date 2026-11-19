@@ -184,6 +184,9 @@ final class NowPlaying {
     /// Short-lived position from a failed Apolo stream, used only if a fresh
     /// resolution for the same track is needed after the mpv fallback.
     @ObservationIgnored private var interruptedPlayback: InterruptedPlaybackPosition?
+    /// An episode resume request is tied to the queue intent, not a fixed
+    /// timer or the player ID (which is assigned before audio is ready).
+    private var requestedPodcastResume: (videoId: String, generation: Int, position: TimeInterval)?
     private static let queueIndexKey = "nowPlaying.queueIndex"
     private static let shuffleKey = "nowPlaying.shuffle"
     private static let repeatKey = "nowPlaying.repeat"
@@ -214,9 +217,27 @@ final class NowPlaying {
         )
     }
 
+    /// Save a podcast's persisted position while the correct episode is
+    /// selected. It will be consumed only at the next actual source load,
+    /// before either Apolo or MPVKit starts playback.
+    func requestPodcastResumePosition(_ position: TimeInterval, for videoId: String) {
+        guard self.videoId == videoId, playbackKind == .podcast,
+              position.isFinite, position > 10,
+              (duration <= 0 || position < duration - 5) else { return }
+        requestedPodcastResume = (
+            videoId: videoId, generation: playbackGeneration, position: position
+        )
+    }
+
     /// Consumes a transient recovery position or the saved launch position.
     func takeResumePosition(for videoId: String?) -> TimeInterval? {
         guard let videoId, videoId == self.videoId else { return nil }
+        if let request = requestedPodcastResume,
+           request.videoId == videoId,
+           request.generation == playbackGeneration {
+            requestedPodcastResume = nil
+            return request.position
+        }
         if let recovery = interruptedPlayback, recovery.videoId == videoId {
             interruptedPlayback = nil
             if recovery.expiresAt > Date() { return recovery.position }
