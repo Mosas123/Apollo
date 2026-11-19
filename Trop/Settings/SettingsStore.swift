@@ -260,6 +260,13 @@ final class SettingsStore: @unchecked Sendable {
         didSet { Self.defaults.set(apoloBetaEnabled, forKey: Keys.apoloBetaEnabled) }
     }
 
+    /// Independent Apolo route for podcast episodes. On upgrade, preserve
+    /// the old beta behavior (podcasts followed the music toggle); users can
+    /// then enable or disable each category without affecting the other.
+    var apoloPodcastsBetaEnabled: Bool {
+        didSet { Self.defaults.set(apoloPodcastsBetaEnabled, forKey: Keys.apoloPodcastsBetaEnabled) }
+    }
+
     /// Opt-in Apolo live radio, independent of the music beta. Default OFF;
     /// enabling/disabling it applies to the next station selection.
     var apoloRadioBetaEnabled: Bool {
@@ -470,6 +477,7 @@ final class SettingsStore: @unchecked Sendable {
         static let podcastIndexKey = "settings.podcastIndexKey"
         static let musicQualityMode = "settings.musicQualityMode"
         static let apoloBetaEnabled = "settings.apoloBetaEnabled"
+        static let apoloPodcastsBetaEnabled = "settings.apoloPodcastsBetaEnabled"
         static let apoloRadioBetaEnabled = "settings.apoloRadioBetaEnabled"
         static let preferAtmos = "settings.preferAtmos"
         static let preferHiRes = "settings.preferHiRes"
