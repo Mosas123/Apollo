@@ -44,3 +44,54 @@ Build + link succeeds, audio-only routing works with one owner of system control
 ### CI caveat
 
 Trop's SwiftLint job reports pre-existing serious violations in other files; review the diff separately and avoid weakening lint globally. The iOS IPA build is the first compilation gate; success is not a guarantee of runtime playback.
+
+
+## IPA experiment — Live Radio (PR 3, opt-in)
+
+This stacked draft integrates the already-tested `ApoloEngine` live radio
+transport in Thrum, pinned to `067ebd150d94d4120327214752e0b22c17684b03`
+(Apolo v7, simulator CI: 100 tests passing). Radio no longer uses the
+finite-music `load` API: the app's adapter calls `loadLive`.
+
+### Enable and observe
+
+1. Open **Settings → Player → Experimental Playback**.
+2. Enable **ApoloEngine Beta (Live Radio)** (independent of the existing
+   music-only beta). The setting defaults OFF and applies to the next station.
+3. In **Radio**, choose an HTTPS MP3/AAC station; the full player should
+   display **APOLOENGINE (RADIO BETA)** while Apolo is active.
+4. Try HLS (.m3u8), Ogg/Opus and FLAC streams, plus M3U/PLS station
+   playlists. Check actual audio, start latency, metadata title updates and
+   proper handling of stations with unknown duration.
+5. Test station switching, pause/resume, headset interruption, lock screen,
+   background, AirPods/AirPlay, and a Wi-Fi/cellular handover.
+6. Simulate a broken stream. Apolo handles its bounded retry budget; the app
+   allows a limited reconnection grace period before switching to
+   **MPVKit (Fallback)**. The app must not skip the music queue on radio EOF.
+7. Toggle radio beta OFF and select a new station: it must use MPVKit, even
+   when music beta remains ON. Music, Lossless, Dolby and video are unchanged.
+
+### Important test limitations
+
+- Radio Browser exposes a codec hint and a URL; it does **not** identify
+  every server's MIME type or know whether MP3 stations use legacy raw ICY.
+  Opaque streams or playlists whose resolved URL has no format hint may
+  require the MPV fallback, especially Ogg/Opus without an extension.
+- Plain `http://` stations may be rejected by iOS App Transport Security for
+  URLSession requests. **No global ATS exception is introduced in this PR.**
+  Test HTTPS stations first; HTTP/legacy ICY device acceptance is a separate
+  explicit security decision, not a reason to silently relax all app traffic.
+- The Apolo/MPVKit fallback is one-way per selection; no automatic switch
+  back to Apolo until a new station is selected.
+- iOS CI produces an **unsigned** `Trop.ipa` artifact, not an already
+  provisioned or App Store-signed build. Sideloading requires signing it
+  with the user's own chosen installation tool.
+- Simulator compile and unit tests are not proof of real-device memory,
+  background, networking, or Dolby output. Use Instruments to check
+  allocations across repeated station changes and 1–2 hour playback.
+
+### Build route
+
+The existing GitHub Actions **Nightly Build** workflow runs on pull requests
+and executes `build_ipa.sh`, uploading `Trop-iOS` with `Trop.ipa` if
+the device build succeeds. No main/nightly release is modified by this draft.
