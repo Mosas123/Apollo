@@ -2,12 +2,12 @@
 
 ## Purpose and safety
 This branch only instruments the existing audio recovery flow on top of Trop PR #17. It does not change session ownership, pause/resume policy, Apolo rendering, MPVKit fallback, watchdog deadlines, Lossless, Atmos, radio, or AirPods behavior.
-The three iOS 27 session lifecycle notifications are observed but do not make playback decisions.
+The three iOS 27-only session lifecycle notifications are NOT instrumented in this build: the available GitHub Actions Xcode 26.6 uses the iOS 26.5 SDK and cannot compile their declarations. The existing legacy interruption notification and UIKit background/foreground/active callbacks are instrumented without changing playback decisions.
 
 ## Reading the log
 Filter for AUDIO_RECOVERY and AUDIO_SESSION_ACTIVATION. uptimeMs is monotonic uptime in milliseconds. Trace id and sinceBeginMs / sinceEndMs correlate events after a traditional interruption began. sinceEndMs=-1 means there has been no end notification yet.
-Stand-alone iOS 27 lifecycle events and foreground events may precede a traditional interruption; compare their uptimeMs values even if no trace id exists.
-Events include application background/foreground/active, legacy interruption begin/end/suspension, iOS 27 session inactive/resumption recommendation/active, audio activation success or failure with stage and duration, resume command, Thrum UI playing, Apolo playing, media-clock advance, and MPV fallback.
+UIKit foreground/background events may precede a traditional interruption; compare their uptimeMs values even if no trace id exists.
+Events include application background/foreground/active, legacy interruption begin/end/suspension, audio activation success or failure with stage and duration, resume command, Thrum UI playing, Apolo playing, media-clock advance, and MPV fallback.
 Important: the AUDIO_SESSION_ACTIVATION measurement covers category and multichannel setup as well as setActive(true), so it is total synchronous assertion duration rather than an isolated setActive call.
 The new diagnostic messages avoid printing signed media URLs, music identifiers, headers, credentials, and audio data.
 
@@ -21,7 +21,7 @@ The new diagnostic messages avoid printing signed media URLs, music identifiers,
 
 ## Interpretation
 - Legacy interruption began-to-ended duration is notification separation, NOT time spent waiting for Apolo or user time in Instagram.
-- If modern iOS recommendation arrives later than the return-to-foreground event, the operating-system path needs investigation.
+- The new iOS 27-specific resumption recommendation is not captured by this IPA. If legacy end arrives late, compare the iPhone stopwatch with UIKit and backend events; a future Xcode/iOS SDK upgrade is required for the new OS notifications.
 - If activation fails or consumes time, investigate session ownership and repeated metadata-triggered assertions before modifying the decoder.
 - If activation succeeds immediately but the Apolo clock does not advance, inspect renderer state and next instrument the actual audio output pipeline.
 - A media-clock advance is NOT evidence that PCM was heard by the user. The 300ms monitor interval adds sampling uncertainty.
