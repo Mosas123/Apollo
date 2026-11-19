@@ -384,12 +384,7 @@ final class DownloadManager: ObservableObject {
 
     /// Extracts the video id from `Artist - Title [<id>].m4a`.
     nonisolated static func videoId(from fileName: String) -> String? {
-        let base = (fileName as NSString).deletingPathExtension
-        guard let range = base.range(of: #"\[([A-Za-z0-9_:-]{6,})\]$"#, options: .regularExpression) else {
-            return nil
-        }
-        let bracketed = base[range]
-        return bracketed.dropFirst().dropLast().description
+        LocalAudioFilePolicy.videoId(from: fileName)
     }
 
     nonisolated private static func displayTitle(from url: URL) -> String {
