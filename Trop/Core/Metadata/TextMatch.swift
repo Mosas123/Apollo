@@ -131,7 +131,34 @@ enum TextMatch {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Recording/edition identity must be evaluated BEFORE normalizeTitle
+    /// strips all parenthetical qualifiers. Otherwise "Niagara Falls
+    /// (Instrumental)" becomes the same title as the vocal album recording.
+    static func versionMarkers(_ value: String) -> Set<String> {
+        let words = Set(normalize(value).split(separator: " ").map(String.init))
+        var markers: Set<String> = []
+        if words.contains("instrumental") || words.contains("instrumentals") {
+            markers.insert("instrumental")
+        }
+        for marker in ["karaoke", "remix", "live", "acoustic", "demo", "cover",
+                       "slowed", "nightcore", "clean"] where words.contains(marker) {
+            markers.insert(marker)
+        }
+        if words.contains("sped"), words.contains("up") {
+            markers.insert("sped-up")
+        }
+        if words.contains("a"), words.contains("cappella") {
+            markers.insert("acappella")
+        }
+        return markers
+    }
+
+    static func versionsCompatible(_ lhs: String, _ rhs: String) -> Bool {
+        versionMarkers(lhs) == versionMarkers(rhs)
+    }
+
     static func titlesMatch(_ lhs: String, _ rhs: String) -> Bool {
+        guard versionsCompatible(lhs, rhs) else { return false }
         let a = normalizeTitle(lhs)
         let b = normalizeTitle(rhs)
         guard !a.isEmpty, !b.isEmpty else { return false }
@@ -145,7 +172,9 @@ enum TextMatch {
 
     /// Karaoke/tribute/sped-up uploads that pollute catalogue matches.
     static func isSuspiciousVersion(_ title: String) -> Bool {
-        let text = normalizeTitle(title)
+        // Inspect the ORIGINAL label: normalizeTitle deliberately discards
+        // "(Instrumental)", "(Karaoke)" and other disqualifying variants.
+        let text = normalize(title)
         let markers = [
             "karaoke", "tribute", "made famous", "instrumental",
             "8d audio", "sped up", "nightcore", "reverb",
@@ -155,6 +184,7 @@ enum TextMatch {
     }
 
     static func albumsMatch(_ lhs: String, _ rhs: String) -> Bool {
+        guard versionsCompatible(lhs, rhs) else { return false }
         let a = normalizeTitle(lhs)
         let b = normalizeTitle(rhs)
         guard !a.isEmpty, !b.isEmpty else { return false }
@@ -230,6 +260,7 @@ extension TextMatch {
     }
 
     static func recordingsMatch(_ lhs: String, _ rhs: String) -> Bool {
+        guard versionsCompatible(lhs, rhs) else { return false }
         let a = normalize(recordingTitle(lhs))
         let b = normalize(recordingTitle(rhs))
         return !a.isEmpty && a == b
