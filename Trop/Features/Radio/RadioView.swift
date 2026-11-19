@@ -150,10 +150,21 @@ struct RadioView: View {
 
     private func play(_ station: RadioStation) {
         guard let stream = station.streamURL else { return }
+        // A station selection is a fresh playback intent. Invalidate
+        // outstanding song-resolver tasks before they can steal the player.
+        NowPlaying.shared.bumpPlaybackIntent()
+        let generation = NowPlaying.shared.playbackGeneration
         Task { @MainActor in
-            // A station selection is a fresh playback intent. Invalidate
-            // outstanding song-resolver tasks before they can steal the player.
-            NowPlaying.shared.bumpPlaybackIntent()
+            // Apolo needs to know whether the station is HLS, ICY or an
+            // exotic container; probing is only worth it on the Apolo beta.
+            let hint: String?
+            if SettingsStore.shared.apoloRadioBetaEnabled {
+                hint = await RadioTransportResolver.shared.hint(for: station)
+            } else {
+                hint = station.apoloMIMEHint
+            }
+            // The user may have picked another station while we probed.
+            guard generation == NowPlaying.shared.playbackGeneration else { return }
             await PlayerController.shared.play(
                 url: stream,
                 title: station.name,
@@ -161,7 +172,7 @@ struct RadioView: View {
                 videoId: NowPlaying.radioPrefix + station.stationuuid,
                 duration: nil,
                 thumbnailUrl: station.iconURL,
-                sourceMIMEType: station.apoloMIMEHint
+                sourceMIMEType: hint
             )
         }
     }
