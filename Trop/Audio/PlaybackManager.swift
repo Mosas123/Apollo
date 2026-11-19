@@ -1264,9 +1264,13 @@ actor PlaybackManager {
                   result.clientName.lowercased()
               ),
               MusicRecordingSelectionPolicy.shouldFindAlbumAudio(
-                  selectedVideo: song.isVideo == true,
+                  selectedVideo: song.recordingPreference == .musicVideo,
                   rowType: song.musicVideoType,
-                  sourceType: result.musicVideoType
+                  sourceType: result.musicVideoType,
+                  rowIsVideo: song.isVideo == true,
+                  albumKnown: !(song.album ?? "").isEmpty || song.albumId != nil,
+                  expectedDuration: song.duration,
+                  resolvedDuration: result.duration ?? 0
               ),
               let artist = song.artists.first?.name,
               !artist.isEmpty
@@ -1300,11 +1304,29 @@ actor PlaybackManager {
                             candidateArtists: candidate.artists.map(\.name),
                             candidateAlbum: candidate.album,
                             candidateDuration: candidate.duration,
-                            candidateType: candidate.musicVideoType
+                            candidateType: candidate.musicVideoType,
+                            originalWasVideo: song.isMusicVideo
+                                || MusicRecordingSelectionPolicy.isVideoRecording(
+                                    result.musicVideoType
+                                )
                         )
                 }
+                // De-duplicate top-card and shelf copies of the same ATV.
+                // If no album metadata survives and distinct ATV releases
+                // match, refuse an arbitrary selection: one might be a
+                // clean/radio edit or an alternate official recording.
+                let unique = Array(
+                    Dictionary(valid.map { ($0.videoId, $0) },
+                               uniquingKeysWith: { first, _ in first }).values
+                )
+                let releaseKeys = Set(unique.map {
+                    TextMatch.normalizeTitle($0.album ?? "")
+                })
+                let ambiguous = (song.album ?? "").isEmpty
+                    && unique.count > 1
+                    && releaseKeys.count > 1
                 // Prefer the same release first, then the closest duration.
-                let sorted = valid.sorted { lhs, rhs in
+                let sorted = unique.sorted { lhs, rhs in
                     let lhsAlbum = song.album != nil
                         && lhs.album != nil
                         && TextMatch.albumsMatch(lhs.album ?? "", song.album ?? "")
@@ -1315,7 +1337,12 @@ actor PlaybackManager {
                     return abs(lhs.duration - song.duration)
                         < abs(rhs.duration - song.duration)
                 }
-                found = sorted.first?.videoId
+                if ambiguous {
+                    Log.player.info(
+                        "MUSIC_MATCH ambiguous ATV candidates videoId=\(videoId) count=\(unique.count)"
+                    )
+                }
+                found = ambiguous ? nil : sorted.first?.videoId
             } catch {
                 // Search is optional. Network errors must not block music.
                 return result
@@ -1328,6 +1355,9 @@ actor PlaybackManager {
         }
 
         guard let candidateID, await isCurrentIntent(intentGeneration) else {
+            Log.player.info(
+                "MUSIC_MATCH no verified ATV source for selected=\(videoId) preference=\(String(describing: song.recordingPreference)) rowType=\(song.musicVideoType ?? "unknown") streamType=\(result.musicVideoType ?? "unknown") duration=\(result.duration ?? 0)"
+            )
             return result
         }
         var request = StreamResolveRequest.playback(videoId: candidateID)
