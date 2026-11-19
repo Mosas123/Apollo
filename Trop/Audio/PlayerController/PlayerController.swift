@@ -94,6 +94,12 @@ final class PlayerController {
     private var wasPlayingBeforeInterruption = false
     private var apoloAudioInterruptionActive = false
     private var apoloLastInterruptionEndedAt: Date?
+    // Diagnostics only. Never used to decide when to resume or fall back.
+    private var recoveryID: UInt64 = 0
+    private var recoveryBegin: TimeInterval?
+    private var recoveryEnd: TimeInterval?
+    private var recoveryPositionAtEnd: TimeInterval?
+    private var recoveryAdvanced = false
 
     /// Video-mode state. Reads happen on the event loop thread from event handlers;
     /// writes happen on the main actor from `setVideoMode` / `loadFileReplacing`.
@@ -467,6 +473,7 @@ extension PlayerController {
     }
 
     func setPaused(_ paused: Bool) {
+        if !paused { traceRecovery("playRequested") }
         sharedState.withLock { $0.desiredPlaying = !paused }
         let currentlyPaused = playState.value != .playing
         guard currentlyPaused != paused else {
@@ -483,11 +490,12 @@ extension PlayerController {
         }
         playState.send(paused ? .paused : .playing)
         NowPlaying.shared.isPlaying = !paused
+        if !paused { traceRecovery("uiPlaying.notAudioConfirmed") }
         if NowPlaying.shared.playbackKind == .radio {
             NowPlaying.shared.radioPlaybackStatus = paused
                 ? .paused : (apoloIsActive ? .connecting : .live)
         }
-        if !paused { assertAudioSession() }
+        if !paused { assertAudioSession(reason: "setPaused") }
         updateNowPlayingProgress()
     }
 
@@ -1170,15 +1178,34 @@ extension PlayerController {
 // MARK: - Audio session / interruption handling
 
 extension PlayerController {
-    func assertAudioSession() {
+    private func traceRecovery(_ event: String) {
+        guard let start = recoveryBegin else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        let elapsed = Int((now - start) * 1000)
+        let postEnd = recoveryEnd.map { Int((now - $0) * 1000) } ?? -1
+        Log.player.info("AUDIO_RECOVERY id=\(self.recoveryID) event=\(event, privacy: .public) uptimeMs=\(Int(now * 1000)) sinceBeginMs=\(elapsed) sinceEndMs=\(postEnd)")
+    }
+
+    func assertAudioSession(reason: String = "unspecified") {
         let session = AVAudioSession.sharedInstance()
+        let start = ProcessInfo.processInfo.systemUptime
+        var stage = "category"
         do {
             if session.category != .playback || session.mode != .default {
                 try session.setCategory(.playback, mode: .default, policy: .longFormAudio)
             }
+            stage = "multichannel"
             try? session.setSupportsMultichannelContent(true)
+            stage = "activation"
             try session.setActive(true)
+            let ms = Int((ProcessInfo.processInfo.systemUptime - start) * 1000)
+            Log.player.info("AUDIO_SESSION_ACTIVATION reason=\(reason, privacy: .public) result=success ms=\(ms) uptimeMs=\(Int(ProcessInfo.processInfo.systemUptime * 1000))")
+            traceRecovery("activation.success.\(reason)")
         } catch {
+            let ms = Int((ProcessInfo.processInfo.systemUptime - start) * 1000)
+            let code = (error as NSError).code
+            Log.player.error("AUDIO_SESSION_ACTIVATION reason=\(reason, privacy: .public) result=failed stage=\(stage, privacy: .public) code=\(code) ms=\(ms) uptimeMs=\(Int(ProcessInfo.processInfo.systemUptime * 1000))")
+            traceRecovery("activation.failed.\(reason)")
             Log.player.error("Failed to assert audio session: \(error)")
         }
     }
@@ -1196,6 +1223,39 @@ extension PlayerController {
             name: AVAudioSession.routeChangeNotification,
             object: nil
         )
+        // iOS 27 lifecycle is observation-only; do NOT make resume decisions here.
+        if #available(iOS 27.0, *) {
+            let session = AVAudioSession.sharedInstance()
+            for name in [
+                AVAudioSession.didBecomeInactiveNotification,
+                AVAudioSession.resumptionRecommendationNotification,
+                AVAudioSession.didBecomeActiveNotification
+            ] {
+                NotificationCenter.default.addObserver(
+                    self, selector: #selector(traceModernAudioLifecycle),
+                    name: name, object: session
+                )
+            }
+        }
+    }
+
+    @objc private func traceModernAudioLifecycle(_ notification: Notification) {
+        guard #available(iOS 27.0, *) else { return }
+        let at = Int(ProcessInfo.processInfo.systemUptime * 1000)
+        if notification.name == AVAudioSession.didBecomeInactiveNotification {
+            let context = notification.userInfo?[AVAudioSession.deactivationContextKey] as? AVAudioSession.DeactivationContext
+            let source = context.map { String(describing: $0.source) } ?? "unavailable"
+            Log.player.info("AUDIO_RECOVERY_OS inactive source=\(source, privacy: .public) uptimeMs=\(at)")
+            traceRecovery("osInactive")
+        } else if notification.name == AVAudioSession.resumptionRecommendationNotification {
+            let context = notification.userInfo?[AVAudioSession.resumptionContextKey] as? AVAudioSession.ResumptionContext
+            let recommendation = context.map { String(describing: $0.recommendation) } ?? "unavailable"
+            Log.player.info("AUDIO_RECOVERY_OS recommendation=\(recommendation, privacy: .public) uptimeMs=\(at)")
+            traceRecovery("osResumeRecommendation")
+        } else if notification.name == AVAudioSession.didBecomeActiveNotification {
+            Log.player.info("AUDIO_RECOVERY_OS active uptimeMs=\(at)")
+            traceRecovery("osActive")
+        }
     }
 
     @objc private func handleInterruption(_ notification: Notification) {
@@ -1205,7 +1265,15 @@ extension PlayerController {
 
         switch type {
         case .began:
+            recoveryID &+= 1
+            recoveryBegin = ProcessInfo.processInfo.systemUptime
+            recoveryEnd = nil
+            recoveryPositionAtEnd = nil
+            recoveryAdvanced = false
             apoloAudioInterruptionActive = true
+            traceRecovery("legacyBegan")
+            let wasSuspended = (userInfo[AVAudioSessionInterruptionWasSuspendedKey] as? Bool) ?? false
+            Log.player.info("AUDIO_RECOVERY_LEGACY wasSuspended=\(wasSuspended) uptimeMs=\(Int(ProcessInfo.processInfo.systemUptime * 1000))")
             Log.player.info("AUDIO_INTERRUPTION began")
             wasPlayingBeforeInterruption = sharedState.withLock({ $0.desiredPlaying }) || playState.value == .playing
             if playState.value == .playing {
@@ -1220,10 +1288,21 @@ extension PlayerController {
             let shouldResume = options.contains(.shouldResume) || wasPlayingBeforeInterruption
             apoloAudioInterruptionActive = false
             apoloLastInterruptionEndedAt = Date()
+            if recoveryBegin == nil {
+                recoveryID &+= 1
+                recoveryBegin = ProcessInfo.processInfo.systemUptime
+            }
+            recoveryEnd = ProcessInfo.processInfo.systemUptime
+            recoveryPositionAtEnd = apoloIsActive ? apoloBackend?.currentTime : nil
+            traceRecovery("legacyEnded.shouldResume=\(shouldResume)")
             Log.player.info("AUDIO_INTERRUPTION ended")
             Task { @MainActor in
-                guard shouldResume else { return }
-                self.assertAudioSession()
+                guard shouldResume else {
+                    self.traceRecovery("resumeNotRequested")
+                    return
+                }
+                self.traceRecovery("resumeTask")
+                self.assertAudioSession(reason: "legacyInterruptionEnded")
                 if self.playState.value != .playing {
                     self.setPaused(false)
                 }
@@ -1281,7 +1360,7 @@ extension PlayerController {
     }
 
     func setNowPlayingMetadata() {
-        assertAudioSession()
+        assertAudioSession(reason: "metadata")
         let np = NowPlaying.shared
         nowPlayingInfo.removeAll()
 
@@ -1457,12 +1536,14 @@ extension PlayerController {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
+            Log.player.info("AUDIO_RECOVERY_APP didEnterBackground uptimeMs=\(Int(ProcessInfo.processInfo.systemUptime * 1000))")
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                self.traceRecovery("appBackground")
                 // Keep the audio session alive while the screen is locked so
                 // auto-advance can keep playing without user interaction.
                 if self.sharedState.withLock({ $0.desiredPlaying }) {
-                    self.assertAudioSession()
+                    self.assertAudioSession(reason: "didEnterBackground")
                 }
                 self.setNowPlayingMetadata()
                 self.updateNowPlayingProgress()
@@ -1482,11 +1563,20 @@ extension PlayerController {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            Log.player.info("AUDIO_RECOVERY_APP willEnterForeground uptimeMs=\(Int(ProcessInfo.processInfo.systemUptime * 1000))")
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.assertAudioSession()
+                self.traceRecovery("appForeground")
+                self.assertAudioSession(reason: "willEnterForeground")
                 self.updateNowPlayingProgress()
             }
+        }
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            Log.player.info("AUDIO_RECOVERY_APP didBecomeActive uptimeMs=\(Int(ProcessInfo.processInfo.systemUptime * 1000))")
+            Task { @MainActor [weak self] in self?.traceRecovery("appActive") }
         }
     }
 }
@@ -1727,6 +1817,14 @@ extension PlayerController {
                       self.apoloGeneration == generation,
                       NowPlaying.shared.videoId == videoId,
                       let backend = self.apoloBackend else { return }
+                if self.recoveryEnd != nil,
+                   !self.recoveryAdvanced,
+                   case .playing = backend.state,
+                   let previousPosition = self.recoveryPositionAtEnd,
+                   backend.currentTime > previousPosition + 0.15 {
+                    self.recoveryAdvanced = true
+                    self.traceRecovery("apoloClockAdvanced.notAcousticProof")
+                }
                 switch backend.state {
                 case .finished:
                     if isLiveRadio {
@@ -1786,6 +1884,7 @@ extension PlayerController {
                     }
                     if !loggedPlaying {
                         loggedPlaying = true
+                        self.traceRecovery("apoloPlaying")
                         Log.player.info(
                             "APOLO_BETA firstPlaying videoId=\(videoId ?? "nil") ms=\(Self.msSince(begun))"
                         )
@@ -1842,6 +1941,7 @@ extension PlayerController {
             NowPlaying.shared.radioPlaybackStatus = .connecting
         }
         let position = isLiveRadio ? 0 : currentTime
+        traceRecovery("mpvFallback")
         if !isLiveRadio {
             NowPlaying.shared.rememberInterruptedPlayback(position, for: videoId)
         }
