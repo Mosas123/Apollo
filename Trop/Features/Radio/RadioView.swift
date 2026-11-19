@@ -151,6 +151,9 @@ struct RadioView: View {
     private func play(_ station: RadioStation) {
         guard let stream = station.streamURL else { return }
         Task { @MainActor in
+            // This marker distinguishes a second user/UI selection from an
+            // engine-level retry. Never log raw stream URLs or headers.
+            Log.player.info("RADIO_UI selection stationId=\(station.stationuuid)")
             // A station selection is a fresh playback intent. Invalidate
             // outstanding song-resolver tasks before they can steal the player.
             NowPlaying.shared.bumpPlaybackIntent()
