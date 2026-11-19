@@ -1810,9 +1810,17 @@ extension PlayerController {
         let artist = NowPlaying.shared.displayArtist
         let duration = NowPlaying.shared.duration
         deactivateApoloPlayback()
+        // The fallback is queued onto the main actor. Another song selection
+        // can supersede it before this Task executes; don't let an old mpv
+        // fallback steal the player from that newer request (including ABA).
+        let fallbackRequestSerial = playRequestSerial
         Log.player.notice("APOLO_BETA switching back to mpv")
         Task { @MainActor [weak self] in
-            guard let self, NowPlaying.shared.videoId == videoId else { return }
+            guard let self, NowPlaying.shared.videoId == videoId,
+                  PlaybackIntentGuard.isLatest(
+                      serial: fallbackRequestSerial,
+                      latestSerial: self.playRequestSerial
+                  ) else { return }
             await self.play(
                 url: url.absoluteString,
                 title: title,
