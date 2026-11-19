@@ -355,6 +355,7 @@ final class NowPlaying {
     ) {
         guard queueSongs.indices.contains(queueIndex) else { return }
         playbackGeneration += 1
+        let intent = playbackGeneration
         if manageResolvingFlag {
             isResolvingNext = true
         }
@@ -364,8 +365,13 @@ final class NowPlaying {
         Task {
             var failed = false
             do {
-                try await PlaybackManager.shared.resolveAndPlay(videoId: song.videoId)
+                try await PlaybackManager.shared.resolveAndPlay(
+                    videoId: song.videoId,
+                    intent: intent
+                )
                 consecutiveFailures = 0
+            } catch is CancellationError {
+                // Superseded by a newer selection; not a playback failure.
             } catch {
                 failed = true
                 Log.nowPlaying.error("\(logContext) failed for \(song.videoId): \(error)")
@@ -436,6 +442,14 @@ final class NowPlaying {
     func beginTransition(to videoId: String) {
         guard self.videoId != videoId else { return }
         let previous = self.videoId
+        artworkLoadTask?.cancel()
+        enrichTask?.cancel()
+        liveResolveTask?.cancel()
+        artworkLoadTask = nil
+        enrichTask = nil
+        liveResolveTask = nil
+        lastLoadedVideoId = nil
+        resolvedArtworkVideoId = nil
         confirmedMetadata = nil
         publishedArtwork = nil
         thumbnailImage = nil
@@ -619,8 +633,13 @@ final class NowPlaying {
             isShuffleOn = false
             queueDidChange()
             let first = items[0]
+            bumpPlaybackIntent()
+            let intent = playbackGeneration
             update(with: first)
-            try? await PlaybackManager.shared.resolveAndPlay(videoId: first.videoId)
+            try? await PlaybackManager.shared.resolveAndPlay(
+                videoId: first.videoId,
+                intent: intent
+            )
             persistQueueState()
         }
     }
@@ -643,8 +662,13 @@ final class NowPlaying {
                 self.isShuffleOn = false
                 self.queueDidChange()
                 let first = songs[0]
+                bumpPlaybackIntent()
+                let intent = playbackGeneration
                 update(with: first)
-                try await PlaybackManager.shared.resolveAndPlay(videoId: first.videoId)
+                try await PlaybackManager.shared.resolveAndPlay(
+                    videoId: first.videoId,
+                    intent: intent
+                )
                 self.persistQueueState()
             } catch {
                 guard generation == playbackGeneration else { return }
@@ -698,15 +722,21 @@ final class NowPlaying {
         lastFailureAt[videoId] = Date()
         isPlaying = false
         Log.nowPlaying.notice("Stream failed mid-play, re-resolving \(videoId)")
+        let intent = playbackGeneration
         Task {
             if MusicPlaybackIdentity.isYouTube(videoId) {
                 await PlayerConfigStore.shared.notifyStreamRejection()
             }
             await StreamCache.shared.remove(videoId: videoId)
             do {
-                try await PlaybackManager.shared.resolveAndPlay(videoId: videoId)
+                try await PlaybackManager.shared.resolveAndPlay(
+                    videoId: videoId,
+                    intent: intent
+                )
                 // Success – allow future retries for this video
                 _ = await MainActor.run { self.lastFailureAt.removeValue(forKey: videoId) }
+            } catch is CancellationError {
+                return
             } catch {
                 Log.nowPlaying.error("Mid-play recovery failed: \(error)")
                 if self.videoId == videoId {

@@ -238,8 +238,16 @@ extension PlayerController {
         losslessLabel: String? = nil,
         qualityLabel: String? = nil,
         startAt: TimeInterval = 0,
-        bypassApolo: Bool = false
+        bypassApolo: Bool = false,
+        intentGeneration: Int? = nil
     ) async {
+        if let intentGeneration,
+           intentGeneration != NowPlaying.shared.playbackGeneration {
+            Log.player.info(
+                "PLAY_INTENT drop gen=\(intentGeneration) current=\(NowPlaying.shared.playbackGeneration) videoId=\(videoId ?? "nil")"
+            )
+            return
+        }
         currentLoudnessDb = loudnessDb
         NowPlaying.shared.losslessFormatLabel = losslessLabel
         NowPlaying.shared.isLosslessStream = losslessLabel != nil
@@ -260,6 +268,13 @@ extension PlayerController {
         var skipStart: Double = 0
         if SponsorBlock.skipsIntroAtStart, MusicPlaybackIdentity.isYouTube(videoId) {
             skipStart = await SponsorBlockIntegration.shared.preloadedStartOffset(for: videoId)
+        }
+        if let intentGeneration,
+           intentGeneration != NowPlaying.shared.playbackGeneration {
+            Log.player.info(
+                "PLAY_INTENT drop post-await gen=\(intentGeneration) current=\(NowPlaying.shared.playbackGeneration) videoId=\(videoId ?? "nil")"
+            )
+            return
         }
         guard NowPlaying.shared.videoId == videoId else {
             return
