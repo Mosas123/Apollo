@@ -284,6 +284,9 @@ final class NowPlaying {
 
     func setQueue(_ songs: [SongItem], startIndex: Int) {
         playbackGeneration += 1
+        // A brand-new queue supersedes any in-flight next-track resolution.
+        // Its old task must not leave the new queue permanently locked.
+        isResolvingNext = false
         queueSongs = songs
         queueIndex = min(max(startIndex, 0), max(songs.count - 1, 0))
         originalQueue = nil
@@ -411,28 +414,38 @@ final class NowPlaying {
         update(with: song)
         persistQueueState()
         Task {
-            var failed = false
+            var failed: Error?
+            var wasCancelled = false
             do {
                 try await PlaybackManager.shared.resolveAndPlay(
                     videoId: song.videoId,
                     intent: intent
                 )
-                consecutiveFailures = 0
             } catch is CancellationError {
-                // Superseded by a newer selection; not a playback failure.
+                wasCancelled = true
             } catch {
-                failed = true
-                Log.nowPlaying.error("\(logContext) failed for \(song.videoId): \(error)")
-                if self.videoId == song.videoId {
-                    isPlaying = false
-                }
+                failed = error
+            }
+            // A superseded resolver can finish after a different song starts.
+            // Its result must NEVER clear that song's resolving flag, reset
+            // failure counters or auto-advance the now-current queue.
+            guard self.playbackGeneration == intent,
+                  self.videoId == song.videoId else {
+                Log.nowPlaying.debug(
+                    "PLAY_INTENT stale completion dropped context=\(logContext) videoId=\(song.videoId) gen=\(intent)"
+                )
+                return
             }
             if manageResolvingFlag {
                 isResolvingNext = false
             }
             afterResolve?()
-            if failed {
+            if let failed {
+                Log.nowPlaying.error("\(logContext) failed for \(song.videoId): \(failed)")
+                isPlaying = false
                 handlePlaybackFailure(failedVideoId: song.videoId)
+            } else if !wasCancelled {
+                consecutiveFailures = 0
             }
         }
     }
@@ -529,6 +542,8 @@ final class NowPlaying {
 
     func bumpPlaybackIntent() {
         playbackGeneration += 1
+        // Invalidating the old request also releases its UI-level skip guard.
+        isResolvingNext = false
     }
 
     /// Convenience pushing a `SongItem`'s metadata into the player state.
@@ -750,6 +765,12 @@ final class NowPlaying {
     }
 
     private func handlePlaybackFailure(failedVideoId: String) {
+        guard videoId == failedVideoId else {
+            Log.nowPlaying.debug(
+                "PLAY_INTENT ignoring obsolete failure for \(failedVideoId)"
+            )
+            return
+        }
         consecutiveFailures += 1
         let canSkip = hasNext && consecutiveFailures < Self.maxConsecutiveFailures
         Log.nowPlaying.notice(
