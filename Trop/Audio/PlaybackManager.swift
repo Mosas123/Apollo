@@ -1376,9 +1376,11 @@ actor PlaybackManager {
             title: cleanedTitle(rawTitle, artist: artistName),
             artist: artistName,
             videoId: videoId,
-            duration: (queueSong?.duration ?? 0) > 0
-                ? TimeInterval(queueSong!.duration)
-                : audioResult.duration.flatMap { $0 > 0 ? TimeInterval($0) : nil },
+            duration: audioResult.duration.flatMap {
+                $0 > 0 ? TimeInterval($0) : nil
+            } ?? queueSong.flatMap { $0.duration > 0
+                ? TimeInterval($0.duration) : nil
+            },
             artists: queueSong?.artists ?? [],
             loudnessDb: audioResult.loudnessDb,
             thumbnailUrl: queueSong?.thumbnailUrl,
@@ -1386,7 +1388,8 @@ actor PlaybackManager {
             qualityLabel: Self.qualityLabel(audioResult),
             intentGeneration: intentGeneration,
             sourceMIMEType: audioResult.mimeType,
-            isAtmos: audioResult.audioQuality.lowercased().contains("atmos")
+            isAtmos: audioResult.audioQuality.lowercased().contains("atmos"),
+            bypassSponsorBlock: audioResult.videoId != videoId
         )
         let sourceName = sourceName(for: audioResult, videoId: videoId)
         if await isCurrentIntent(intentGeneration) {
