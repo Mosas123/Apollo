@@ -172,12 +172,11 @@ final class NowPlaying {
     @ObservationIgnored private var enrichTask: Task<Void, Never>?
     @ObservationIgnored private var liveResolveTask: Task<Void, Never>?
     @ObservationIgnored private var radioMetadataTask: Task<Void, Never>?
-    @ObservationIgnored private var radioCoverTask: Task<Void, Never>?
+    @ObservationIgnored private var radioArtworkTask: Task<Void, Never>?
     @ObservationIgnored private var lastRadioMetadataFetch = Date.distantPast
     @ObservationIgnored private var radioMetadataFailures = 0
     @ObservationIgnored private var radioMetadataCooldownUntil: Date?
-    @ObservationIgnored private var lastRadioCoverURL: URL?
-    private static let radioCoverCache = NSCache<NSURL, UIImage>()
+    @ObservationIgnored private var lastRadioArtworkKey: String?
     var lastManualSkipTime: Date?
     private var isResolvingNext = false
     private var consecutiveFailures = 0
@@ -520,12 +519,12 @@ final class NowPlaying {
         self.liveSongInfo = nil
         radioMetadataTask?.cancel()
         radioMetadataTask = nil
-        radioCoverTask?.cancel()
-        radioCoverTask = nil
+        radioArtworkTask?.cancel()
+        radioArtworkTask = nil
         lastRadioMetadataFetch = .distantPast
         radioMetadataFailures = 0
         radioMetadataCooldownUntil = nil
-        lastRadioCoverURL = nil
+        lastRadioArtworkKey = nil
         self.radioPlaybackStatus = .connecting
         self.hasVideo = false
         self.isVideoMode = false
@@ -571,12 +570,12 @@ final class NowPlaying {
         liveSongInfo = nil
         radioMetadataTask?.cancel()
         radioMetadataTask = nil
-        radioCoverTask?.cancel()
-        radioCoverTask = nil
+        radioArtworkTask?.cancel()
+        radioArtworkTask = nil
         lastRadioMetadataFetch = .distantPast
         radioMetadataFailures = 0
         radioMetadataCooldownUntil = nil
-        lastRadioCoverURL = nil
+        lastRadioArtworkKey = nil
         radioPlaybackStatus = .connecting
         currentSourceName = nil
         currentResult = nil
@@ -1339,57 +1338,50 @@ final class NowPlaying {
         let artist = data.artist.trimmingCharacters(in: .whitespacesAndNewlines)
         let title = data.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard title.count >= 2 else { return }
+        if title.caseInsensitiveCompare(displayTitle) == .orderedSame { return }
         let display = artist.isEmpty ? title : "\(artist) - \(title)"
         if liveTitle != display {
             liveResolveTask?.cancel()
+            radioArtworkTask?.cancel()
             liveTitle = display
             liveSongInfo = LiveSongInfo(title: title, artist: artist, album: data.album, artwork: nil)
-            lastRadioCoverURL = nil
+            lastRadioArtworkKey = nil
+            showRadioPlaceholderArtwork()
         } else if liveSongInfo?.album == nil {
             liveSongInfo?.album = data.album
         }
-        guard liveSongInfo?.artwork == nil, let coverURL = data.coverURL else { return }
-        if let cached = Self.radioCoverCache.object(forKey: coverURL as NSURL) {
-            publishArtwork(cached)
-            liveSongInfo?.artwork = cached.pngData()
-            return
-        }
-        guard lastRadioCoverURL != coverURL else { return }
-        lastRadioCoverURL = coverURL
-        radioCoverTask?.cancel()
-        radioCoverTask = Task { [weak self] in
-            guard let (bytes, _) = try? await URLSession.shared.data(from: coverURL),
-                  let image = UIImage(data: bytes) else { return }
-            Self.radioCoverCache.setObject(image, forKey: coverURL as NSURL)
+
+        // Never use the provider thumbnail: it is low resolution. The app looks
+        // up a proper cover for this exact song and keeps it only while the song
+        // is current (no cover cache to accumulate garbage).
+        let key = "\(artist.lowercased())|\(title.lowercased())"
+        if let liveSongInfo, liveSongInfo.artwork != nil { return }
+        if lastRadioArtworkKey == key { return }
+        lastRadioArtworkKey = key
+        radioArtworkTask?.cancel()
+        radioArtworkTask = Task { [weak self] in
+            guard let resolved = await MetadataResolver.enrich(title: title, artist: artist) else { return }
+            let artworkString = ArtworkURLs.highRes(resolved.artworkURL?.absoluteString)
+            guard let artworkString, let artworkURL = URL(string: artworkString),
+                  let image = try? await ArtworkLoader.image(for: artworkURL) else { return }
             await MainActor.run {
-                guard let self, self.playbackKind == .radio else { return }
+                guard let self, self.playbackKind == .radio, self.liveTitle == display else { return }
                 self.publishArtwork(image)
-                self.liveSongInfo?.artwork = bytes
+                self.liveSongInfo?.artwork = image.pngData()
+                if let album = resolved.album, self.liveSongInfo?.album == nil {
+                    self.liveSongInfo?.album = album
+                }
             }
         }
     }
 
-    /// Splits an ICY title ("Artist - Title") and enriches it with a catalogue
-    /// lookup, so the player can show the full song and offer to save it.
-    private func resolveLiveSong(_ raw: String) {
-        let parts = Self.splitICY(raw)
-        liveSongInfo = LiveSongInfo(title: parts.title, artist: parts.artist, album: nil, artwork: nil)
-        liveResolveTask?.cancel()
-        liveResolveTask = Task {
-            guard !Task.isCancelled else { return }
-            guard let resolved = await MetadataResolver.enrich(title: parts.title, artist: parts.artist) else { return }
-            var artwork: Data?
-            if let url = resolved.artworkURL {
-                artwork = try? await URLSession.shared.data(from: url).0
-            }
-            guard liveTitle == raw else { return }
-            liveSongInfo = LiveSongInfo(
-                title: resolved.title,
-                artist: resolved.artist,
-                album: resolved.album,
-                artwork: artwork
-            )
-        }
+    /// Drops the previous song's cover as soon as a new song starts or the
+    /// station stops; nothing is kept in a cover cache.
+    private func showRadioPlaceholderArtwork() {
+        guard playbackKind == .radio else { return }
+        thumbnailUIImage = nil
+        thumbnailImage = Image(systemName: "dot.radiowaves.left.and.right")
+        PlayerController.shared.updateNowPlayingArtwork()
     }
 
     /// Splits a raw ICY stream title into artist and title.
