@@ -157,7 +157,8 @@ struct RadioView: View {
                 artist: station.subtitle.isEmpty ? nil : station.subtitle,
                 videoId: NowPlaying.radioPrefix + station.stationuuid,
                 duration: nil,
-                thumbnailUrl: station.iconURL
+                thumbnailUrl: station.iconURL,
+                sourceMIMEType: station.apoloMIMEHint
             )
         }
     }
