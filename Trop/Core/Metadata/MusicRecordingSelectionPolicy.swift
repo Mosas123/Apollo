@@ -74,7 +74,7 @@ enum MusicRecordingSelectionPolicy {
         let targetAlbum = TextMatch.normalizeTitle(wantedAlbum ?? "")
         let sourceAlbum = TextMatch.normalizeTitle(candidateAlbum ?? "")
         if !targetAlbum.isEmpty, !sourceAlbum.isEmpty,
-           !TextMatch.albumsMatch(targetAlbum, sourceAlbum) {
+           !TextMatch.albumsMatch(wantedAlbum ?? "", candidateAlbum ?? "") {
             return false
         }
 
@@ -82,7 +82,7 @@ enum MusicRecordingSelectionPolicy {
         // demand time alignment; two same-name recordings can be different.
         let sameAlbum = !targetAlbum.isEmpty
             && !sourceAlbum.isEmpty
-            && TextMatch.albumsMatch(targetAlbum, sourceAlbum)
+            && TextMatch.albumsMatch(wantedAlbum ?? "", candidateAlbum ?? "")
         if wantedDuration <= 0 || candidateDuration <= 0 {
             return sameAlbum
         }
