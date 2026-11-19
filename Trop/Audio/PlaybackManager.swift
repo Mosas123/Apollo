@@ -12,6 +12,9 @@ actor PlaybackManager {
     static let shared = PlaybackManager()
 
     private var inflightResolutions: [String: Task<PlaybackResult, Error>] = [:]
+    private var albumAudioMatchCache: [String: (videoId: String?, at: Date)] = [:]
+
+
 
     private func resolutionKey(videoId: String, forDownload: Bool) -> String {
         forDownload ? "\(videoId):download" : "\(videoId):resolve"
@@ -1144,11 +1147,13 @@ actor PlaybackManager {
                 }
                 upgradeResultCache[videoId] = nil
             }
-            // Cache contains transport metadata, whose author can be an upload
-            // channel. Use the same queue-credit policy as fresh resolutions.
-            await playNetworkResult(cached, videoId: videoId, intentGeneration: intentGeneration)
+            // Cache can hold the video's transport response; still apply
+            // album-audio verification when the selected row is a song.
+            let played = await playNetworkResult(
+                cached, videoId: videoId, intentGeneration: intentGeneration
+            )
             scheduleUpgradePrefetch(videoId: videoId)
-            return cached
+            return played
         }
 
         let key = playKey(
@@ -1212,11 +1217,13 @@ actor PlaybackManager {
             // Dead cached URL (origin rotated/expired): drop it, use YouTube.
             upgradeResultCache[videoId] = nil
         }
-        await playNetworkResult(result, videoId: videoId, intentGeneration: intentGeneration)
+        let played = await playNetworkResult(
+            result, videoId: videoId, intentGeneration: intentGeneration
+        )
         // Warm this track (for replays) and the next two while it plays. Off
         // the play path: never delays audio.
         scheduleUpgradePrefetch(videoId: videoId)
-        return result
+        return played
     }
 
     private func addonName(for key: String) async -> String? {
@@ -1240,50 +1247,163 @@ actor PlaybackManager {
         }
     }
 
+    /// When an old/ambiguous song entry resolves to a YouTube music VIDEO,
+    /// look for an independently typed ATV album audio track. A video's
+    /// audio-bearing stream is still the video's mix; codec selection alone
+    /// cannot turn it into the album master.
+    private func albumAudioVersion(
+        of result: PlaybackResult,
+        for videoId: String,
+        song: SongItem?,
+        intentGeneration: Int
+    ) async -> PlaybackResult {
+        guard MusicPlaybackIdentity.isYouTube(videoId),
+              result.videoId == videoId,
+              let song,
+              !["addon", "jiosaavn", "qobuz", "audius", "local"].contains(
+                  result.clientName.lowercased()
+              ),
+              MusicRecordingSelectionPolicy.shouldFindAlbumAudio(
+                  selectedVideo: song.isVideo == true,
+                  rowType: song.musicVideoType,
+                  sourceType: result.musicVideoType
+              ),
+              let artist = song.artists.first?.name,
+              !artist.isEmpty
+        else { return result }
+
+        let candidateID: String?
+        if let cached = albumAudioMatchCache[videoId],
+           Date().timeIntervalSince(cached.at) < (cached.videoId == nil ? 600 : 3_600) {
+            candidateID = cached.videoId
+        } else {
+            let query = "\(artist) \(song.title)"
+            let found: String?
+            do {
+                let data = try await InnerTubeClient.tropShared.search(
+                    query: query, client: .webRemix
+                )
+                guard await isCurrentIntent(intentGeneration) else { return result }
+                let parsed = SearchParser.parseSearchResults(from: data.value)
+                let candidates = parsed.flatMap(\.items).compactMap { item -> SongItem? in
+                    if case .song(let song) = item { return song }
+                    return nil
+                }
+                let valid = candidates.filter { candidate in
+                    candidate.videoId != videoId
+                        && MusicRecordingSelectionPolicy.verifiedAlbumAudio(
+                            wantedTitle: song.title,
+                            wantedArtist: artist,
+                            wantedAlbum: song.album,
+                            wantedDuration: song.duration,
+                            candidateTitle: candidate.title,
+                            candidateArtists: candidate.artists.map(\.name),
+                            candidateAlbum: candidate.album,
+                            candidateDuration: candidate.duration,
+                            candidateType: candidate.musicVideoType
+                        )
+                }
+                // Prefer the same release first, then the closest duration.
+                let sorted = valid.sorted { lhs, rhs in
+                    let lhsAlbum = song.album != nil
+                        && lhs.album != nil
+                        && TextMatch.albumsMatch(lhs.album ?? "", song.album ?? "")
+                    let rhsAlbum = song.album != nil
+                        && rhs.album != nil
+                        && TextMatch.albumsMatch(rhs.album ?? "", song.album ?? "")
+                    if lhsAlbum != rhsAlbum { return lhsAlbum }
+                    return abs(lhs.duration - song.duration)
+                        < abs(rhs.duration - song.duration)
+                }
+                found = sorted.first?.videoId
+            } catch {
+                // Search is optional. Network errors must not block music.
+                return result
+            }
+            if albumAudioMatchCache.count >= 100 {
+                albumAudioMatchCache.removeAll(keepingCapacity: true)
+            }
+            albumAudioMatchCache[videoId] = (found, Date())
+            candidateID = found
+        }
+
+        guard let candidateID, await isCurrentIntent(intentGeneration) else {
+            return result
+        }
+        var request = StreamResolveRequest.playback(videoId: candidateID)
+        request.options.audioQuality = SettingsStore.shared.audioQuality
+        guard let albumAudio = try? await StreamFallback.resolveFirstValid(
+            request,
+            using: InnerTubeClient.tropShared,
+            providers: .tropLive
+        ), albumAudio.videoId == candidateID,
+           !MusicRecordingSelectionPolicy.isVideoRecording(albumAudio.musicVideoType),
+           await isCurrentIntent(intentGeneration)
+        else { return result }
+
+        Log.player.notice(
+            "MUSIC_MATCH album audio selected original=\(videoId) audio=\(candidateID)"
+        )
+        return albumAudio
+    }
+
+    @discardableResult
     private func playNetworkResult(
         _ result: PlaybackResult,
         videoId: String,
         intentGeneration: Int
-    ) async {
+    ) async -> PlaybackResult {
         guard await isCurrentIntent(intentGeneration) else {
             Log.player.info(
                 "PLAY_INTENT drop result gen=\(intentGeneration) videoId=\(videoId)"
             )
-            return
+            return result
         }
         let queueSong = await queueSong(for: videoId)
+        let audioResult = await albumAudioVersion(
+            of: result,
+            for: videoId,
+            song: queueSong,
+            intentGeneration: intentGeneration
+        )
+        guard await isCurrentIntent(intentGeneration) else { return result }
         let queueArtistName = queueSong.map { artistDisplayString(from: $0.artists) } ?? ""
         let fallbackAuthor = result.author?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let artistName = !queueArtistName.isEmpty ? queueArtistName : fallbackAuthor
         let rawTitle = queueSong?.title ?? result.title ?? ""
         await PlayerController.shared.play(
-            url: result.streamUrl,
+            url: audioResult.streamUrl,
             title: cleanedTitle(rawTitle, artist: artistName),
             artist: artistName,
             videoId: videoId,
-            duration: result.duration.flatMap { $0 > 0 ? TimeInterval($0) : nil },
+            duration: (queueSong?.duration ?? 0) > 0
+                ? TimeInterval(queueSong!.duration)
+                : audioResult.duration.flatMap { $0 > 0 ? TimeInterval($0) : nil },
             artists: queueSong?.artists ?? [],
-            loudnessDb: result.loudnessDb,
+            loudnessDb: audioResult.loudnessDb,
             thumbnailUrl: queueSong?.thumbnailUrl,
-            losslessLabel: Self.losslessLabel(result),
-            qualityLabel: Self.qualityLabel(result),
+            losslessLabel: Self.losslessLabel(audioResult),
+            qualityLabel: Self.qualityLabel(audioResult),
             intentGeneration: intentGeneration,
-            sourceMIMEType: result.mimeType,
-            isAtmos: result.audioQuality.lowercased().contains("atmos")
+            sourceMIMEType: audioResult.mimeType,
+            isAtmos: audioResult.audioQuality.lowercased().contains("atmos")
         )
-        let sourceName = sourceName(for: result, videoId: videoId)
+        let sourceName = sourceName(for: audioResult, videoId: videoId)
         if await isCurrentIntent(intentGeneration) {
             await MainActor.run {
                 NowPlaying.shared.currentSourceName = sourceName
-                NowPlaying.shared.currentResult = result
+                NowPlaying.shared.currentResult = audioResult
             }
         }
         await publishVideoAvailability(
+            // Video mode still belongs to the user's original YouTube ID.
+            // Only the audio stream is substituted with its album recording.
             result: result,
             videoId: videoId,
             rowType: queueSong?.musicVideoType,
             intentGeneration: intentGeneration
         )
+        return audioResult
     }
 
     private func clearInflight(key: String) {
