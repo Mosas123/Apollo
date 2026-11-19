@@ -34,6 +34,15 @@ enum LocalAudioFilePolicy {
         bytes >= 8_192
     }
 
+    static func videoId(from fileName: String) -> String? {
+        let stem = (fileName as NSString).deletingPathExtension
+        guard let range = stem.range(
+            of: #"\[([A-Za-z0-9_:-]{6,})\]$"#,
+            options: .regularExpression
+        ) else { return nil }
+        return String(stem[range].dropFirst().dropLast())
+    }
+
     static func storedFilename(
         title: String,
         videoId: String,
