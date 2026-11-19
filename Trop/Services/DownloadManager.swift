@@ -933,9 +933,12 @@ extension DownloadManager {
                   preferAtmos: preferAtmos,
                   preferHiRes: preferHiRes
               ),
-              match.stream.qualityTier == "Lossless",
               case .url(let url) = match.stream.kind,
-              Self.format(mime: match.stream.mimeType, url: url) == .flac
+              OfflineAudioFormatPolicy.isVerifiedFLAC(
+                  qualityTier: match.stream.qualityTier,
+                  mimeType: match.stream.mimeType,
+                  pathExtension: url.pathExtension
+              )
         else { return nil }
         // Some addons report a size but answer HEAD badly; trust the size.
         // Never label a compressed Atmos/E-AC3 bitstream as FLAC.
