@@ -9,6 +9,7 @@ on:
       - "Trop/Services/DownloadManager.swift"
       - "Trop/Audio/PlayerController/PlayerController.swift"
       - "Trop/Audio/PlayerController/ApoloFiniteAudioWatchdog.swift"
+      - "Trop/Audio/PlayerController/ApoloLiveRadioWatchdog.swift"
       - "tests/Playback/ConsolidatedAudioChecks.swift"
       - "tests/Playback/ApoloInterruptionWatchdogChecks.swift"
       - ".github/workflows/consolidated-audio-checks.yml"
@@ -33,6 +34,7 @@ jobs:
           set -euo pipefail
           swiftc \
             Trop/Audio/PlayerController/ApoloFiniteAudioWatchdog.swift \
+            Trop/Audio/PlayerController/ApoloLiveRadioWatchdog.swift \
             tests/Playback/ApoloInterruptionWatchdogChecks.swift \
             -o "$RUNNER_TEMP/apolo-interruption-watchdog-checks"
           "$RUNNER_TEMP/apolo-interruption-watchdog-checks"
