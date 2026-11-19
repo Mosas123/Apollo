@@ -254,6 +254,12 @@ final class SettingsStore: @unchecked Sendable {
         didSet { Self.defaults.set(upgradeDuringPlayback, forKey: Keys.upgradeDuringPlayback) }
     }
 
+    /// Experimental, audio-only ApoloEngine. Changes apply on the next track.
+    /// Default OFF: the stable mpv playback path remains unchanged.
+    var apoloBetaEnabled: Bool {
+        didSet { Self.defaults.set(apoloBetaEnabled, forKey: Keys.apoloBetaEnabled) }
+    }
+
     // MARK: - Liquid Glass
 
     /// Translucency of the player's floating glass chips (iOS 27 style control).
@@ -457,6 +463,7 @@ final class SettingsStore: @unchecked Sendable {
         static let glassStyle = "settings.glassStyle"
         static let podcastIndexKey = "settings.podcastIndexKey"
         static let musicQualityMode = "settings.musicQualityMode"
+        static let apoloBetaEnabled = "settings.apoloBetaEnabled"
         static let preferAtmos = "settings.preferAtmos"
         static let preferHiRes = "settings.preferHiRes"
         static let legacyPreferLossless = "settings.preferLossless"
@@ -541,6 +548,7 @@ final class SettingsStore: @unchecked Sendable {
         glassStyle = Self.loadEnum(Keys.glassStyle, default: .regular)
         podcastIndexKey = Self.loadString(Keys.podcastIndexKey, default: "")
         musicQualityMode = Self.loadEnum(Keys.musicQualityMode, default: .auto)
+        apoloBetaEnabled = Self.load(Keys.apoloBetaEnabled, default: false)
         preferAtmos = Self.load(Keys.preferAtmos, default: false)
         preferHiRes = Self.load(
             Keys.preferHiRes,

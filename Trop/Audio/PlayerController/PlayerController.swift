@@ -134,8 +134,16 @@ final class PlayerController {
     private var pendingSeek: (target: TimeInterval, deadline: Date)?
     private var metadataDebounceTask: Task<Void, Never>?
 
+    // Opt-in audio-only beta. Thrum retains queue, system commands and session.
+    private var apoloBackend: ApoloAudioBackend?
+    private var apoloIsActive = false
+    private var apoloGeneration: UInt64 = 0
+    private var apoloMonitorTask: Task<Void, Never>?
+    var isApoloActive: Bool { apoloIsActive }
+
     var currentTime: TimeInterval {
-        withMpv { mpv in
+        if apoloIsActive { return apoloBackend?.currentTime ?? 0 }
+        return withMpv { mpv in
             var val = Double(0)
             mpv_get_property(mpv, "time-pos", MPV_FORMAT_DOUBLE, &val)
             return val
@@ -143,7 +151,8 @@ final class PlayerController {
     }
 
     var duration: TimeInterval {
-        withMpv { mpv in
+        if apoloIsActive { return max(apoloBackend?.duration ?? 0, NowPlaying.shared.duration) }
+        return withMpv { mpv in
             var val = Double(0)
             mpv_get_property(mpv, "duration", MPV_FORMAT_DOUBLE, &val)
             return val
@@ -226,7 +235,8 @@ extension PlayerController {
         thumbnailUrl: String? = nil,
         losslessLabel: String? = nil,
         qualityLabel: String? = nil,
-        startAt: TimeInterval = 0
+        startAt: TimeInterval = 0,
+        bypassApolo: Bool = false
     ) async {
         currentLoudnessDb = loudnessDb
         NowPlaying.shared.losslessFormatLabel = losslessLabel
@@ -251,6 +261,31 @@ extension PlayerController {
         guard NowPlaying.shared.videoId == videoId else {
             return
         }
+
+        // Audio-only experiment: bypass mpv while keeping Thrum as owner of
+        // the queue, remote commands, Now Playing artwork and audio session.
+        if !bypassApolo,
+           SettingsStore.shared.apoloBetaEnabled,
+           NowPlaying.shared.playbackKind == .music,
+           ["file", "http", "https"].contains(url.scheme?.lowercased() ?? "") {
+            var playbackStart = startAt > 0 ? startAt : skipStart
+            if startAt == 0,
+               let resume = NowPlaying.shared.takeResumePosition(for: videoId),
+               resume > 5,
+               resume < (duration ?? .greatestFiniteMagnitude) - 5 {
+                playbackStart = resume
+            }
+            await playWithApolo(
+                url: url,
+                videoId: videoId,
+                title: title,
+                artist: artist,
+                duration: duration,
+                startAt: playbackStart
+            )
+            return
+        }
+        deactivateApoloPlayback()
 
         let prevVideoId = sharedState.withLock { $0.currentVideoId }
         let isNewSong = prevVideoId != nil && videoId != prevVideoId
@@ -337,6 +372,16 @@ extension PlayerController {
     func seek(to time: TimeInterval) {
         pendingSeek = (time, Date().addingTimeInterval(1.5))
         NowPlaying.shared.currentTime = time
+        if apoloIsActive {
+            let generation = apoloGeneration
+            Task { @MainActor [weak self] in
+                guard let self, self.apoloIsActive,
+                      self.apoloGeneration == generation else { return }
+                await self.apoloBackend?.seek(to: time)
+                self.updateNowPlayingProgress()
+            }
+            return
+        }
         withMpv { mpv in
             var val = time
             let result = mpv_set_property(mpv, "time-pos", MPV_FORMAT_DOUBLE, &val)
@@ -351,9 +396,13 @@ extension PlayerController {
             updateNowPlayingProgress()
             return
         }
-        withMpv { mpv in
-            var flag: Int32 = paused ? 1 : 0
-            mpv_set_property(mpv, "pause", MPV_FORMAT_FLAG, &flag)
+        if apoloIsActive {
+            if paused { apoloBackend?.pause() } else { apoloBackend?.play() }
+        } else {
+            withMpv { mpv in
+                var flag: Int32 = paused ? 1 : 0
+                mpv_set_property(mpv, "pause", MPV_FORMAT_FLAG, &flag)
+            }
         }
         playState.send(paused ? .paused : .playing)
         NowPlaying.shared.isPlaying = !paused
@@ -372,6 +421,10 @@ extension PlayerController {
 
     func applyPlayerVolume() {
         let vol = volumeOverride ?? SettingsStore.shared.playerVolume
+        if apoloIsActive {
+            apoloBackend?.volume = Float(max(0, min(1, vol)))
+            return
+        }
         withMpv { mpv in
             var val = Double(vol * 100)
             mpv_set_property(mpv, "volume", MPV_FORMAT_DOUBLE, &val)
@@ -390,6 +443,12 @@ extension PlayerController {
     }
 
     func applyPlaybackSettings() {
+        if apoloIsActive {
+            // Beta intentionally uses Apolo's default flat DSP. The existing
+            // mpv ten-band EQ cannot be mapped one-to-one to Apolo's five bands.
+            applyPlayerVolume()
+            return
+        }
         let settings = SettingsStore.shared
         let loudness = currentLoudnessDb
         let eqEnabled = settings.equalizerEnabled
@@ -580,7 +639,7 @@ extension PlayerController {
         let actuallyPlaying = pauseFlag == 0
         let pendingVideoId = self.sharedState.withLock { $0.pendingVideoId }
         Task { @MainActor [weak self] in
-            guard let self else { return }
+            guard let self, !self.apoloIsActive else { return }
             if let meta = self.pendingMetadata {
                 self.pendingMetadata = nil
                 NowPlaying.shared.update(
@@ -619,6 +678,7 @@ extension PlayerController {
             let newDur: Double = prop.data?.load(as: Double.self) ?? 0
             if newDur > 0 {
                 Task { @MainActor in
+                    guard !self.apoloIsActive else { return }
                     NowPlaying.shared.duration = newDur
                     // mpv can emit several duration updates as a stream
                     // settles; coalesce the (expensive) metadata rebuild.
@@ -680,7 +740,7 @@ extension PlayerController {
         let isError = reason == MPV_END_FILE_REASON_ERROR
         let stoppedVideoId = self.sharedState.withLock { $0.currentVideoId }
         Task { @MainActor [weak self] in
-            guard let self else { return }
+            guard let self, !self.apoloIsActive else { return }
             let videoId = stoppedVideoId
             Log.player.debug(
                 "TRANSITION END_FILE reason=\(reason.rawValue) isEof=\(isEof) isError=\(isError) stoppedVideoId=\(videoId ?? "nil")"
@@ -706,6 +766,7 @@ extension PlayerController {
 
 extension PlayerController {
     func setVideoMode() {
+        guard !SettingsStore.shared.apoloBetaEnabled, !apoloIsActive else { return }
         // No real video (e.g. art-track): stay in the big player, do nothing.
         guard NowPlaying.shared.hasVideo else { return }
         guard let videoId = NowPlaying.shared.videoId else { return }
@@ -1136,19 +1197,23 @@ extension PlayerController {
         let np = NowPlaying.shared
         nowPlayingInfo.removeAll()
 
-        let liveDur = withMpv { mpv in
-            var val = Double(0)
-            mpv_get_property(mpv, "duration", MPV_FORMAT_DOUBLE, &val)
-            return val
-        } ?? 0
+        let liveDur: Double = apoloIsActive
+            ? (apoloBackend?.duration ?? 0)
+            : (withMpv { mpv in
+                var val = Double(0)
+                mpv_get_property(mpv, "duration", MPV_FORMAT_DOUBLE, &val)
+                return val
+            } ?? 0)
         let duration = liveDur > 0 ? liveDur : np.duration
         if duration > 0 { np.duration = duration }
 
-        let livePos = withMpv { mpv in
-            var val = Double(0)
-            mpv_get_property(mpv, "time-pos", MPV_FORMAT_DOUBLE, &val)
-            return val
-        } ?? 0
+        let livePos: Double = apoloIsActive
+            ? (apoloBackend?.currentTime ?? 0)
+            : (withMpv { mpv in
+                var val = Double(0)
+                mpv_get_property(mpv, "time-pos", MPV_FORMAT_DOUBLE, &val)
+                return val
+            } ?? 0)
         let elapsed = livePos > 0 ? livePos : np.currentTime
 
         nowPlayingInfo[MPMediaItemPropertyTitle] = np.displayTitle
@@ -1182,13 +1247,16 @@ extension PlayerController {
     }
 
     func updateNowPlayingProgress() {
-        let props: (dur: Double, pos: Double)? = withMpv { mpv in
-            var dur = Double(0)
-            mpv_get_property(mpv, "duration", MPV_FORMAT_DOUBLE, &dur)
-            var pos = Double(0)
-            mpv_get_property(mpv, "time-pos", MPV_FORMAT_DOUBLE, &pos)
-            return (dur, pos)
-        }
+        let props: (dur: Double, pos: Double)? = apoloIsActive
+            ? (max(apoloBackend?.duration ?? 0, NowPlaying.shared.duration),
+               apoloBackend?.currentTime ?? 0)
+            : withMpv { mpv in
+                var dur = Double(0)
+                mpv_get_property(mpv, "duration", MPV_FORMAT_DOUBLE, &dur)
+                var pos = Double(0)
+                mpv_get_property(mpv, "time-pos", MPV_FORMAT_DOUBLE, &pos)
+                return (dur, pos)
+            }
         guard var props, props.dur > 0 else { return }
         let np = NowPlaying.shared
 
@@ -1328,6 +1396,161 @@ extension Array where Element == String {
         var ptrs = cstrings.map { UnsafePointer($0) } + [nil]
         return ptrs.withUnsafeMutableBufferPointer { buf in
             body(buf.baseAddress)
+        }
+    }
+}
+
+// MARK: - ApoloEngine beta (music only)
+
+extension PlayerController {
+    /// Releases the experimental renderer before mpv takes over. Also makes
+    /// outstanding FFmpeg probe results and monitor ticks obsolete.
+    private func deactivateApoloPlayback() {
+        apoloGeneration &+= 1
+        apoloMonitorTask?.cancel()
+        apoloMonitorTask = nil
+        if apoloIsActive {
+            apoloBackend?.stop()
+            apoloIsActive = false
+        }
+    }
+
+    private func playWithApolo(
+        url: URL,
+        videoId: String?,
+        title: String?,
+        artist: String?,
+        duration: TimeInterval?,
+        startAt: TimeInterval
+    ) async {
+        let oldId = sharedState.withLock { $0.currentVideoId }
+        let isNewSong = oldId != nil && oldId != videoId
+        deactivateApoloPlayback()
+        apoloIsActive = true
+        let generation = apoloGeneration
+        pendingURL = nil
+        pendingMetadata = nil
+        pendingSeek = nil
+        loadedMuxedURL = nil
+        loadedVideoOnlyURL = nil
+        muxedActive = false
+        muxedVideoId = nil
+        NowPlaying.shared.isVideoMode = false
+        NowPlaying.shared.isVideoReady = false
+        sharedState.withLock {
+            $0.currentVideoId = videoId
+            $0.pendingVideoId = nil
+            $0.desiredPlaying = true
+        }
+        // Stop mpv before Apolo starts; an EOF emitted by the old mpv item
+        // must never advance Thrum's queue while Apolo owns playback.
+        _ = withMpv { mpv in
+            ["stop"].withUnsafeCArg { mpv_command(mpv, $0) }
+        }
+        assertAudioSession()
+        if isNewSong { await PlaybackStateService.shared.stopTracking() }
+        if let videoId { await PlaybackStateService.shared.startTracking(videoId: videoId) }
+        guard apoloIsActive, apoloGeneration == generation,
+              NowPlaying.shared.videoId == videoId else { return }
+        let backend: ApoloAudioBackend
+        if let existing = apoloBackend {
+            backend = existing
+        } else {
+            backend = ApoloAudioBackend()
+            apoloBackend = backend
+        }
+        backend.volume = Float(max(0, min(1, SettingsStore.shared.playerVolume)))
+        do {
+            try await backend.load(
+                audioURL: url,
+                title: title ?? NowPlaying.shared.displayTitle,
+                artist: artist ?? NowPlaying.shared.displayArtist
+            )
+            guard apoloIsActive, apoloGeneration == generation,
+                  NowPlaying.shared.videoId == videoId else { return }
+            if startAt > 0 { await backend.seek(to: startAt) }
+            guard apoloIsActive, apoloGeneration == generation else { return }
+            backend.play()
+            playState.send(.playing)
+            NowPlaying.shared.isPlaying = true
+            NowPlaying.shared.currentTime = startAt
+            NowPlaying.shared.duration = max(0, duration ?? 0)
+            setNowPlayingMetadata()
+            monitorApolo(url: url, videoId: videoId, generation: generation)
+            Log.player.info("APOLO_BETA active audio only videoId=\(videoId ?? \"nil\")")
+        } catch {
+            guard apoloIsActive, apoloGeneration == generation else { return }
+            Log.player.error("APOLO_BETA load failed: \(error)")
+            fallbackFromApolo(url: url, videoId: videoId, generation: generation)
+        }
+    }
+
+    private func monitorApolo(url: URL, videoId: String?, generation: UInt64) {
+        apoloMonitorTask?.cancel()
+        apoloMonitorTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let begun = Date()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled, self.apoloIsActive,
+                      self.apoloGeneration == generation,
+                      NowPlaying.shared.videoId == videoId,
+                      let backend = self.apoloBackend else { return }
+                switch backend.state {
+                case .finished:
+                    self.playState.send(.stopped)
+                    NowPlaying.shared.stopped(videoId: videoId, isEof: true)
+                    return
+                case .failed(let message):
+                    Log.player.error("APOLO_BETA renderer error: \(message)")
+                    self.fallbackFromApolo(url: url, videoId: videoId, generation: generation)
+                    return
+                case .loading:
+                    if Date().timeIntervalSince(begun) > 20 {
+                        Log.player.warning("APOLO_BETA loading timeout; using mpv fallback")
+                        self.fallbackFromApolo(url: url, videoId: videoId, generation: generation)
+                        return
+                    }
+                case .playing:
+                    if self.playState.value != .playing {
+                        self.playState.send(.playing)
+                        NowPlaying.shared.isPlaying = true
+                    }
+                case .paused:
+                    if self.playState.value != .paused {
+                        self.playState.send(.paused)
+                        NowPlaying.shared.isPlaying = false
+                    }
+                case .idle:
+                    break
+                }
+                if backend.duration > 0, NowPlaying.shared.duration <= 0 {
+                    NowPlaying.shared.duration = backend.duration
+                }
+            }
+        }
+    }
+
+    private func fallbackFromApolo(url: URL, videoId: String?, generation: UInt64) {
+        guard apoloIsActive, apoloGeneration == generation,
+              NowPlaying.shared.videoId == videoId else { return }
+        let position = currentTime
+        let title = NowPlaying.shared.displayTitle
+        let artist = NowPlaying.shared.displayArtist
+        let duration = NowPlaying.shared.duration
+        deactivateApoloPlayback()
+        Log.player.notice("APOLO_BETA switching back to mpv")
+        Task { @MainActor [weak self] in
+            guard let self, NowPlaying.shared.videoId == videoId else { return }
+            await self.play(
+                url: url.absoluteString,
+                title: title,
+                artist: artist,
+                videoId: videoId,
+                duration: duration,
+                startAt: position,
+                bypassApolo: true
+            )
         }
     }
 }

@@ -621,7 +621,7 @@ struct FullPlayerView: View {
     @ViewBuilder
     private var artwork: some View {
         Group {
-            if np.isVideoMode, np.hasVideo {
+            if np.isVideoMode, np.hasVideo, !settings.apoloBetaEnabled {
                 ZStack {
                     VideoPlayerView()
                         .mask {
@@ -657,7 +657,7 @@ struct FullPlayerView: View {
                     )
                 }
                 .onTapGesture {
-                    guard np.hasVideo else { return }
+                    guard np.hasVideo, !settings.apoloBetaEnabled else { return }
                     showQueue = true
                     player.setVideoMode()
                 }

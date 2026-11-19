@@ -28,6 +28,18 @@ struct PlayerSettingsView: View {
 
         List {
             Section {
+                SettingsToggleRow(
+                    "ApoloEngine Beta (Music Only)",
+                    icon: "waveform.path",
+                    isOn: $settings.apoloBetaEnabled
+                )
+            } header: {
+                Text("Experimental Playback")
+            } footer: {
+                Text("Apolo plays music on the next track. Video mode is disabled while the beta is enabled; mpv is used if a source fails. Ten-band EQ support is not yet migrated.")
+            }
+
+            Section {
                 SettingsNavigationRow("Equalizer", icon: "slider.vertical.3") {
                     EqualizerView()
                 }
