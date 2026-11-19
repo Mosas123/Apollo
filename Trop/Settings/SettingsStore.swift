@@ -565,7 +565,8 @@ final class SettingsStore: @unchecked Sendable {
         musicQualityMode = Self.loadEnum(Keys.musicQualityMode, default: .auto)
         apoloBetaEnabled = Self.load(Keys.apoloBetaEnabled, default: false)
         apoloPodcastsBetaEnabled = Self.load(
-            Keys.apoloPodcastsBetaEnabled, default: apoloBetaEnabled
+            Keys.apoloPodcastsBetaEnabled,
+            default: Self.load(Keys.apoloBetaEnabled, default: false)
         )
         apoloRadioBetaEnabled = Self.load(Keys.apoloRadioBetaEnabled, default: false)
         preferAtmos = Self.load(Keys.preferAtmos, default: false)
