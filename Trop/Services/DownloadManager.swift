@@ -167,6 +167,61 @@ final class DownloadManager: ObservableObject {
         return downloadsDir.appendingPathComponent("\(stem) [\(videoId)].\(fileExtension)")
     }
 
+    /// Imports an audio file from Files into this app's sandbox. Copying it
+    /// means the player does not need to keep an external security-scoped URL
+    /// alive after the picker closes, even across launches or offline use.
+    /// The copy is done off-main and never loads the whole file into RAM.
+    func importLocalAudio(from sourceURL: URL) async throws {
+        guard LocalAudioFilePolicy.supports(sourceURL) else {
+            throw LocalAudioImportError.unsupportedFormat
+        }
+        guard ensureDirectories() else {
+            throw LocalAudioImportError.unavailableDestination
+        }
+        let sourceName = sourceURL.deletingPathExtension().lastPathComponent
+        let title = Self.sanitizeFileName(sourceName)
+        let newId = "local:\(UUID().uuidString)"
+        let fileName = LocalAudioFilePolicy.storedFilename(
+            title: title,
+            videoId: newId,
+            fileExtension: sourceURL.pathExtension
+        )
+        let destination = downloadsDir.appendingPathComponent(fileName)
+        try await Task.detached(priority: .userInitiated) {
+            let scoped = sourceURL.startAccessingSecurityScopedResource()
+            defer {
+                if scoped { sourceURL.stopAccessingSecurityScopedResource() }
+            }
+            guard let properties = try? sourceURL.resourceValues(
+                forKeys: [.isRegularFileKey, .fileSizeKey]
+            ), properties.isRegularFile == true,
+                LocalAudioFilePolicy.isValidAudioSize(properties.fileSize ?? 0)
+            else { throw LocalAudioImportError.invalidFile }
+
+            try FileManager.default.copyItem(at: sourceURL, to: destination)
+        }.value
+
+        let entity = DownloadedTrackEntity(
+            id: newId,
+            title: title,
+            artist: "",
+            duration: 0,
+            thumbnailUrl: nil,
+            localPath: storedPath(for: destination),
+            downloadedAt: Date()
+        )
+        do {
+            _ = try await DatabaseService.shared.insertOrReplace(entity)
+        } catch {
+            try? fileManager.removeItem(at: destination)
+            throw error
+        }
+        tracksById[newId] = entity
+        apply(tracksById)
+        isLoaded = true
+        Log.downloadManager.notice("Imported local audio format=\(sourceURL.pathExtension.lowercased())")
+    }
+
     /// Strips characters illegal on filesystems, trims whitespace/dots and
     /// caps length for APFS's 255-byte limit.
     nonisolated static func sanitizeFileName(_ name: String) -> String {
@@ -295,9 +350,11 @@ final class DownloadManager: ObservableObject {
         var found: [String: URL] = [:]
         var dates: [String: Date] = [:]
 
-        for url in urls where url.pathExtension.lowercased() == "m4a" {
+        for url in urls where LocalAudioFilePolicy.supports(url) {
             let values = try? url.resourceValues(forKeys: Set(keys))
-            guard (values?.fileSize ?? 0) >= minimumAudioBytes else { continue }
+            guard LocalAudioFilePolicy.isValidAudioSize(
+                values?.fileSize ?? 0
+            ) else { continue }
             guard let videoId = Self.videoId(from: url.lastPathComponent) else { continue }
             let modified = values?.contentModificationDate ?? .distantPast
             if let existingDate = dates[videoId], existingDate >= modified { continue }
@@ -1482,6 +1539,23 @@ extension DownloadManager {
         let artist: String
         let album: String?
         let artworkData: Data?
+    }
+}
+
+enum LocalAudioImportError: LocalizedError {
+    case unsupportedFormat
+    case invalidFile
+    case unavailableDestination
+
+    var errorDescription: String? {
+        switch self {
+        case .unsupportedFormat:
+            return "This file format is not supported for local audio."
+        case .invalidFile:
+            return "The selected audio file is missing, incomplete or unreadable."
+        case .unavailableDestination:
+            return "Thrum could not create its local audio folder."
+        }
     }
 }
 
