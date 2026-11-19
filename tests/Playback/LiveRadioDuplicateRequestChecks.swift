@@ -10,55 +10,90 @@ struct LiveRadioDuplicateRequestChecks {
     }
 
     static func main() {
+        typealias Session = LiveRadioDuplicateRequestPolicy.ActiveSession
         let rtlID = "radio:042d3140-227c-4fac-9387-4903b692d5f2"
         let otherID = "radio:other-station"
         let rtlURL = URL(string: "https://radio.example/rtl/live.m3u8?token=abc")!
         let alternateURL = URL(string: "https://radio.example/rtl/live.m3u8?token=def")!
 
+        let baseline = Session(
+            stationID: rtlID,
+            streamURL: rtlURL,
+            apoloActive: true,
+            apoloRadioEnabled: true,
+            isLoadingOrPlaying: true,
+            desiredPlaying: true,
+            isInterrupted: false
+        )
+
         func ignored(
-            requestedID: String? = rtlID,
-            requestedURL: URL = rtlURL,
-            currentID: String? = rtlID,
-            currentURL: URL? = rtlURL,
-            apoloActive: Bool = true,
-            apoloRadioEnabled: Bool = true,
-            bypassApolo: Bool = false,
-            isLoadingOrPlaying: Bool = true,
-            desiredPlaying: Bool = true,
-            isInterrupted: Bool = false
+            _ session: Session,
+            requestedID: String? = nil,
+            requestedURL: URL? = nil,
+            bypassApolo: Bool = false
         ) -> Bool {
             LiveRadioDuplicateRequestPolicy.shouldSuppress(
-                requestedID: requestedID,
-                requestedURL: requestedURL,
-                currentID: currentID,
-                currentURL: currentURL,
-                apoloActive: apoloActive,
-                apoloRadioEnabled: apoloRadioEnabled,
+                requestedID: requestedID ?? rtlID,
+                requestedURL: requestedURL ?? rtlURL,
                 bypassApolo: bypassApolo,
-                isLoadingOrPlaying: isLoadingOrPlaying,
-                desiredPlaying: desiredPlaying,
-                isInterrupted: isInterrupted
+                active: session
             )
         }
 
-        // Regression for log(10): two identical RTL HLS starts in 1.231s.
-        expect(ignored(), "Second RTL request while loading or playing must not rebuild AVPlayerItem")
-        expect(!ignored(apoloActive: false), "First station load must proceed")
-        expect(!ignored(currentID: otherID), "Changing stations must proceed")
-        expect(!ignored(requestedID: otherID), "Selecting a new station must proceed")
-        expect(!ignored(requestedURL: alternateURL), "Refreshing an expired HLS URL must proceed")
-        expect(!ignored(currentURL: nil), "Unknown current URL must proceed")
-        expect(!ignored(currentURL: alternateURL), "Changed active source URL must proceed")
-        expect(!ignored(isLoadingOrPlaying: false), "Paused/idle/failed session must allow explicit retry")
-        expect(!ignored(desiredPlaying: false), "User-paused session must allow explicit restart")
-        expect(!ignored(isInterrupted: true), "Explicit selection during interruption is not silently dropped")
-        expect(!ignored(apoloRadioEnabled: false), "Turning off beta allows engine switch")
-        expect(!ignored(bypassApolo: true), "Explicit MPV fallback is never blocked")
-        expect(!ignored(requestedID: "youtube-song"), "Ordinary music must not be deduplicated")
-        expect(!ignored(requestedID: nil), "Requests without a radio ID must proceed")
-        expect(!ignored(currentID: nil), "Unknown current station must proceed")
-        expect(!ignored(requestedURL: URL(string: "https://radio.example/other.m3u8")!),
-               "A different stream under the same station ID must proceed")
+        // Regression for log(10): identical RTL HLS starts 1.231s apart.
+        expect(ignored(baseline), "Second RTL request while loading or playing is ignored")
+
+        var session = baseline
+        session = Session(
+            stationID: baseline.stationID,
+            streamURL: baseline.streamURL,
+            apoloActive: false,
+            apoloRadioEnabled: true,
+            isLoadingOrPlaying: true,
+            desiredPlaying: true,
+            isInterrupted: false
+        )
+        expect(!ignored(session), "First station load proceeds")
+        expect(!ignored(baseline, requestedID: otherID), "Selecting a new station proceeds")
+        expect(!ignored(baseline, requestedURL: alternateURL), "Refreshing expired HLS URL proceeds")
+        expect(!ignored(baseline, bypassApolo: true), "Explicit MPV fallback is not blocked")
+        expect(!ignored(baseline, requestedID: "youtube-song"), "Music must not be suppressed")
+
+        // Mutable copies keep the test independent of AVFoundation and allow
+        // each policy condition to be isolated without a giant parameter list.
+        session = baseline
+        session.stationID = otherID
+        expect(!ignored(session), "Current station ID must match")
+        session = baseline
+        session.streamURL = nil
+        expect(!ignored(session), "Unknown current URL must not suppress")
+        session = baseline
+        session.streamURL = alternateURL
+        expect(!ignored(session), "New current stream must not suppress")
+        session = baseline
+        session.apoloRadioEnabled = false
+        expect(!ignored(session), "Disabling radio beta allows engine switch")
+        session = baseline
+        session.isLoadingOrPlaying = false
+        expect(!ignored(session), "Paused/idle/failed phase permits explicit retry")
+        session = baseline
+        session.desiredPlaying = false
+        expect(!ignored(session), "User pause allows explicit restart")
+        session = baseline
+        session.isInterrupted = true
+        expect(!ignored(session), "User selection during interruption is not dropped")
+        session = baseline
+        session.apoloActive = false
+        expect(!ignored(session), "MPV active path must be unaffected")
+        expect(!ignored(baseline, requestedURL: URL(string: "https://radio.example/other.m3u8")!),
+               "Different stream URL under same ID must proceed")
+
+        // Simulated app behavior: same station while playing keeps the engine,
+        // but an explicit retry after .failed remains possible.
+        expect(ignored(baseline), "Playing state still ignores repeat")
+        session = baseline
+        session.isLoadingOrPlaying = false
+        expect(!ignored(session), "Failed state permits reloading the same RTL HLS")
 
         print("PASS: \(checks) live radio duplicate-request policy checks")
     }
