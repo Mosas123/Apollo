@@ -419,6 +419,7 @@ struct PodcastDetailView: View {
     @State private var pendingRoute: DetailRoute?
     @State private var showMoreSheet = false
     @State private var artworkSeed: Color?
+    @State private var episodeRequestSerial: UInt64 = 0
     @Environment(\.colorScheme) private var colorScheme
 
     @Environment(\.dismiss) private var dismiss
@@ -589,26 +590,24 @@ struct PodcastDetailView: View {
     }
 
     private func playEpisode(_ episode: EpisodeItem, in podcast: PodcastDetailInfo) {
+        episodeRequestSerial &+= 1
+        let requestSerial = episodeRequestSerial
         let songs = podcastSongs(podcast)
         let song = songs.first { $0.videoId == episode.videoId } ?? episode.toSongItem()
         Task {
             let saved = await EpisodePlaybackStore.shared.position(for: episode.videoId)
-            let resumeAt: TimeInterval? = if let saved, saved.position > 10, !saved.isFinished {
-                saved.position
-            } else {
-                nil
+            guard episodeRequestSerial == requestSerial else { return }
+            PlaybackQueue.play(
+                song, in: songs, log: Log.podcastDetail, context: "playEpisode"
+            )
+            // PlayerController consumes this when the real audio source is
+            // ready. Waiting for currentVideoId is unsafe: it is assigned
+            // before AVPlayer/FFmpeg have finished loading the episode.
+            if let saved, saved.position > 10, !saved.isFinished {
+                NowPlaying.shared.requestPodcastResumePosition(
+                    saved.position, for: episode.videoId
+                )
             }
-            PlaybackQueue.play(song, in: songs, log: Log.podcastDetail, context: "playEpisode")
-            guard let resumeAt else { return }
-            // Wait until this episode's file is actually loaded before seeking.
-            // A fixed delay races slow stream resolves (BotGuard etc.): the seek
-            // lands on the old file (or nothing) and the fresh load starts at 0.
-            for _ in 0..<75 {
-                try? await Task.sleep(for: .milliseconds(200))
-                if PlayerController.shared.currentVideoId == episode.videoId { break }
-            }
-            guard PlayerController.shared.currentVideoId == episode.videoId else { return }
-            PlayerController.shared.seek(to: resumeAt)
         }
     }
 }
