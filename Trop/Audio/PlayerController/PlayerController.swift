@@ -240,7 +240,8 @@ extension PlayerController {
         startAt: TimeInterval = 0,
         bypassApolo: Bool = false,
         intentGeneration: Int? = nil,
-        sourceMIMEType: String? = nil
+        sourceMIMEType: String? = nil,
+        isAtmos: Bool = false
     ) async {
         if let intentGeneration,
            intentGeneration != NowPlaying.shared.playbackGeneration {
@@ -302,7 +303,8 @@ extension PlayerController {
                 artist: artist,
                 duration: duration,
                 startAt: playbackStart,
-                sourceMIMEType: sourceMIMEType
+                sourceMIMEType: sourceMIMEType,
+                isAtmos: isAtmos
             )
             return
         }
@@ -1114,6 +1116,7 @@ extension PlayerController {
             if session.category != .playback || session.mode != .default {
                 try session.setCategory(.playback, mode: .default, policy: .longFormAudio)
             }
+            try? session.setSupportsMultichannelContent(true)
             try session.setActive(true)
         } catch {
             Log.player.error("Failed to assert audio session: \(error)")
@@ -1461,7 +1464,8 @@ extension PlayerController {
         artist: String?,
         duration: TimeInterval?,
         startAt: TimeInterval,
-        sourceMIMEType: String? = nil
+        sourceMIMEType: String? = nil,
+        isAtmos: Bool = false
     ) async {
         let oldId = sharedState.withLock { $0.currentVideoId }
         let isNewSong = oldId != nil && oldId != videoId
@@ -1546,7 +1550,8 @@ extension PlayerController {
                 audioURL: url,
                 title: title ?? NowPlaying.shared.displayTitle,
                 artist: artist ?? NowPlaying.shared.displayArtist,
-                sourceMIMEType: sourceMIMEType
+                sourceMIMEType: sourceMIMEType,
+                isAtmos: isAtmos
             )
             Log.player.info(
                 "APOLO_BETA loadReturned videoId=\(videoId ?? "nil") ms=\(Self.msSince(apoloBegan))"

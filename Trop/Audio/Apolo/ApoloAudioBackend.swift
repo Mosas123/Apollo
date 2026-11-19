@@ -29,7 +29,8 @@ final class ApoloAudioBackend {
         artist: String,
         album: String? = nil,
         artworkData: Data? = nil,
-        sourceMIMEType: String? = nil
+        sourceMIMEType: String? = nil,
+        isAtmos: Bool = false
     ) async throws {
         try await engine.load(
             url: audioURL,
@@ -40,7 +41,8 @@ final class ApoloAudioBackend {
                 album: album,
                 artworkData: artworkData
             ),
-            sourceMIMEType: sourceMIMEType
+            sourceMIMEType: sourceMIMEType,
+            isAtmos: isAtmos
         )
     }
 

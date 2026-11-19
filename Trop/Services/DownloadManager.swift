@@ -67,12 +67,16 @@ final class DownloadManager: ObservableObject {
                 preferAtmos: SettingsStore.shared.preferAtmos
             )
         case .cd:
-            return AddonQualityPreference(requireCD: true, preferHiRes: false, preferAtmos: false)
+            return AddonQualityPreference(
+                requireCD: true,
+                preferHiRes: false,
+                preferAtmos: SettingsStore.shared.preferAtmos
+            )
         case .lossless:
             return AddonQualityPreference(
                 requireCD: false,
                 preferHiRes: SettingsStore.shared.preferHiRes,
-                preferAtmos: false
+                preferAtmos: SettingsStore.shared.preferAtmos
             )
         case .auto, .high:
             return AddonQualityPreference(

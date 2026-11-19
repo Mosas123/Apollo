@@ -209,7 +209,7 @@ actor PlaybackManager {
         }
         let client = try MusicAddonClient(installation: installation)
         let mode = SettingsStore.shared.musicQualityMode
-        let atmos = mode == .auto && SettingsStore.shared.preferAtmos
+        let atmos = mode != .off && SettingsStore.shared.preferAtmos
         let streamQuality: AddonStreamQuality = atmos
             ? .max
             : (mode == .cd ? .lossless : (SettingsStore.shared.preferHiRes ? .hires : .lossless))
@@ -220,6 +220,16 @@ actor PlaybackManager {
             quality: streamQuality
         )
         guard !stream.isEncrypted else { throw MusicCatalogError.unavailableTrack }
+        let isAtmosStream = stream.qualityTier.lowercased().contains("atmos")
+            || stream.mimeType.lowercased().contains("eac3")
+            || stream.mimeType.lowercased().contains("ec+3")
+        Log.player.info(
+            "ADDON_STREAM quality=\(stream.qualityTier) mime=\(stream.mimeType) atmos=\(isAtmosStream) requested=\(atmos)"
+        )
+        if atmos, !isAtmosStream {
+            Log.player.info("ADDON_STREAM skipped: Dolby only is on")
+            throw MusicCatalogError.unavailableTrack
+        }
         resolvedSourceNames[videoId] = installation.manifest.name
 
         if case .youtube(let youTubeId) = stream.kind {
@@ -313,12 +323,16 @@ actor PlaybackManager {
         case .off:
             return nil
         case .cd:
-            return AddonQualityPreference(requireCD: true, preferHiRes: false, preferAtmos: false)
+            return AddonQualityPreference(
+                requireCD: true,
+                preferHiRes: false,
+                preferAtmos: SettingsStore.shared.preferAtmos
+            )
         case .lossless:
             return AddonQualityPreference(
                 requireCD: false,
                 preferHiRes: SettingsStore.shared.preferHiRes,
-                preferAtmos: false
+                preferAtmos: SettingsStore.shared.preferAtmos
             )
         case .auto, .high:
             return AddonQualityPreference(
@@ -1080,7 +1094,8 @@ actor PlaybackManager {
                 losslessLabel: Self.losslessLabel(result),
                 qualityLabel: Self.qualityLabel(result),
                 intentGeneration: intentGeneration,
-                sourceMIMEType: result.mimeType
+                sourceMIMEType: result.mimeType,
+                isAtmos: result.audioQuality.lowercased().contains("atmos")
             )
             let externalSourceName = sourceName(for: result, videoId: videoId)
             if await isCurrentIntent(intentGeneration) {
@@ -1258,7 +1273,8 @@ actor PlaybackManager {
             losslessLabel: Self.losslessLabel(result),
             qualityLabel: Self.qualityLabel(result),
             intentGeneration: intentGeneration,
-            sourceMIMEType: result.mimeType
+            sourceMIMEType: result.mimeType,
+            isAtmos: result.audioQuality.lowercased().contains("atmos")
         )
         let sourceName = sourceName(for: result, videoId: videoId)
         if await isCurrentIntent(intentGeneration) {
