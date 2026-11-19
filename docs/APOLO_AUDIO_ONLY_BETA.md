@@ -49,8 +49,8 @@ Trop's SwiftLint job reports pre-existing serious violations in other files; rev
 ## IPA experiment — Live Radio (PR 3, opt-in)
 
 This stacked draft integrates the already-tested `ApoloEngine` live radio
-transport in Thrum, pinned to `067ebd150d94d4120327214752e0b22c17684b03`
-(Apolo v7, simulator CI: 100 tests passing). Radio no longer uses the
+transport in Thrum, pinned to `a4b81bb8a8c85dd68f8d2f67e3e8fe0026fbdf94`
+(Apolo v8 physical-device crash-containment draft, stacked on v7). Radio no longer uses the
 finite-music `load` API: the app's adapter calls `loadLive`.
 
 ### Enable and observe
@@ -95,3 +95,27 @@ finite-music `load` API: the app's adapter calls `loadLive`.
 The existing GitHub Actions **Nightly Build** workflow runs on pull requests
 and executes `build_ipa.sh`, uploading `Trop-iOS` with `Trop.ipa` if
 the device build succeeds. No main/nightly release is modified by this draft.
+
+
+### First iPhone finding and hotfix
+
+The first radio IPA played audible audio but showed a static music
+progress bar and crashed. The iOS 27.0.1 incident was `EXC_BAD_ACCESS`
+during `AVPlayerItemMetadataOutput._pushTimedMetadataGroups` inside
+AVFCore, before the app's timed-title callback. This suggests a
+native-HLS timed-metadata handling problem, not a proven decoder bug.
+
+The second IPA experiment pins an Apolo hotfix that **does not attach**
+`AVPlayerItemMetadataOutput` on live AVPlayer items. HLS audio still works;
+**HLS timed song titles are temporarily disabled**. FFmpeg ICY titles
+still work. Treat this as crash containment, not proven root-cause resolution.
+
+The full player now displays `Connecting…`, `LIVE`, `Reconnecting…`
+or `Paused` rather than fake `0:00 / -0:00` progress. The mini-player
+shows the same connection status; neither player presents a radio seek
+slider. Radio EOF/error cannot advance Thrum's music queue.
+
+**Retest on iPhone:** select the same station that previously caused
+the crash, run at least 5 minutes, switch stations 20–30 times, then
+repeat locked/background and with AirPods. If it crashes again, save a
+fresh `.ips` from the new IPA build and compare the top frames.
