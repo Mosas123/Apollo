@@ -136,7 +136,7 @@ final class NowPlaying {
     private var progressTick = 0
     /// Bumped whenever the user starts/changes playback, so deferred autoplay
     /// work can abort instead of hijacking the new track.
-    private var playbackGeneration = 0
+    private(set) var playbackGeneration = 0
     var sleepTimerEndsAt: Date?
     @ObservationIgnored private var sleepTimerTask: Task<Void, Never>?
     @ObservationIgnored private var artworkLoadTask: Task<Void, Never>?
@@ -427,6 +427,44 @@ final class NowPlaying {
         if MusicPlaybackIdentity.isYouTube(videoId) {
             CanvasPrefetch.request(videoId: videoId, title: title, artist: self.artist, album: album)
         }
+    }
+
+    /// Clears the previous song's published payload before a new selection is
+    /// initialized. No-op when the queue already initialized this videoId.
+    /// Call it before setting `videoId` so the old title/artwork never leaks
+    /// into the new track.
+    func beginTransition(to videoId: String) {
+        guard self.videoId != videoId else { return }
+        let previous = self.videoId
+        confirmedMetadata = nil
+        publishedArtwork = nil
+        thumbnailImage = nil
+        thumbnailUIImage = nil
+        thumbnailVersion += 1
+        dominantColors = [
+            Color(red: 0.15, green: 0.15, blue: 0.2),
+            Color(red: 0.05, green: 0.05, blue: 0.08),
+        ]
+        title = ""
+        artist = ""
+        artists = []
+        albumTitle = ""
+        artistVideoId = nil
+        liveTitle = nil
+        liveSongInfo = nil
+        currentSourceName = nil
+        currentResult = nil
+        currentTime = 0
+        duration = 0
+        isPlaying = false
+        stopTimer()
+        Log.nowPlaying.info(
+            "TRANSITION begin videoId=\(videoId) previous=\(previous ?? "nil")"
+        )
+    }
+
+    func bumpPlaybackIntent() {
+        playbackGeneration += 1
     }
 
     /// Convenience pushing a `SongItem`'s metadata into the player state.
@@ -1022,6 +1060,7 @@ final class NowPlaying {
 
     private func startTimer() {
         stopTimer()
+        Log.nowPlaying.debug("TIMER start videoId=\(self.videoId ?? "nil")")
         // Add to `.common` so progress keeps updating while the user scrolls
         // or drags the slider (the default mode pauses the timer).
         let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in

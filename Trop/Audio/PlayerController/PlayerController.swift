@@ -252,6 +252,7 @@ extension PlayerController {
         }
 
         if let videoId, let title, videoId != NowPlaying.shared.videoId {
+            NowPlaying.shared.beginTransition(to: videoId)
             pendingMetadata = PendingMetadata(title: title, artist: artist, videoId: videoId, artists: artists, thumbnailUrl: thumbnailUrl)
             NowPlaying.shared.videoId = videoId
         }
@@ -1445,6 +1446,7 @@ extension PlayerController {
     ) async {
         let oldId = sharedState.withLock { $0.currentVideoId }
         let isNewSong = oldId != nil && oldId != videoId
+        let pending = pendingMetadata
         deactivateApoloPlayback()
         apoloIsActive = true
         NowPlaying.shared.activePlaybackEngine = "ApoloEngine (Beta)"
@@ -1471,6 +1473,40 @@ extension PlayerController {
         assertAudioSession()
         guard apoloIsActive, apoloGeneration == generation,
               NowPlaying.shared.videoId == videoId else { return }
+
+        // Initialize the player state once, before audio starts. `update`
+        // starts the timer and requests this song's artwork; `isPlaying`
+        // stays false so SponsorBlock cannot seek before the backend plays.
+        NowPlaying.shared.isPlaying = false
+        if let pending,
+           pending.videoId == videoId,
+           NowPlaying.shared.videoId == videoId,
+           generation == apoloGeneration {
+            NowPlaying.shared.update(
+                title: pending.title,
+                artist: pending.artist,
+                videoId: pending.videoId,
+                artists: pending.artists,
+                thumbnailUrl: pending.thumbnailUrl,
+                preserveMissingArtist: true
+            )
+            NowPlaying.shared.isPlaying = false
+            if let duration {
+                NowPlaying.shared.duration = max(0, duration)
+            }
+            Log.player.info(
+                "APOLO_BETA metadata videoId=\(pending.videoId) gen=\(generation) source=\(Self.apoloSource(url))"
+            )
+        } else if let pending {
+            Log.player.info(
+                "APOLO_BETA metadata dropped videoId=\(pending.videoId) current=\(NowPlaying.shared.videoId ?? "nil")"
+            )
+        } else {
+            Log.player.info(
+                "APOLO_BETA metadata already initialized videoId=\(videoId ?? "nil") gen=\(generation)"
+            )
+        }
+
         let backend: ApoloAudioBackend
         if let existing = apoloBackend {
             backend = existing
