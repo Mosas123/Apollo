@@ -429,8 +429,12 @@ final class NowPlaying {
             // A superseded resolver can finish after a different song starts.
             // Its result must NEVER clear that song's resolving flag, reset
             // failure counters or auto-advance the now-current queue.
-            guard self.playbackGeneration == intent,
-                  self.videoId == song.videoId else {
+            guard PlaybackIntentGuard.owns(
+                expectedGeneration: intent,
+                expectedVideoId: song.videoId,
+                generation: self.playbackGeneration,
+                videoId: self.videoId
+            ) else {
                 Log.nowPlaying.debug(
                     "PLAY_INTENT stale completion dropped context=\(logContext) videoId=\(song.videoId) gen=\(intent)"
                 )
