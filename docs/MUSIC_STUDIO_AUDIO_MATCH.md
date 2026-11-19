@@ -63,3 +63,52 @@ video IDs and whether multiple recordings exist remain to be confirmed.
   insufficient to certify exact content matching.
 
 Draft, stacked on PR #14; no main merge or release.
+
+## Second iPhone finding: NUEVAYoL (2026-11-19)
+
+The latest album-audio matcher fixed the reported "Moscow Mule" example,
+but the same tester heard the music-video audio of **NUEVAYoL** while the
+full player displayed about **3:42**. The album recording is approximately
+**3:03** (independent published catalog duration). This gives a specific
+39-second duration difference compatible with the video's extra narrative.
+
+The original matcher had **three blind spots**:
+
+1. It treated `SongItem.isVideo` (a characteristic of the *source ID*)
+   as proof the user explicitly **chose to play a video**. That suppressed
+   matching when an OMV was mistakenly present in the Songs listing.
+2. Only positively known `MUSIC_VIDEO_TYPE_OMV/UGC` sources triggered
+   matching. Album rows missing this upstream flag could slip through.
+3. A 39-second duration difference was rejected without a confirmed
+   album identity, even when the original source was known to be a video.
+
+### Revised behavior
+
+- `SongItem.recordingPreference` is a backwards-compatible optional
+  media-intent field. Search Songs taps record `.albumAudio` and
+  explicit Videos taps record `.musicVideo`. The original row's
+  `musicVideoType` / `isVideo` remains source metadata, not intent.
+  Album and older queue entries default to music-first.
+- A source marked as a video, or an *untyped source* of a known album,
+  initiates an optional search for a verified YouTube Music ATV art-track.
+  A confirmed ATV source is never rematched.
+- For a positively video-typed source, an **up-to-60-second** intro/outro
+  difference is allowed when the candidate itself is ATV and title /
+  artist identity is exact. An unverified source still needs a closer
+  duration match or verified album.
+- Duplicate ATV results are deduplicated. Distinct releases without an
+  original album identity are considered ambiguous and rejected.
+- If no reliable ATV exists, the stream is not silently relabeled as
+  studio audio; the resolver logs a `MUSIC_MATCH no verified ATV source`
+  diagnostic. The existing video-audio fallback may still play and must
+  not be interpreted as a verified studio match.
+
+### Hardware acceptance
+
+Re-test **NUEVAYoL** from **Songs** (expect album audio close to 3:03)
+and from **Videos** (expect the intentionally selected music video).
+Then retest **Moscow Mule**, a live/remix track, older saved songs,
+an unknown-type album entry, SponsorBlock, radio, local audio and Atmos.
+Capture `MUSIC_MATCH` logs if either track is still wrong.
+
+This is a beta regression fix, not evidence of perfect catalog matching.
