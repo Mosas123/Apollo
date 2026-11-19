@@ -71,7 +71,7 @@ struct PlayerSettingsView: View {
                     SettingsToggleRow("Allow Hi-Res (24-bit)", icon: "waveform.path.ecg", isOn: $settings.preferHiRes)
                 }
                 if addonCapabilities.atmos, settings.musicQualityMode != .off {
-                    SettingsToggleRow("Dolby Atmos only (E-AC3 5.1)", icon: "spatial.audio", isOn: $settings.preferAtmos)
+                    SettingsToggleRow("Allow Dolby Atmos (E-AC3 5.1)", icon: "spatial.audio", isOn: $settings.preferAtmos)
                 }
                 SettingsToggleRow("Upgrade to best quality during playback", icon: "arrow.up.circle", isOn: $settings.upgradeDuringPlayback)
                 SettingsToggleRow("Audio Normalization", icon: "speaker.wave.2", isOn: $settings.audioNormalization)
