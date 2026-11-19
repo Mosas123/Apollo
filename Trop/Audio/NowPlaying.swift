@@ -170,6 +170,8 @@ final class NowPlaying {
     @ObservationIgnored private var artworkLoadTask: Task<Void, Never>?
     @ObservationIgnored private var enrichTask: Task<Void, Never>?
     @ObservationIgnored private var liveResolveTask: Task<Void, Never>?
+    @ObservationIgnored private var radioMetadataTask: Task<Void, Never>?
+    @ObservationIgnored private var lastRadioMetadataFetch = Date.distantPast
     var lastManualSkipTime: Date?
     private var isResolvingNext = false
     private var consecutiveFailures = 0
@@ -510,6 +512,9 @@ final class NowPlaying {
         self.videoId = videoId
         self.liveTitle = nil
         self.liveSongInfo = nil
+        radioMetadataTask?.cancel()
+        radioMetadataTask = nil
+        lastRadioMetadataFetch = .distantPast
         self.radioPlaybackStatus = .connecting
         self.hasVideo = false
         self.isVideoMode = false
@@ -553,6 +558,9 @@ final class NowPlaying {
         artistVideoId = nil
         liveTitle = nil
         liveSongInfo = nil
+        radioMetadataTask?.cancel()
+        radioMetadataTask = nil
+        lastRadioMetadataFetch = .distantPast
         radioPlaybackStatus = .connecting
         currentSourceName = nil
         currentResult = nil
@@ -1251,6 +1259,7 @@ final class NowPlaying {
         icyTick += 1
         if icyTick % 4 == 0, playbackKind == .radio {
             refreshLiveTitle()
+            refreshRadioMetadataIfNeeded()
         }
         if let videoId, duration >= 600 || musicVideoType == "MUSIC_VIDEO_TYPE_PODCAST_EPISODE" {
             let vid = videoId
@@ -1266,9 +1275,56 @@ final class NowPlaying {
     /// station) and publishes it when it changes.
     private func refreshLiveTitle() {
         guard let icy = PlayerController.shared.icyTitle(), !icy.isEmpty else { return }
-        guard liveTitle != icy else { return }
-        liveTitle = icy
-        resolveLiveSong(icy)
+        guard let parsed = ICYTitleParser.parse(icy, stationName: displayTitle) else { return }
+        let display = parsed.display
+        guard liveTitle != display else { return }
+        liveTitle = display
+        resolveLiveSong(display)
+    }
+
+    /// Broadcasters without ICY (Radio Paradise AAC/MP3, etc.) get their
+    /// now-playing data from a per-station API instead.
+    private func refreshRadioMetadataIfNeeded() {
+        guard playbackKind == .radio,
+              let raw = currentStreamURL,
+              let url = URL(string: raw),
+              let provider = RadioMetadataProviders.provider(for: url, stationName: displayTitle) else {
+            return
+        }
+        guard Date().timeIntervalSince(lastRadioMetadataFetch) >= 30 else { return }
+        lastRadioMetadataFetch = Date()
+        radioMetadataTask?.cancel()
+        let stationName = displayTitle
+        radioMetadataTask = Task { [weak self] in
+            guard let data = await provider.metadata(for: url, stationName: stationName),
+                  !Task.isCancelled else { return }
+            await MainActor.run {
+                self?.applyRadioNowPlaying(data, stationName: stationName)
+            }
+        }
+    }
+
+    private func applyRadioNowPlaying(_ data: RadioNowPlaying, stationName: String) {
+        guard playbackKind == .radio else { return }
+        let artist = data.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = data.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard title.count >= 2 else { return }
+        let display = artist.isEmpty ? title : "\(artist) - \(title)"
+        if liveTitle != display {
+            liveResolveTask?.cancel()
+            liveTitle = display
+            liveSongInfo = LiveSongInfo(title: title, artist: artist, album: data.album, artwork: nil)
+        }
+        guard liveSongInfo?.artwork == nil, let coverURL = data.coverURL else { return }
+        Task { [weak self] in
+            guard let (bytes, _) = try? await URLSession.shared.data(from: coverURL),
+                  let image = UIImage(data: bytes) else { return }
+            await MainActor.run {
+                guard let self, self.playbackKind == .radio else { return }
+                self.publishArtwork(image)
+                self.liveSongInfo?.artwork = bytes
+            }
+        }
     }
 
     /// Splits an ICY title ("Artist - Title") and enriches it with a catalogue
@@ -1296,14 +1352,8 @@ final class NowPlaying {
 
     /// Splits a raw ICY stream title into artist and title.
     static func splitICY(_ raw: String) -> (artist: String, title: String) {
-        for separator in [" - ", " – ", " — "] {
-            if let range = raw.range(of: separator) {
-                let artist = raw[..<range.lowerBound].trimmingCharacters(in: .whitespaces)
-                let title = raw[range.upperBound...].trimmingCharacters(in: .whitespaces)
-                if !artist.isEmpty, !title.isEmpty {
-                    return (String(artist), String(title))
-                }
-            }
+        if let parsed = ICYTitleParser.parse(raw) {
+            return (parsed.artist, parsed.title)
         }
         return ("", raw.trimmingCharacters(in: .whitespaces))
     }
