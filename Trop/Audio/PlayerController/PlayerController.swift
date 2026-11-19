@@ -334,7 +334,7 @@ extension PlayerController {
             : ["loadfile", url.absoluteString, "replace"]
         Log.player.info(
             "TRANSITION play videoId=\(videoId ?? "nil") isNewSong=\(isNewSong) muxedActive=\(muxedActive) "
-                + "url=\(url.absoluteString.prefix(80))"
+                + "source=\(Self.apoloSource(url))"
         )
         let cmdResult = withMpv { mpv -> Int32 in
             mpv_set_property_string(mpv, "pause", "no")
@@ -1420,6 +1420,21 @@ extension PlayerController {
         }
     }
 
+    /// Log-safe source description: scheme, extension and MIME only. Never
+    /// the signed URL or its headers.
+    private static func apoloSource(_ url: URL) -> String {
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let mime = components?.queryItems?
+            .first { $0.name.lowercased() == "mime" }?
+            .value ?? "-"
+        let ext = url.pathExtension.isEmpty ? "-" : url.pathExtension
+        return "\(url.scheme ?? "-")/\(ext)/\(mime)"
+    }
+
+    private static func msSince(_ date: Date) -> Int {
+        Int(Date().timeIntervalSince(date) * 1000)
+    }
+
     private func playWithApolo(
         url: URL,
         videoId: String?,
@@ -1464,11 +1479,21 @@ extension PlayerController {
             apoloBackend = backend
         }
         backend.volume = Float(max(0, min(1, SettingsStore.shared.playerVolume)))
+        let apoloBegan = Date()
+        // The watchdog must cover the load itself: a slow asset track lookup
+        // must be able to fall back instead of waiting forever.
+        monitorApolo(url: url, videoId: videoId, generation: generation)
+        Log.player.info(
+            "APOLO_BETA begin videoId=\(videoId ?? "nil") source=\(Self.apoloSource(url))"
+        )
         do {
             try await backend.load(
                 audioURL: url,
                 title: title ?? NowPlaying.shared.displayTitle,
                 artist: artist ?? NowPlaying.shared.displayArtist
+            )
+            Log.player.info(
+                "APOLO_BETA loadReturned videoId=\(videoId ?? "nil") ms=\(Self.msSince(apoloBegan))"
             )
             guard apoloIsActive, apoloGeneration == generation,
                   NowPlaying.shared.videoId == videoId else { return }
@@ -1480,7 +1505,6 @@ extension PlayerController {
             NowPlaying.shared.currentTime = startAt
             NowPlaying.shared.duration = max(0, duration ?? 0)
             setNowPlayingMetadata()
-            monitorApolo(url: url, videoId: videoId, generation: generation)
             scheduleApoloTracking(
                 isNewSong: isNewSong,
                 videoId: videoId,
@@ -1520,6 +1544,7 @@ extension PlayerController {
         apoloMonitorTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let begun = Date()
+            var loggedPlaying = false
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(300))
                 guard !Task.isCancelled, self.apoloIsActive,
@@ -1542,6 +1567,12 @@ extension PlayerController {
                         return
                     }
                 case .playing:
+                    if !loggedPlaying {
+                        loggedPlaying = true
+                        Log.player.info(
+                            "APOLO_BETA firstPlaying videoId=\(videoId ?? "nil") ms=\(Self.msSince(begun))"
+                        )
+                    }
                     if self.playState.value != .playing {
                         self.playState.send(.playing)
                         NowPlaying.shared.isPlaying = true
@@ -1552,7 +1583,17 @@ extension PlayerController {
                         NowPlaying.shared.isPlaying = false
                     }
                 case .idle:
-                    break
+                    if Date().timeIntervalSince(begun) > 20 {
+                        Log.player.warning(
+                            "APOLO_BETA idle timeout; using mpv fallback"
+                        )
+                        self.fallbackFromApolo(
+                            url: url,
+                            videoId: videoId,
+                            generation: generation
+                        )
+                        return
+                    }
                 }
                 if backend.duration > 0, NowPlaying.shared.duration <= 0 {
                     NowPlaying.shared.duration = backend.duration
