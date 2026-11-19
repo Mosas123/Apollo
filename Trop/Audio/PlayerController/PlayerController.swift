@@ -288,6 +288,9 @@ extension PlayerController {
         // Thrum remains the sole owner of MPRemoteCommandCenter, queue and
         // AVAudioSession; radio must use Apolo.loadLive, never finite load.
         let isLiveRadio = NowPlaying.shared.playbackKind == .radio
+        if isLiveRadio {
+            NowPlaying.shared.radioPlaybackStatus = .connecting
+        }
         let useApolo = isLiveRadio
             ? SettingsStore.shared.apoloRadioBetaEnabled
             : SettingsStore.shared.apoloBetaEnabled
@@ -443,6 +446,10 @@ extension PlayerController {
         }
         playState.send(paused ? .paused : .playing)
         NowPlaying.shared.isPlaying = !paused
+        if NowPlaying.shared.playbackKind == .radio {
+            NowPlaying.shared.radioPlaybackStatus = paused
+                ? .paused : (apoloIsActive ? .connecting : .live)
+        }
         if !paused { assertAudioSession() }
         updateNowPlayingProgress()
     }
@@ -691,6 +698,9 @@ extension PlayerController {
             Log.player.debug("TRANSITION FILE_LOADED videoId=\(pendingVideoId ?? "nil") playing=\(actuallyPlaying)")
             self.playState.send(actuallyPlaying ? .playing : .paused)
             NowPlaying.shared.isPlaying = actuallyPlaying
+            if NowPlaying.shared.playbackKind == .radio {
+                NowPlaying.shared.radioPlaybackStatus = actuallyPlaying ? .live : .paused
+            }
             self.sharedState.withLock { $0.currentVideoId = pendingVideoId }
             self.sharedState.withLock { $0.pendingVideoId = nil }
             self.assertAudioSession()
@@ -1686,6 +1696,7 @@ extension PlayerController {
                     return
                 case .failed(let message):
                     if isLiveRadio {
+                        NowPlaying.shared.radioPlaybackStatus = .reconnecting
                         // Apolo itself owns three bounded reconnect attempts.
                         // Give those a grace window before switching to mpv.
                         // A shared failure deadline prevents endless resets
@@ -1700,6 +1711,10 @@ extension PlayerController {
                     self.fallbackFromApolo(url: url, videoId: videoId, generation: generation)
                     return
                 case .loading:
+                    if isLiveRadio {
+                        NowPlaying.shared.radioPlaybackStatus =
+                            loggedPlaying ? .reconnecting : .connecting
+                    }
                     if Date().timeIntervalSince(radioFailureSince ?? begun) > (isLiveRadio ? 40 : 20) {
                         Log.player.warning("APOLO_BETA loading timeout; using mpv fallback")
                         self.fallbackFromApolo(url: url, videoId: videoId, generation: generation)
@@ -1707,6 +1722,9 @@ extension PlayerController {
                     }
                 case .playing:
                     radioFailureSince = nil
+                    if isLiveRadio {
+                        NowPlaying.shared.radioPlaybackStatus = .live
+                    }
                     if !loggedPlaying {
                         loggedPlaying = true
                         Log.player.info(
@@ -1718,11 +1736,18 @@ extension PlayerController {
                         NowPlaying.shared.isPlaying = true
                     }
                 case .paused:
+                    if isLiveRadio {
+                        NowPlaying.shared.radioPlaybackStatus = .paused
+                    }
                     if self.playState.value != .paused {
                         self.playState.send(.paused)
                         NowPlaying.shared.isPlaying = false
                     }
                 case .idle:
+                    if isLiveRadio {
+                        NowPlaying.shared.radioPlaybackStatus =
+                            loggedPlaying ? .reconnecting : .connecting
+                    }
                     if Date().timeIntervalSince(radioFailureSince ?? begun) > (isLiveRadio ? 40 : 20) {
                         Log.player.warning(
                             "APOLO_BETA idle timeout; using mpv fallback"
@@ -1746,6 +1771,9 @@ extension PlayerController {
         guard apoloIsActive, apoloGeneration == generation,
               NowPlaying.shared.videoId == videoId else { return }
         let isLiveRadio = NowPlaying.shared.playbackKind == .radio
+        if isLiveRadio {
+            NowPlaying.shared.radioPlaybackStatus = .connecting
+        }
         let position = isLiveRadio ? 0 : currentTime
         if !isLiveRadio {
             NowPlaying.shared.rememberInterruptedPlayback(position, for: videoId)
