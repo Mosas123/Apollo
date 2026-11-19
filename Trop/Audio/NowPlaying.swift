@@ -153,6 +153,11 @@ final class NowPlaying {
     private static let positionKey = "nowPlaying.lastPosition"
     private var pendingResumePosition: TimeInterval?
     private var pendingResumeAt: Date?
+    /// Short-lived position from a failed Apolo stream, used only if a fresh
+    /// resolution for the same track is needed after the mpv fallback.
+    @ObservationIgnored private var interruptedPlayback: (
+        videoId: String, position: TimeInterval, expiresAt: Date
+    )?
     private static let queueIndexKey = "nowPlaying.queueIndex"
     private static let shuffleKey = "nowPlaying.shuffle"
     private static let repeatKey = "nowPlaying.repeat"
@@ -170,10 +175,27 @@ final class NowPlaying {
 
     // MARK: - Persistent queue
 
-    /// Consumes a saved position for the first play after launch.
+    /// Keep the last audible position across an Apolo -> mpv -> re-resolve
+    /// recovery, without allowing it to resume a different song or a later
+    /// user-initiated play.
+    func rememberInterruptedPlayback(_ position: TimeInterval, for videoId: String?) {
+        guard let videoId, self.videoId == videoId,
+              position.isFinite, position > 1 else { return }
+        interruptedPlayback = (
+            videoId: videoId,
+            position: position,
+            expiresAt: Date().addingTimeInterval(45)
+        )
+    }
+
+    /// Consumes a transient recovery position or the saved launch position.
     func takeResumePosition(for videoId: String?) -> TimeInterval? {
-        guard let videoId, videoId == self.videoId,
-              let position = pendingResumePosition,
+        guard let videoId, videoId == self.videoId else { return nil }
+        if let recovery = interruptedPlayback, recovery.videoId == videoId {
+            interruptedPlayback = nil
+            if recovery.expiresAt > Date() { return recovery.position }
+        }
+        guard let position = pendingResumePosition,
               let savedAt = pendingResumeAt,
               Date().timeIntervalSince(savedAt) < 86_400 else { return nil }
         pendingResumePosition = nil
@@ -733,8 +755,9 @@ final class NowPlaying {
                     videoId: videoId,
                     intent: intent
                 )
-                // Success – allow future retries for this video
-                _ = await MainActor.run { self.lastFailureAt.removeValue(forKey: videoId) }
+                // A resolved URL is not proof of audible playback. Keep the
+                // 30-second cooldown so an Apolo -> mpv -> resolve failure
+                // cannot immediately retry the same broken stream forever.
             } catch is CancellationError {
                 return
             } catch {
