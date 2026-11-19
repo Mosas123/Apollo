@@ -4,12 +4,16 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct DownloadsView: View {
     @Environment(SettingsStore.self) private var settings
     @ObservedObject private var downloadManager = DownloadManager.shared
     @State private var pendingRoute: DetailRoute?
     @State private var showMoreSheet = false
+    @State private var showingAudioImporter = false
+    @State private var importErrorMessage = ""
+    @State private var showingImportError = false
 
     private var tracks: [DownloadedTrackEntity] { downloadManager.tracks }
     private var songs: [SongItem] { tracks.map { SongItem(entity: $0) } }
@@ -31,6 +35,44 @@ struct DownloadsView: View {
         .background(Color(.systemGroupedBackground))
         .navigationTitle("Downloads")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showingAudioImporter = true
+                } label: {
+                    Label("Import Audio", systemImage: "square.and.arrow.down")
+                }
+                .accessibilityLabel("Import audio from Files")
+            }
+        }
+        .fileImporter(
+            isPresented: $showingAudioImporter,
+            allowedContentTypes: [.audio, .data],
+            allowsMultipleSelection: true
+        ) { result in
+            switch result {
+            case .success(let urls):
+                Task { @MainActor in
+                    for url in urls {
+                        do {
+                            try await downloadManager.importLocalAudio(from: url)
+                        } catch {
+                            importErrorMessage = error.localizedDescription
+                            showingImportError = true
+                            break
+                        }
+                    }
+                }
+            case .failure(let error):
+                importErrorMessage = error.localizedDescription
+                showingImportError = true
+            }
+        }
+        .alert("Could not import audio", isPresented: $showingImportError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(importErrorMessage)
+        }
         .refreshable { await downloadManager.reload() }
         .task {
             if !downloadManager.isLoaded {
@@ -54,6 +96,10 @@ struct DownloadsView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(settings.accentColor)
+            Button("Import Audio from Files") {
+                showingAudioImporter = true
+            }
+            .buttonStyle(.bordered)
         }
         .miniPlayerTracksScroll().scrollEdgeEffectHidden(true, for: .bottom)
     }
@@ -134,7 +180,8 @@ struct DownloadsView: View {
         guard !songs.isEmpty else { return }
         NowPlaying.shared.setQueue(songs, startIndex: 0)
         NowPlaying.shared.update(with: songs[0])
-        Task { await playLocal(songs[0]) }
+        let intent = NowPlaying.shared.playbackGeneration
+        Task { await playLocal(songs[0], intent: intent) }
     }
 
     private func shufflePlay() {
@@ -142,7 +189,8 @@ struct DownloadsView: View {
         guard !songs.isEmpty else { return }
         NowPlaying.shared.setQueue(songs, startIndex: 0)
         NowPlaying.shared.update(with: songs[0])
-        Task { await playLocal(songs[0]) }
+        let intent = NowPlaying.shared.playbackGeneration
+        Task { await playLocal(songs[0], intent: intent) }
     }
 
     private func playSong(_ song: SongItem) {
@@ -153,11 +201,19 @@ struct DownloadsView: View {
             NowPlaying.shared.setQueue([song], startIndex: 0)
         }
         NowPlaying.shared.update(with: song)
-        Task { await playLocal(song) }
+        let intent = NowPlaying.shared.playbackGeneration
+        Task { await playLocal(song, intent: intent) }
     }
 
-    private func playLocal(_ song: SongItem) async {
-        guard let localURL = await downloadManager.localURL(for: song.videoId) else { return }
+    private func playLocal(_ song: SongItem, intent: Int) async {
+        guard let localURL = await downloadManager.localURL(for: song.videoId) else {
+            Log.downloadManager.warning("Local audio not found for \(song.videoId)")
+            return
+        }
+        // A file lookup may suspend while the user chooses another song.
+        // Never let the older result start playback or override its metadata.
+        guard NowPlaying.shared.playbackGeneration == intent,
+              NowPlaying.shared.videoId == song.videoId else { return }
         let artists = song.artists
         let displayArtist = artists.map(\.name).joined(separator: ", ")
         await PlayerController.shared.play(
@@ -166,10 +222,13 @@ struct DownloadsView: View {
             artist: displayArtist,
             videoId: song.videoId,
             duration: TimeInterval(song.duration),
-            artists: artists
+            artists: artists,
+            intentGeneration: intent,
+            sourceMIMEType: LocalAudioFilePolicy.mimeHint(for: localURL)
         )
-        await MainActor.run {
-            NowPlaying.shared.updateVideoAvailability()
-        }
+        guard NowPlaying.shared.playbackGeneration == intent,
+              NowPlaying.shared.videoId == song.videoId else { return }
+        NowPlaying.shared.currentSourceName = "Downloaded"
+        NowPlaying.shared.updateVideoAvailability()
     }
 }
