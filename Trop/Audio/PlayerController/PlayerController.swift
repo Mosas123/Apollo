@@ -276,7 +276,9 @@ extension PlayerController {
             )
             return
         }
-        guard requestSerial == playRequestSerial else {
+        guard PlaybackIntentGuard.isLatest(
+            serial: requestSerial, latestSerial: playRequestSerial
+        ) else {
             Log.player.info(
                 "PLAY_INTENT drop superseded source request videoId=\(videoId ?? "nil") serial=\(requestSerial)"
             )
@@ -407,9 +409,13 @@ extension PlayerController {
         if isNewSong {
             await PlaybackStateService.shared.stopTracking()
         }
-        guard requestSerial == playRequestSerial else { return }
+        guard PlaybackIntentGuard.isLatest(
+            serial: requestSerial, latestSerial: playRequestSerial
+        ) else { return }
         if let videoId { await PlaybackStateService.shared.startTracking(videoId: videoId) }
-        guard requestSerial == playRequestSerial else { return }
+        guard PlaybackIntentGuard.isLatest(
+            serial: requestSerial, latestSerial: playRequestSerial
+        ) else { return }
         playState.send(.playing)
         NowPlaying.shared.isPlaying = true
         NowPlaying.shared.currentTime = playbackStart
