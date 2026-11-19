@@ -1341,7 +1341,7 @@ actor PlaybackManager {
                                uniquingKeysWith: { first, _ in first }).values
                 )
                 let releaseKeys = Set(unique.map {
-                    TextMatch.normalizeTitle($0.album ?? "")
+                    TextMatch.normalize($0.album ?? "")
                 })
                 let ambiguous = (song.album ?? "").isEmpty
                     && unique.count > 1
