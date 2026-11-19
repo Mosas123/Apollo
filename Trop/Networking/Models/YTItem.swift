@@ -292,8 +292,13 @@ struct SongItem: Codable, Hashable {
     /// persisted queue snapshots keep decoding; nil means `.music`.
     var contentKind: ContentKind?
 
-    /// True for music-video results (subtitle starts with "Video").
-    var isMusicVideo: Bool { isVideo == true }
+    /// The watch endpoint's music type is authoritative even when the
+    /// localized subtitle omits the word "Video".
+    var isMusicVideo: Bool {
+        MusicRecordingSelectionPolicy.isMusicVideo(
+            isVideo: isVideo, type: musicVideoType
+        )
+    }
 
     static func from(_ renderer: [String: Any]) -> SongItem? {
         guard let videoId = extractVideoId(renderer) else {
@@ -348,11 +353,15 @@ struct SongItem: Codable, Hashable {
         }.map { YTArtist(name: $0.name, id: $0.browseId) }
         let thumbnailUrl = extractResponsiveThumbnail(renderer)
         let stats = extractItemStats(from: segments)
+        let rowType = VideoAvailability.rowMusicVideoType(renderer)
+        let isVideo = MusicRecordingSelectionPolicy.isMusicVideo(
+            isVideo: stats.startsWithVideo ? true : nil, type: rowType
+        )
         return SongItem(
             videoId: videoId, title: title, artists: artists, album: album, albumId: albumId,
             duration: duration, thumbnailUrl: thumbnailUrl, isExplicit: false, playlistId: playlistId,
-            viewCount: stats.viewCount, year: stats.year, isVideo: stats.startsWithVideo ? true : nil,
-            musicVideoType: VideoAvailability.rowMusicVideoType(renderer)
+            viewCount: stats.viewCount, year: stats.year, isVideo: isVideo ? true : nil,
+            musicVideoType: rowType
         )
     }
 
@@ -390,11 +399,15 @@ struct SongItem: Codable, Hashable {
             }
         }
         let stats = extractItemStats(from: subSegments)
+        let rowType = VideoAvailability.rowMusicVideoType(renderer)
+        let isVideo = MusicRecordingSelectionPolicy.isMusicVideo(
+            isVideo: stats.startsWithVideo ? true : nil, type: rowType
+        )
         return SongItem(
             videoId: videoId, title: title, artists: artists, album: album, albumId: albumId,
             duration: duration, thumbnailUrl: thumbnailUrl, isExplicit: false, playlistId: playlistId,
-            viewCount: stats.viewCount, year: stats.year, isVideo: stats.startsWithVideo ? true : nil,
-            musicVideoType: VideoAvailability.rowMusicVideoType(renderer)
+            viewCount: stats.viewCount, year: stats.year, isVideo: isVideo ? true : nil,
+            musicVideoType: rowType
         )
     }
 }
