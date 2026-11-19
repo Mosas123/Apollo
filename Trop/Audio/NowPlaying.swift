@@ -1293,8 +1293,12 @@ final class NowPlaying {
         guard let parsed = ICYTitleParser.parse(icy, stationName: displayTitle) else { return }
         let display = parsed.display
         guard liveTitle != display else { return }
-        liveTitle = display
-        resolveLiveSong(display)
+        applyRadioNowPlaying(RadioNowPlaying(
+            artist: parsed.artist,
+            title: parsed.title,
+            album: nil,
+            coverURL: nil
+        ))
     }
 
     /// Broadcasters without ICY (Radio Paradise AAC/MP3, etc.) get their
