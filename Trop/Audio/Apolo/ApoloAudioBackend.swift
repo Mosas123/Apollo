@@ -16,6 +16,8 @@ final class ApoloAudioBackend {
     var state: PlaybackState { engine.state }
     var currentTime: TimeInterval { engine.currentTime }
     var duration: TimeInterval { engine.duration }
+    /// Live ID3/ICY station song title from Apolo; the app owns enrichment.
+    var liveTitle: String? { engine.liveTitle }
 
     var volume: Float {
         get { engine.volume }
@@ -43,6 +45,28 @@ final class ApoloAudioBackend {
             ),
             sourceMIMEType: sourceMIMEType,
             isAtmos: isAtmos
+        )
+    }
+
+    /// Continuous internet radio: do not use the finite-file `load` path.
+    /// Thrum still owns session, lock-screen metadata, and playback commands.
+    func loadLive(
+        stationURL: URL,
+        httpHeaders: [String: String] = [:],
+        title: String,
+        artist: String,
+        artworkData: Data? = nil,
+        sourceMIMEType: String? = nil
+    ) async throws {
+        try await engine.loadLive(
+            url: stationURL,
+            httpHeaders: httpHeaders,
+            metadata: NowPlayingMetadata(
+                title: title,
+                artist: artist,
+                artworkData: artworkData
+            ),
+            sourceMIMEType: sourceMIMEType
         )
     }
 
