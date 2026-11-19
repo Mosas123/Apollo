@@ -107,6 +107,8 @@ final class DownloadManager: ObservableObject {
     private var lastProgressTime: [String: CFTimeInterval] = [:]
     private var progressBoxes: [String: DownloadProgressBox] = [:]
     private var activeFFmpegSessions: [String: FFmpegSession] = [:]
+    /// A late completion must not unregister a newer session for this ID.
+    private var activeFFmpegTokens: [String: UUID] = [:]
 
     private var tracksById: [String: DownloadedTrackEntity] = [:]
 
@@ -1120,6 +1122,7 @@ extension DownloadManager {
             session.cancel()
         }
         activeFFmpegSessions.removeAll()
+        activeFFmpegTokens.removeAll()
     }
 
     func progressBox(for videoId: String) -> DownloadProgressBox {
@@ -1223,6 +1226,8 @@ extension DownloadManager {
         videoId: String? = nil,
         onSize: (@MainActor @Sendable (Int64) -> Void)? = nil
     ) async throws {
+        let token = UUID()
+        if let videoId { activeFFmpegTokens[videoId] = token }
         let sessionBox = FFmpegSessionBox()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -1232,7 +1237,9 @@ extension DownloadManager {
                     sessionBox: sessionBox,
                     onSize: onSize,
                     onCompletion: { [weak self] _ in
-                        guard let self, let videoId else { return }
+                        guard let self, let videoId,
+                              self.activeFFmpegTokens[videoId] == token else { return }
+                        self.activeFFmpegTokens.removeValue(forKey: videoId)
                         self.activeFFmpegSessions.removeValue(forKey: videoId)
                     }
                 )
@@ -1241,6 +1248,8 @@ extension DownloadManager {
                 // task can remove it. A previous session cannot remove its successor.
                 if let videoId, let session {
                     activeFFmpegSessions[videoId] = session
+                } else if let videoId {
+                    activeFFmpegTokens.removeValue(forKey: videoId)
                 }
                 if Task.isCancelled { session?.cancel() }
             }
@@ -1318,6 +1327,7 @@ extension DownloadManager {
         if let session = activeFFmpegSessions.removeValue(forKey: videoId) {
             session.cancel()
         }
+        activeFFmpegTokens.removeValue(forKey: videoId)
         clearProgress(for: videoId)
         downloads[videoId] = .notStarted
         tracksById.removeValue(forKey: videoId)
