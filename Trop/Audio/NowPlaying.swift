@@ -894,16 +894,25 @@ final class NowPlaying {
             }
             guard !Task.isCancelled, lastLoadedVideoId == videoId else { return }
             if isMusic {
-                // Do not enlarge a tiny source thumbnail or a 16px bitmap.
-                // Resolve the catalogue cover first, then use the same full-size
-                // CDN ladder as the rest of the player on a catalogue miss.
-                thumbnailUIImage = nil
-                thumbnailImage = nil
-                thumbnailVersion &+= 1
+                // The artwork selected in Album / Quick Picks is the UI's
+                // trusted source. A cross-catalogue best guess must not
+                // replace it with a video thumbnail or another release.
+                // Resize the SAME CDN image when supported, never switch
+                // to the YouTube video's maxres/hqdefault variants.
+                if let thumb, !thumb.isEmpty {
+                    loadThumbnailFromCDN(
+                        videoId: videoId,
+                        thumbnailUrl: thumb,
+                        preferSourceArtwork: true
+                    )
+                    return
+                }
+                // Only an entry with no selected artwork may use a
+                // verified canonical album image or YouTube fallback.
                 let resolved = await resolveCanonicalArtwork(videoId: videoId)
                 guard !Task.isCancelled, lastLoadedVideoId == videoId else { return }
                 if !resolved {
-                    loadThumbnailFromCDN(videoId: videoId, thumbnailUrl: thumb)
+                    loadThumbnailFromCDN(videoId: videoId, thumbnailUrl: nil)
                 }
             } else {
                 enrichArtwork(videoId: videoId, replaceArtwork: true)
@@ -1095,11 +1104,20 @@ final class NowPlaying {
         return min(image.size.width, image.size.height) * image.scale
     }
 
-    private func loadThumbnailFromCDN(videoId: String, thumbnailUrl: String? = nil, fallbackImage: UIImage? = nil) {
+    private func loadThumbnailFromCDN(
+        videoId: String,
+        thumbnailUrl: String? = nil,
+        fallbackImage: UIImage? = nil,
+        preferSourceArtwork: Bool = false
+    ) {
         // Best source first: the track's own artwork upgraded to full
         // resolution, then ytimg step-downs, then the guaranteed hqdefault.
         var candidates: [String] = []
-        if MusicPlaybackIdentity.isExternal(videoId), let thumbnailUrl {
+        if preferSourceArtwork, let thumbnailUrl, !thumbnailUrl.isEmpty {
+            let upgraded = ArtworkURLs.highRes(thumbnailUrl) ?? thumbnailUrl
+            candidates.append(upgraded)
+            if thumbnailUrl != upgraded { candidates.append(thumbnailUrl) }
+        } else if MusicPlaybackIdentity.isExternal(videoId), let thumbnailUrl {
             candidates.append(thumbnailUrl)
         } else if let upgraded = ArtworkURLs.highRes(thumbnailUrl) {
             if let maxRes = ArtworkURLs.maxResVariant(upgraded) {
@@ -1110,7 +1128,7 @@ final class NowPlaying {
             }
             candidates.append(upgraded)
         }
-        if !MusicPlaybackIdentity.isExternal(videoId) {
+        if !preferSourceArtwork, !MusicPlaybackIdentity.isExternal(videoId) {
             let fallback = Self.artworkURL(for: videoId)
             // Missing track metadata still deserves the complete resolution
             // ladder, not only the 480px video thumbnail.
