@@ -537,7 +537,8 @@ struct FullPlayerView: View {
                         .tracking(1.2)
                         .foregroundStyle(.white.opacity(0.6))
                 }
-                if settings.apoloBetaEnabled, np.playbackKind == .music {
+                if (settings.apoloBetaEnabled && np.playbackKind == .music)
+                    || (settings.apoloRadioBetaEnabled && np.playbackKind == .radio) {
                     Text(np.activePlaybackEngine.uppercased())
                         .font(.system(size: 10, weight: .semibold))
                         .tracking(0.7)
