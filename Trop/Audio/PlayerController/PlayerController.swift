@@ -176,9 +176,11 @@ final class PlayerController {
         mpvHandle.withLock { if let box = $0 { mpv_wakeup(box.value) } }
     }
 
-    /// The stream's ICY title (live song on Shoutcast/Icecast radio), if any.
+    /// Radio titles come from whichever engine actually owns playback.
+    /// Never read a stale mpv ICY property while Apolo plays a station.
     func icyTitle() -> String? {
-        withMpv { mpv -> String? in
+        if apoloIsActive { return apoloBackend?.liveTitle }
+        return withMpv { mpv -> String? in
             guard let cstr = mpv_get_property_string(mpv, "icy-title") else { return nil }
             defer { mpv_free(UnsafeMutableRawPointer(cstr)) }
             let value = String(cString: cstr)
@@ -282,13 +284,19 @@ extension PlayerController {
             return
         }
 
-        // Audio-only beta: route music and podcasts through Apolo while Thrum
-        // owns the queue, commands, artwork and audio session. Keep live radio
-        // on mpv; Apolo's HTTP AVIO does not support segmented/live streams.
+        // Experimental music and live radio use separate switches.
+        // Thrum remains the sole owner of MPRemoteCommandCenter, queue and
+        // AVAudioSession; radio must use Apolo.loadLive, never finite load.
+        let isLiveRadio = NowPlaying.shared.playbackKind == .radio
+        let useApolo = isLiveRadio
+            ? SettingsStore.shared.apoloRadioBetaEnabled
+            : SettingsStore.shared.apoloBetaEnabled
+        let scheme = url.scheme?.lowercased() ?? ""
         if !bypassApolo,
-           SettingsStore.shared.apoloBetaEnabled,
-           NowPlaying.shared.playbackKind != .radio,
-           ["file", "http", "https"].contains(url.scheme?.lowercased() ?? "") {
+           useApolo,
+           (isLiveRadio
+                ? ["http", "https"].contains(scheme)
+                : ["file", "http", "https"].contains(scheme)) {
             var playbackStart = startAt > 0 ? startAt : skipStart
             if startAt == 0,
                let resume = NowPlaying.shared.takeResumePosition(for: videoId),
@@ -304,7 +312,8 @@ extension PlayerController {
                 duration: duration,
                 startAt: playbackStart,
                 sourceMIMEType: sourceMIMEType,
-                isAtmos: isAtmos
+                isAtmos: isAtmos,
+                isLiveRadio: isLiveRadio
             )
             return
         }
@@ -1425,7 +1434,7 @@ extension Array where Element == String {
     }
 }
 
-// MARK: - ApoloEngine beta (music and podcasts)
+// MARK: - ApoloEngine beta (music, podcasts, and opt-in live radio)
 
 extension PlayerController {
     /// Releases the experimental renderer before mpv takes over. Also makes
@@ -1465,14 +1474,16 @@ extension PlayerController {
         duration: TimeInterval?,
         startAt: TimeInterval,
         sourceMIMEType: String? = nil,
-        isAtmos: Bool = false
+        isAtmos: Bool = false,
+        isLiveRadio: Bool = false
     ) async {
         let oldId = sharedState.withLock { $0.currentVideoId }
         let isNewSong = oldId != nil && oldId != videoId
         let pending = pendingMetadata
         deactivateApoloPlayback()
         apoloIsActive = true
-        NowPlaying.shared.activePlaybackEngine = "ApoloEngine (Beta)"
+        NowPlaying.shared.activePlaybackEngine = isLiveRadio
+            ? "ApoloEngine (Radio Beta)" : "ApoloEngine (Beta)"
         let generation = apoloGeneration
         pendingURL = nil
         pendingMetadata = nil
@@ -1541,37 +1552,56 @@ extension PlayerController {
         let apoloBegan = Date()
         // The watchdog must cover the load itself: a slow asset track lookup
         // must be able to fall back instead of waiting forever.
-        monitorApolo(url: url, videoId: videoId, generation: generation)
+        monitorApolo(
+            url: url, videoId: videoId,
+            generation: generation, isLiveRadio: isLiveRadio
+        )
         Log.player.info(
             "APOLO_BETA begin videoId=\(videoId ?? "nil") kind=\(NowPlaying.shared.playbackKind) source=\(Self.apoloSource(url))"
         )
         do {
-            try await backend.load(
-                audioURL: url,
-                title: title ?? NowPlaying.shared.displayTitle,
-                artist: artist ?? NowPlaying.shared.displayArtist,
-                sourceMIMEType: sourceMIMEType,
-                isAtmos: isAtmos
-            )
+            if isLiveRadio {
+                try await backend.loadLive(
+                    stationURL: url,
+                    title: title ?? NowPlaying.shared.displayTitle,
+                    artist: artist ?? NowPlaying.shared.displayArtist,
+                    sourceMIMEType: sourceMIMEType
+                )
+            } else {
+                try await backend.load(
+                    audioURL: url,
+                    title: title ?? NowPlaying.shared.displayTitle,
+                    artist: artist ?? NowPlaying.shared.displayArtist,
+                    sourceMIMEType: sourceMIMEType,
+                    isAtmos: isAtmos
+                )
+            }
             Log.player.info(
                 "APOLO_BETA loadReturned videoId=\(videoId ?? "nil") ms=\(Self.msSince(apoloBegan))"
             )
             guard apoloIsActive, apoloGeneration == generation,
                   NowPlaying.shared.videoId == videoId else { return }
-            if startAt > 0 { await backend.seek(to: startAt) }
+            // Live streams have no seekable timeline or resume position.
+            if !isLiveRadio, startAt > 0 {
+                await backend.seek(to: startAt)
+            }
             guard apoloIsActive, apoloGeneration == generation else { return }
             backend.play()
             playState.send(.playing)
             NowPlaying.shared.isPlaying = true
-            NowPlaying.shared.currentTime = startAt
-            NowPlaying.shared.duration = max(0, duration ?? 0)
+            NowPlaying.shared.currentTime = isLiveRadio ? 0 : startAt
+            NowPlaying.shared.duration = isLiveRadio ? 0 : max(0, duration ?? 0)
             setNowPlayingMetadata()
-            scheduleApoloTracking(
-                isNewSong: isNewSong,
-                videoId: videoId,
-                generation: generation
+            if !isLiveRadio {
+                scheduleApoloTracking(
+                    isNewSong: isNewSong,
+                    videoId: videoId,
+                    generation: generation
+                )
+            }
+            Log.player.info(
+                "APOLO_BETA active kind=\(isLiveRadio ? "radio" : "audio") videoId=\(videoId ?? "nil")"
             )
-            Log.player.info("APOLO_BETA active audio only videoId=\(videoId ?? "nil")")
         } catch {
             guard apoloIsActive, apoloGeneration == generation else { return }
             Log.player.error("APOLO_BETA load failed: \(error)")
@@ -1600,12 +1630,18 @@ extension PlayerController {
         }
     }
 
-    private func monitorApolo(url: URL, videoId: String?, generation: UInt64) {
+    private func monitorApolo(
+        url: URL,
+        videoId: String?,
+        generation: UInt64,
+        isLiveRadio: Bool
+    ) {
         apoloMonitorTask?.cancel()
         apoloMonitorTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let begun = Date()
             var loggedPlaying = false
+            var radioFailureSince: Date?
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(300))
                 guard !Task.isCancelled, self.apoloIsActive,
@@ -1614,20 +1650,38 @@ extension PlayerController {
                       let backend = self.apoloBackend else { return }
                 switch backend.state {
                 case .finished:
-                    self.playState.send(.stopped)
-                    NowPlaying.shared.stopped(videoId: videoId, isEof: true)
+                    if isLiveRadio {
+                        // A live station ending is a stream error, not an EOF
+                        // that advances the user's music queue.
+                        self.fallbackFromApolo(url: url, videoId: videoId, generation: generation)
+                    } else {
+                        self.playState.send(.stopped)
+                        NowPlaying.shared.stopped(videoId: videoId, isEof: true)
+                    }
                     return
                 case .failed(let message):
+                    if isLiveRadio {
+                        // Apolo itself owns three bounded reconnect attempts.
+                        // Give those a grace window before switching to mpv.
+                        // A shared failure deadline prevents endless resets
+                        // across .loading/.failed transitions.
+                        let since = radioFailureSince ?? Date()
+                        radioFailureSince = since
+                        if Date().timeIntervalSince(since) <= 35 {
+                            continue
+                        }
+                    }
                     Log.player.error("APOLO_BETA renderer error: \(message)")
                     self.fallbackFromApolo(url: url, videoId: videoId, generation: generation)
                     return
                 case .loading:
-                    if Date().timeIntervalSince(begun) > 20 {
+                    if Date().timeIntervalSince(radioFailureSince ?? begun) > (isLiveRadio ? 40 : 20) {
                         Log.player.warning("APOLO_BETA loading timeout; using mpv fallback")
                         self.fallbackFromApolo(url: url, videoId: videoId, generation: generation)
                         return
                     }
                 case .playing:
+                    radioFailureSince = nil
                     if !loggedPlaying {
                         loggedPlaying = true
                         Log.player.info(
@@ -1644,7 +1698,7 @@ extension PlayerController {
                         NowPlaying.shared.isPlaying = false
                     }
                 case .idle:
-                    if Date().timeIntervalSince(begun) > 20 {
+                    if Date().timeIntervalSince(radioFailureSince ?? begun) > (isLiveRadio ? 40 : 20) {
                         Log.player.warning(
                             "APOLO_BETA idle timeout; using mpv fallback"
                         )
@@ -1666,8 +1720,11 @@ extension PlayerController {
     private func fallbackFromApolo(url: URL, videoId: String?, generation: UInt64) {
         guard apoloIsActive, apoloGeneration == generation,
               NowPlaying.shared.videoId == videoId else { return }
-        let position = currentTime
-        NowPlaying.shared.rememberInterruptedPlayback(position, for: videoId)
+        let isLiveRadio = NowPlaying.shared.playbackKind == .radio
+        let position = isLiveRadio ? 0 : currentTime
+        if !isLiveRadio {
+            NowPlaying.shared.rememberInterruptedPlayback(position, for: videoId)
+        }
         let title = NowPlaying.shared.displayTitle
         let artist = NowPlaying.shared.displayArtist
         let duration = NowPlaying.shared.duration
