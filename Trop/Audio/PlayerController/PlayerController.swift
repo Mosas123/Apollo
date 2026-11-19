@@ -1784,7 +1784,7 @@ extension PlayerController {
             guard let self else { return }
             let begun = Date()
             var loggedPlaying = false
-            var radioFailureSince: Date?
+            var liveRadioWatchdog = ApoloLiveRadioWatchdog()
             var finiteAudioWatchdog = ApoloFiniteAudioWatchdog()
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(300))
@@ -1833,11 +1833,15 @@ extension PlayerController {
                         NowPlaying.shared.radioPlaybackStatus = .reconnecting
                         // Apolo itself owns three bounded reconnect attempts.
                         // Give those a grace window before switching to mpv.
-                        // A shared failure deadline prevents endless resets
-                        // across .loading/.failed transitions.
-                        let since = radioFailureSince ?? Date()
-                        radioFailureSince = since
-                        if Date().timeIntervalSince(since) <= 35 {
+                        // Share one deadline across .failed/.loading/.idle,
+                        // but never reuse a station-age deadline after a
+                        // successful .playing state or iOS interruption.
+                        if !liveRadioWatchdog.hasTimedOut(
+                            now: Date(),
+                            timeout: 35,
+                            isInterrupted: self.apoloAudioInterruptionActive,
+                            interruptionEndedAt: self.apoloLastInterruptionEndedAt
+                        ) {
                             continue
                         }
                     }
@@ -1850,8 +1854,13 @@ extension PlayerController {
                             loggedPlaying ? .reconnecting : .connecting
                     }
                     if isLiveRadio {
-                        if Date().timeIntervalSince(radioFailureSince ?? begun) > 40 {
-                            Log.player.warning("APOLO_BETA loading timeout; using mpv fallback")
+                        if liveRadioWatchdog.hasTimedOut(
+                            now: Date(),
+                            timeout: 40,
+                            isInterrupted: self.apoloAudioInterruptionActive,
+                            interruptionEndedAt: self.apoloLastInterruptionEndedAt
+                        ) {
+                            Log.player.warning("APOLO_BETA radio continuous loading timeout; using mpv fallback")
                             self.fallbackFromApolo(
                                 url: url, videoId: videoId, generation: generation
                             )
@@ -1870,7 +1879,7 @@ extension PlayerController {
                     }
                 case .playing:
                     finiteAudioWatchdog.reset()
-                    radioFailureSince = nil
+                    liveRadioWatchdog.reset()
                     if isLiveRadio {
                         NowPlaying.shared.radioPlaybackStatus = .live
                     }
@@ -1887,6 +1896,7 @@ extension PlayerController {
                     }
                 case .paused:
                     finiteAudioWatchdog.reset()
+                    liveRadioWatchdog.reset()
                     if isLiveRadio {
                         NowPlaying.shared.radioPlaybackStatus = .paused
                     }
@@ -1900,7 +1910,12 @@ extension PlayerController {
                             loggedPlaying ? .reconnecting : .connecting
                     }
                     let idleTimedOut = isLiveRadio
-                        ? Date().timeIntervalSince(radioFailureSince ?? begun) > 40
+                        ? liveRadioWatchdog.hasTimedOut(
+                            now: Date(),
+                            timeout: 40,
+                            isInterrupted: self.apoloAudioInterruptionActive,
+                            interruptionEndedAt: self.apoloLastInterruptionEndedAt
+                        )
                         : finiteAudioWatchdog.hasTimedOut(
                             now: Date(),
                             isInterrupted: self.apoloAudioInterruptionActive,
