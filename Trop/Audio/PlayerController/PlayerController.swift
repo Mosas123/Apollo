@@ -297,8 +297,10 @@ extension PlayerController {
            (isLiveRadio
                 ? ["http", "https"].contains(scheme)
                 : ["file", "http", "https"].contains(scheme)) {
-            var playbackStart = startAt > 0 ? startAt : skipStart
-            if startAt == 0,
+            // A station is a continuous live session: no intro skip or
+            // saved playback position may be applied to it.
+            var playbackStart = isLiveRadio ? 0 : (startAt > 0 ? startAt : skipStart)
+            if !isLiveRadio, startAt == 0,
                let resume = NowPlaying.shared.takeResumePosition(for: videoId),
                resume > 5,
                resume < (duration ?? .greatestFiniteMagnitude) - 5 {
