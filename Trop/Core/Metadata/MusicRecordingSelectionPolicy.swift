@@ -45,7 +45,11 @@ enum MusicRecordingSelectionPolicy {
         guard isStudioAudio(candidateType),
               !wantedArtist.isEmpty,
               candidateArtists.contains(where: {
-                  TextMatch.artistsMatch($0, wantedArtist)
+                  // Cross-catalogue fuzzy artist matching accepts
+                  // "Bad Bunny Tribute" as a substring of "Bad Bunny".
+                  // Recording substitution requires stricter identity.
+                  TextMatch.normalizeArtist($0)
+                      == TextMatch.normalizeArtist(wantedArtist)
               }),
               TextMatch.recordingsMatch(wantedTitle, candidateTitle),
               !TextMatch.isSuspiciousVersion(candidateTitle)
