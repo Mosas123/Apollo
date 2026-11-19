@@ -21,6 +21,12 @@ enum RadioMetadataProviders {
         if TritonProvider.matches(streamURL: streamURL) {
             return TritonProvider()
         }
+        if BBCRadioProvider.matches(streamURL: streamURL, stationName: stationName) {
+            return BBCRadioProvider()
+        }
+        if RadioFranceProvider.matches(streamURL: streamURL, stationName: stationName) {
+            return RadioFranceProvider()
+        }
         return nil
     }
 }
@@ -155,5 +161,155 @@ struct TritonProvider: RadioMetadataProvider {
                 string.substring(with: match.range(at: 2))
         }
         return result
+    }
+}
+
+
+/// BBC Radio publishes the current music segment through the public RMS API.
+/// Stream URLs use Akamai hosts, so the service id comes from the path/name.
+struct BBCRadioProvider: RadioMetadataProvider {
+    static func matches(streamURL: URL, stationName: String) -> Bool {
+        let haystack = (streamURL.absoluteString + " " + stationName).lowercased()
+        return haystack.contains("bbc") && (haystack.contains("bbc_") || haystack.contains("bbc radio"))
+    }
+
+    func metadata(for streamURL: URL, stationName: String) async -> RadioNowPlaying? {
+        guard let service = Self.serviceID(streamURL: streamURL, stationName: stationName) else { return nil }
+        var components = URLComponents(string: "https://rms.api.bbc.co.uk/v2/services/\(service)/segments/latest")
+        components?.queryItems = []
+        guard let url = components?.url else { return nil }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse,
+              http.statusCode == 200,
+              let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
+            return nil
+        }
+        let segment = payload.data.first { $0.segmentType == "music" && ($0.offset?.nowPlaying ?? false) }
+            ?? payload.data.first { $0.segmentType == "music" }
+        guard let segment,
+              let artist = segment.titles?.primary?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let title = segment.titles?.secondary?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !artist.isEmpty, title.count >= 2 else { return nil }
+        let cover = segment.imageURL?
+            .replacingOccurrences(of: "{recipe}", with: "400x400")
+            .flatMap(URL.init(string:))
+        return RadioNowPlaying(artist: artist, title: title, album: nil, coverURL: cover)
+    }
+
+    static func serviceID(streamURL: URL, stationName: String) -> String? {
+        if let range = streamURL.absoluteString.range(of: #"bbc_[a-z0-9_]+"#, options: [.regularExpression, .caseInsensitive]) {
+            return String(streamURL.absoluteString[range]).lowercased()
+        }
+        let name = stationName.lowercased()
+        let map: [(String, String)] = [
+            ("1xtra", "bbc_1xtra"),
+            ("radio 1", "bbc_radio_one"),
+            ("radio 2", "bbc_radio_two"),
+            ("radio 3", "bbc_radio_three"),
+            ("radio 4 extra", "bbc_radio_four_extra"),
+            ("radio 4", "bbc_radio_fourfm"),
+            ("radio 5 sports extra", "bbc_radio_five_live_sports_extra"),
+            ("radio 5", "bbc_radio_five_live"),
+            ("6 music", "bbc_6music"),
+            ("asian network", "bbc_asian_network"),
+            ("world service", "bbc_world_service"),
+            ("radio scotland", "bbc_radio_scotland_fm"),
+            ("radio wales", "bbc_radio_wales_fm"),
+            ("radio ulster", "bbc_radio_ulster"),
+            ("radio cymru", "bbc_radio_cymru")
+        ]
+        return map.first { name.contains($0.0) }?.1
+    }
+
+    private struct Payload: Decodable {
+        let data: [Segment]
+    }
+
+    private struct Segment: Decodable {
+        let segmentType: String?
+        let titles: Titles?
+        let imageURL: String?
+        let offset: Offset?
+
+        enum CodingKeys: String, CodingKey {
+            case segmentType = "segment_type"
+            case titles
+            case imageURL = "image_url"
+            case offset
+        }
+    }
+
+    private struct Titles: Decodable {
+        let primary: String?
+        let secondary: String?
+    }
+
+    private struct Offset: Decodable {
+        let nowPlaying: Bool?
+        enum CodingKeys: String, CodingKey { case nowPlaying = "now_playing" }
+    }
+}
+
+/// Radio France exposes live metadata per station id (Inter 1, Info 2,
+/// Musique 4, Culture 5, Mouv 6, FIP 7).
+struct RadioFranceProvider: RadioMetadataProvider {
+    static func matches(streamURL: URL, stationName: String) -> Bool {
+        let haystack = (streamURL.absoluteString + " " + stationName).lowercased()
+        return haystack.contains("radiofrance.fr")
+    }
+
+    func metadata(for streamURL: URL, stationName: String) async -> RadioNowPlaying? {
+        guard let stationID = Self.stationID(streamURL: streamURL, stationName: stationName) else { return nil }
+        var request = URLRequest(url: URL(string: "https://api.radiofrance.fr/livemeta/pull/\(stationID)")!)
+        request.timeoutInterval = 8
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse,
+              http.statusCode == 200,
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let steps = root["steps"] as? [String: Any] else {
+            return nil
+        }
+        let now = Date().timeIntervalSince1970
+        var candidates: [[String: Any]] = []
+        for value in steps.values {
+            guard let step = value as? [String: Any] else { continue }
+            let start = (step["start"] as? NSNumber)?.doubleValue ?? 0
+            let end = (step["end"] as? NSNumber)?.doubleValue ?? .greatestFiniteMagnitude
+            guard start <= now, now <= end else { continue }
+            let title = (step["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let authors = ((step["authors"] as? [String]) ?? []).joined(separator: ", ")
+            guard title.count >= 2, !authors.isEmpty else { continue }
+            candidates.append(step)
+        }
+        guard let best = candidates.max(by: {
+            ((($0["start"] as? NSNumber)?.doubleValue) ?? 0) < ((($1["start"] as? NSNumber)?.doubleValue) ?? 0)
+        }) else { return nil }
+        let artist = ((best["authors"] as? [String]) ?? []).joined(separator: ", ")
+        let title = (best["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let album = (best["titreAlbum"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cover = (best["visual"] as? String).flatMap(URL.init(string:))
+        return RadioNowPlaying(
+            artist: artist,
+            title: title,
+            album: (album?.isEmpty == false) ? album : nil,
+            coverURL: cover
+        )
+    }
+
+    static func stationID(streamURL: URL, stationName: String) -> Int? {
+        let path = streamURL.path.lowercased()
+        let name = stationName.lowercased()
+        let haystack = path + " " + name
+        if haystack.contains("fip") { return 7 }
+        if haystack.contains("franceinter") || haystack.contains("france inter") { return 1 }
+        if haystack.contains("franceinfo") || haystack.contains("france info") { return 2 }
+        if haystack.contains("francemusique") || haystack.contains("france musique") { return 4 }
+        if haystack.contains("franceculture") || haystack.contains("france culture") { return 5 }
+        if haystack.contains("mouv") { return 6 }
+        return nil
     }
 }

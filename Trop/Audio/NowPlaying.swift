@@ -10,6 +10,7 @@ import Foundation
 import Observation
 import Nuke
 import SwiftUI
+import UIKit
 
 /// The song currently playing on a radio stream (from ICY metadata), enriched
 /// with canonical metadata and artwork when available.
@@ -171,7 +172,12 @@ final class NowPlaying {
     @ObservationIgnored private var enrichTask: Task<Void, Never>?
     @ObservationIgnored private var liveResolveTask: Task<Void, Never>?
     @ObservationIgnored private var radioMetadataTask: Task<Void, Never>?
+    @ObservationIgnored private var radioCoverTask: Task<Void, Never>?
     @ObservationIgnored private var lastRadioMetadataFetch = Date.distantPast
+    @ObservationIgnored private var radioMetadataFailures = 0
+    @ObservationIgnored private var radioMetadataCooldownUntil: Date?
+    @ObservationIgnored private var lastRadioCoverURL: URL?
+    private static let radioCoverCache = NSCache<NSURL, UIImage>()
     var lastManualSkipTime: Date?
     private var isResolvingNext = false
     private var consecutiveFailures = 0
@@ -514,7 +520,12 @@ final class NowPlaying {
         self.liveSongInfo = nil
         radioMetadataTask?.cancel()
         radioMetadataTask = nil
+        radioCoverTask?.cancel()
+        radioCoverTask = nil
         lastRadioMetadataFetch = .distantPast
+        radioMetadataFailures = 0
+        radioMetadataCooldownUntil = nil
+        lastRadioCoverURL = nil
         self.radioPlaybackStatus = .connecting
         self.hasVideo = false
         self.isVideoMode = false
@@ -560,7 +571,12 @@ final class NowPlaying {
         liveSongInfo = nil
         radioMetadataTask?.cancel()
         radioMetadataTask = nil
+        radioCoverTask?.cancel()
+        radioCoverTask = nil
         lastRadioMetadataFetch = .distantPast
+        radioMetadataFailures = 0
+        radioMetadataCooldownUntil = nil
+        lastRadioCoverURL = nil
         radioPlaybackStatus = .connecting
         currentSourceName = nil
         currentResult = nil
@@ -1286,25 +1302,39 @@ final class NowPlaying {
     /// now-playing data from a per-station API instead.
     private func refreshRadioMetadataIfNeeded() {
         guard playbackKind == .radio,
+              isPlaying,
+              UIApplication.shared.applicationState == .active,
               let raw = currentStreamURL,
               let url = URL(string: raw),
               let provider = RadioMetadataProviders.provider(for: url, stationName: displayTitle) else {
             return
         }
+        if let until = radioMetadataCooldownUntil, Date() < until { return }
         guard Date().timeIntervalSince(lastRadioMetadataFetch) >= 30 else { return }
         lastRadioMetadataFetch = Date()
         radioMetadataTask?.cancel()
         let stationName = displayTitle
         radioMetadataTask = Task { [weak self] in
-            guard let data = await provider.metadata(for: url, stationName: stationName),
-                  !Task.isCancelled else { return }
+            let data = await provider.metadata(for: url, stationName: stationName)
+            guard !Task.isCancelled else { return }
             await MainActor.run {
-                self?.applyRadioNowPlaying(data, stationName: stationName)
+                guard let self else { return }
+                if let data {
+                    self.radioMetadataFailures = 0
+                    self.radioMetadataCooldownUntil = nil
+                    self.applyRadioNowPlaying(data)
+                } else {
+                    self.radioMetadataFailures += 1
+                    if self.radioMetadataFailures >= 3 {
+                        self.radioMetadataCooldownUntil = Date().addingTimeInterval(300)
+                        self.radioMetadataFailures = 0
+                    }
+                }
             }
         }
     }
 
-    private func applyRadioNowPlaying(_ data: RadioNowPlaying, stationName: String) {
+    private func applyRadioNowPlaying(_ data: RadioNowPlaying) {
         guard playbackKind == .radio else { return }
         let artist = data.artist.trimmingCharacters(in: .whitespacesAndNewlines)
         let title = data.title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1314,11 +1344,23 @@ final class NowPlaying {
             liveResolveTask?.cancel()
             liveTitle = display
             liveSongInfo = LiveSongInfo(title: title, artist: artist, album: data.album, artwork: nil)
+            lastRadioCoverURL = nil
+        } else if liveSongInfo?.album == nil {
+            liveSongInfo?.album = data.album
         }
         guard liveSongInfo?.artwork == nil, let coverURL = data.coverURL else { return }
-        Task { [weak self] in
+        if let cached = Self.radioCoverCache.object(forKey: coverURL as NSURL) {
+            publishArtwork(cached)
+            liveSongInfo?.artwork = cached.pngData()
+            return
+        }
+        guard lastRadioCoverURL != coverURL else { return }
+        lastRadioCoverURL = coverURL
+        radioCoverTask?.cancel()
+        radioCoverTask = Task { [weak self] in
             guard let (bytes, _) = try? await URLSession.shared.data(from: coverURL),
                   let image = UIImage(data: bytes) else { return }
+            Self.radioCoverCache.setObject(image, forKey: coverURL as NSURL)
             await MainActor.run {
                 guard let self, self.playbackKind == .radio else { return }
                 self.publishArtwork(image)
