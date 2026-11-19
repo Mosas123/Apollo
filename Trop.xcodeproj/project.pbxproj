@@ -201,6 +201,9 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				es,
+				fr,
+				"pt-BR",
 				Base,
 				zh,
 			);

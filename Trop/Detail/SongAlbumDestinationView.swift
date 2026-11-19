@@ -18,11 +18,11 @@ struct SongAlbumDestinationView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ContentUnavailableView {
-                    Label(lookupFailed ? "Couldn't load album" : "Album unavailable", systemImage: "square.stack")
+                    Label(LocalizedStringKey(lookupFailed ? "Couldn't load album" : "Album unavailable"), systemImage: "square.stack")
                 } description: {
-                    Text(lookupFailed
+                    Text(LocalizedStringKey(lookupFailed
                          ? "Check your connection and try again."
-                         : "No matching album was found for this song.")
+                         : "No matching album was found for this song."))
                 } actions: {
                     Button("Try Again") { attempt += 1 }
                 }

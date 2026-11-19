@@ -39,8 +39,8 @@ struct LastFMSettingsView: View {
                             .overlay(Circle().stroke(Color.white.opacity(0.08), lineWidth: 1))
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(username.isEmpty ? "Last.fm User" : username).font(.headline)
-                            Text(username.isEmpty ? "Connected to Last.fm" : "@\(username)").font(.subheadline).foregroundStyle(.secondary)
+                            Text(username.isEmpty ? String(localized: "Last.fm User") : username).font(.headline)
+                            Text(username.isEmpty ? String(localized: "Connected to Last.fm") : "@\(username)").font(.subheadline).foregroundStyle(.secondary)
                         }
                         Spacer()
                         Button("Logout", role: .destructive) {
@@ -140,7 +140,7 @@ struct LastFMSettingsView: View {
                 Text("Scrobble Configuration")
             } footer: {
                 // swiftlint:disable:next line_length
-                Text("Scrobble after \(Int(scrobbleDelayPercent*100))% of track or \(DurationFormat.shortDuration(scrobbleDelaySeconds)), whichever comes first. Tracks shorter than \(DurationFormat.shortDuration(minDuration)) are ignored.")
+                Text(AppStrings.format("Register a listen after %ld%% of the song or %@, whichever comes first. Songs shorter than %@ are skipped.", Int(scrobbleDelayPercent * 100), DurationFormat.shortDuration(scrobbleDelaySeconds), DurationFormat.shortDuration(minDuration)))
             }
         }
         .navigationTitle("Last.fm")

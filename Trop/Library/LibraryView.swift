@@ -37,7 +37,7 @@ struct LibraryView: View {
     }
     private var autoPlaylists: [AutoPlaylistInfo] {
         [
-            AutoPlaylistInfo(id: "liked", title: "Liked Songs", icon: "heart.fill", subtitle: "\(likedSongCount) songs", route: .likedSongs),
+            AutoPlaylistInfo(id: "liked", title: "Liked Songs", icon: "heart.fill", subtitle: AppStrings.songs(likedSongCount), route: .likedSongs),
             AutoPlaylistInfo(id: "downloads", title: "Downloads", icon: "arrow.down.circle.fill",
                              subtitle: downloadsSubtitle, route: nil, detailRoute: .downloads),
             AutoPlaylistInfo(id: "top100", title: "My Top 100", icon: "trophy.fill", subtitle: "Top 100", route: .topSongs(limit: 100))
@@ -47,7 +47,7 @@ struct LibraryView: View {
     private var downloadsSubtitle: String {
         downloadManager.persistedDownloadCount == 0
             ? "Offline"
-            : "\(downloadManager.persistedDownloadCount) songs"
+            : AppStrings.songs(downloadManager.persistedDownloadCount)
     }
 
     enum LibraryFilter: String, CaseIterable {
@@ -117,7 +117,7 @@ struct LibraryView: View {
                     get: { playlistToDelete != nil },
                     set: { if !$0 { playlistToDelete = nil } }
                 ),
-                message: Text("Are you sure you want to delete \"\(playlistToDelete?.name ?? "")\"?"),
+                message: Text(AppStrings.format("Delete “%@”?", playlistToDelete?.name ?? "")),
                 confirmTitle: "Delete"
             ) {
                 if let p = playlistToDelete {
@@ -154,6 +154,12 @@ struct LibraryView: View {
         }
         .scrollIndicators(.automatic)
         .miniPlayerTracksScroll(headerOffset: quantizedHeaderOffset).scrollEdgeEffectHidden(true, for: .bottom)
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("trop.likeChanged"))) { _ in
+            Task { await loadContent() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("trop.libraryChanged"))) { _ in
+            Task { await loadContent() }
+        }
     }
 
     /// Coalesces scroll-offset writes into ~8pt steps so the list isn't
@@ -240,7 +246,7 @@ struct LibraryView: View {
                                         .lineLimit(1)
                                         .font(.callout)
                                     if album.songCount > 0 {
-                                        Text("\(album.songCount) songs")
+                                        Text(AppStrings.songs(album.songCount))
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
@@ -279,7 +285,7 @@ struct LibraryView: View {
                     itemCell(
                         url: playlist.thumbnailUrl,
                         title: playlist.name,
-                        subtitle: playlistSongCounts[playlist.id].map { "\($0) songs" }
+                        subtitle: playlistSongCounts[playlist.id].map { AppStrings.songs($0) }
                     )
                 }
                 .buttonStyle(.plain)
@@ -322,7 +328,7 @@ struct LibraryView: View {
                     itemCell(
                         url: album.thumbnailUrl,
                         title: album.title,
-                        subtitle: album.songCount > 0 ? "\(album.songCount) songs" : nil
+                        subtitle: album.songCount > 0 ? AppStrings.songs(album.songCount) : nil
                     )
                 }
                 .buttonStyle(.plain)

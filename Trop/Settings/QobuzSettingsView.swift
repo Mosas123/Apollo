@@ -30,14 +30,11 @@ struct QobuzSettingsView: View {
             } header: {
                 Text("Your Qobuz account")
             } footer: {
-                Text(
-                    "Use credentials you are authorized to use. Full-track streaming requires "
-                    + "an eligible Qobuz account and permission to use the API. No community tokens are bundled."
-                )
+                Text("Use credentials you are authorized to use. Full-track streaming requires an eligible Qobuz account and permission to use the API. No community tokens are bundled.")
             }
 
             Section {
-                LabeledContent("Connection", value: isConfigured ? "Configured" : "Not configured")
+                LabeledContent("Connection", value: isConfigured ? String(localized: "Configured") : String(localized: "Not configured"))
                 if isConfigured {
                     Button("Remove credentials", role: .destructive) {
                         removeCredentials()
@@ -73,9 +70,9 @@ struct QobuzSettingsView: View {
                 appId = ""
                 appSecret = ""
                 userAuthToken = ""
-                status = "Saved securely. Search again to see eligible Qobuz tracks."
+                status = String(localized: "Saved securely. Search again to see eligible Qobuz tracks.")
             } catch {
-                status = "Could not save credentials. Check the fields and try again."
+                status = String(localized: "Could not save credentials. Check the fields and try again.")
             }
             isSaving = false
         }
@@ -91,9 +88,9 @@ struct QobuzSettingsView: View {
                 appId = ""
                 appSecret = ""
                 userAuthToken = ""
-                status = "Qobuz credentials removed."
+                status = String(localized: "Qobuz credentials removed.")
             } catch {
-                status = "Could not remove credentials from Keychain."
+                status = String(localized: "Could not remove credentials from Keychain.")
             }
             isSaving = false
         }

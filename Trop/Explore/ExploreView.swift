@@ -216,7 +216,7 @@ private struct MoodDetailView: View {
                     ContentUnavailableView(
                         "Nothing here",
                         systemImage: "square.grid.2x2",
-                        description: Text("Nothing found for \(mood.title).")
+                        description: Text(AppStrings.format("Nothing found for %@.", NSLocalizedString(mood.title, comment: "Mood name")))
                     )
                 } else {
                     ScrollView {

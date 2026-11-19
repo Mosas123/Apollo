@@ -50,6 +50,12 @@ struct LibrarySongsView: View {
         .navigationTitle("Songs")
         .navigationBarTitleDisplayMode(.large)
         .task { await load() }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("trop.likeChanged"))) { _ in
+            Task { await load() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("trop.libraryChanged"))) { _ in
+            Task { await load() }
+        }
     }
 
     private func load() async {

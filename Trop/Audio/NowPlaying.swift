@@ -27,6 +27,17 @@ enum PlaybackKind: Sendable {
     case radio
 }
 
+/// Display metadata for one playback identity. Original SongItem artist/album
+/// IDs remain untouched and continue to be used for navigation.
+struct PlaybackMetadataSnapshot: Sendable {
+    let videoId: String
+    let title: String
+    let artist: String
+    let album: String?
+    let artworkURL: String?
+    let source: String?
+}
+
 @MainActor
 @Observable
 final class NowPlaying {
@@ -43,6 +54,9 @@ final class NowPlaying {
     var albumTitle = ""
     var videoId: String?
     var artists: [YTArtist] = []
+    private var confirmedMetadata: (videoId: String, value: ResolvedMetadata)?
+    private var publishedArtwork: (videoId: String, url: String)?
+    private var displayedArtworkVideoId: String?
     var isPlaying = false
     /// True while the current stream is lossless (FLAC / Qobuz CD). Drives the
     /// player's "Lossless" badge.
@@ -56,6 +70,11 @@ final class NowPlaying {
     /// Current stream URL + lossless label, kept to roll back a failed upgrade.
     var currentStreamURL: String?
     var currentLosslessLabel: String?
+    /// Human name of the source currently feeding the player (add-on name,
+    /// "Qobuz", "Downloaded"…), used by the details sheet.
+    var currentSourceName: String?
+    /// The stream actually playing, so details never show a stale cached one.
+    var currentResult: PlaybackResult?
     var currentTime: TimeInterval = 0
     var duration: TimeInterval = 0
     var progress: Float {
@@ -129,6 +148,9 @@ final class NowPlaying {
     private var lastFailureAt: [String: Date] = [:]
 
     private static let queueKey = "nowPlaying.queue"
+    private static let positionKey = "nowPlaying.lastPosition"
+    private var pendingResumePosition: TimeInterval?
+    private var pendingResumeAt: Date?
     private static let queueIndexKey = "nowPlaying.queueIndex"
     private static let shuffleKey = "nowPlaying.shuffle"
     private static let repeatKey = "nowPlaying.repeat"
@@ -145,6 +167,17 @@ final class NowPlaying {
     }
 
     // MARK: - Persistent queue
+
+    /// Consumes a saved position for the first play after launch.
+    func takeResumePosition(for videoId: String?) -> TimeInterval? {
+        guard let videoId, videoId == self.videoId,
+              let position = pendingResumePosition,
+              let savedAt = pendingResumeAt,
+              Date().timeIntervalSince(savedAt) < 86_400 else { return nil }
+        pendingResumePosition = nil
+        pendingResumeAt = nil
+        return position
+    }
 
     private func restoreQueueIfNeeded() {
         guard SettingsStore.shared.persistQueue,
@@ -164,6 +197,17 @@ final class NowPlaying {
         isRepeatOn = UserDefaults.standard.bool(forKey: Self.repeatKey)
         queueIndex = max(0, queueIndex)
         lastPersistedQueue = songs
+        if let saved = UserDefaults.standard.dictionary(forKey: Self.positionKey),
+           let savedId = saved["videoId"] as? String,
+           let position = saved["position"] as? Double,
+           let at = saved["at"] as? Double,
+           queueSongs.indices.contains(queueIndex),
+           queueSongs[queueIndex].videoId == savedId,
+           Date().timeIntervalSince1970 - at < 86_400 {
+            pendingResumePosition = position
+            pendingResumeAt = Date(timeIntervalSince1970: at)
+            currentTime = position
+        }
     }
 
     func persistQueueState() {
@@ -195,6 +239,12 @@ final class NowPlaying {
         originalQueue = nil
         isShuffleOn = false
         persistQueueState()
+        queueDidChange()
+    }
+
+    /// Posted after any queue mutation so playback can warm the new next songs.
+    func queueDidChange() {
+        NotificationCenter.default.post(name: .tropQueueChanged, object: nil)
     }
 
     /// Ensures `queueIndex` points at a valid entry
@@ -236,6 +286,7 @@ final class NowPlaying {
         queueIndex = prefix.count
         isShuffleOn = true
         persistQueueState()
+        queueDidChange()
     }
 
     /// Restore the original (unshuffled) queue order.
@@ -252,6 +303,7 @@ final class NowPlaying {
         originalQueue = nil
         isShuffleOn = false
         persistQueueState()
+        queueDidChange()
     }
 
     func moveQueueSongs(from source: IndexSet, to destination: Int) {
@@ -259,6 +311,7 @@ final class NowPlaying {
         queueSongs.move(fromOffsets: source, toOffset: destination)
         repairQueueIndex()
         persistQueueState()
+        queueDidChange()
     }
 
     func repeatCurrent() {
@@ -337,6 +390,10 @@ final class NowPlaying {
         thumbnailUrl: String? = nil,
         preserveMissingArtist: Bool = false
     ) {
+        if self.videoId != videoId {
+            confirmedMetadata = nil
+            publishedArtwork = nil
+        }
         self.isPlaying = true
         enrichTask?.cancel()
         liveResolveTask?.cancel()
@@ -413,11 +470,54 @@ final class NowPlaying {
         Task { await ImagePreloader.shared.append(urls) }
     }
 
-    /// Artist string from `artists`, falling back to `artist`.
+    /// All playback surfaces, including the lock screen, read this snapshot.
+    /// Resolved credits take precedence over the original navigable credits.
+    var currentMetadata: PlaybackMetadataSnapshot? {
+        guard let videoId else { return nil }
+        let confirmed = confirmedMetadata.flatMap { $0.videoId == videoId ? $0.value : nil }
+        let resolvedArtist = confirmed?.artist ?? ""
+        let resolvedTitle = confirmed?.title ?? ""
+        let resolvedAlbum = confirmed?.album ?? ""
+        let name = resolvedArtist.isEmpty ? artist : resolvedArtist
+        let trackTitle = resolvedTitle.isEmpty ? title : resolvedTitle
+        let album = resolvedAlbum.isEmpty ? (albumTitle.isEmpty ? nil : albumTitle) : resolvedAlbum
+        return PlaybackMetadataSnapshot(
+            videoId: videoId, title: trackTitle,
+            artist: name.isEmpty ? artistDisplayString(from: artists) : name,
+            album: album, artworkURL: publishedArtwork.flatMap { $0.videoId == videoId ? $0.url : nil },
+            source: confirmed?.source
+        )
+    }
+
+    func metadataSnapshot(for videoId: String) -> PlaybackMetadataSnapshot? {
+        guard self.videoId == videoId else { return nil }
+        return currentMetadata
+    }
+
+    func artwork(for videoId: String) -> UIImage? {
+        guard self.videoId == videoId, displayedArtworkVideoId == videoId else { return nil }
+        return thumbnailUIImage
+    }
+
+    var displayTitle: String { currentMetadata?.title ?? title }
+    var displayAlbumTitle: String { currentMetadata?.album ?? albumTitle }
+
     var displayArtist: String {
-        let fromArray = artistDisplayString(from: artists)
-        if !fromArray.isEmpty { return fromArray }
-        return artist
+        currentMetadata?.artist ?? artist
+    }
+
+    /// The caller supplies a verified catalogue result for this exact video.
+    /// A late response must never replace the newly selected song's metadata.
+    func acceptResolvedMetadata(_ metadata: ResolvedMetadata, videoId: String, replaceExisting: Bool = false) {
+        guard self.videoId == videoId else { return }
+        // Visible rows may supply an initial result; playback's own verified
+        // lookup is authoritative. A later row must not change the release.
+        guard replaceExisting || confirmedMetadata?.videoId != videoId else { return }
+        confirmedMetadata = (videoId, metadata)
+        if !metadata.title.isEmpty { title = metadata.title }
+        if !metadata.artist.isEmpty { artist = metadata.artist }
+        if let album = metadata.album, !album.isEmpty { albumTitle = album }
+        PlayerController.shared.setNowPlayingMetadata()
     }
 
     func stopped(videoId: String?, isEof: Bool = true) {
@@ -477,6 +577,7 @@ final class NowPlaying {
             queueSongs = items
             queueIndex = 0
             isShuffleOn = false
+            queueDidChange()
             let first = items[0]
             update(with: first)
             try? await PlaybackManager.shared.resolveAndPlay(videoId: first.videoId)
@@ -500,6 +601,7 @@ final class NowPlaying {
                 self.queueSongs = songs
                 self.queueIndex = 0
                 self.isShuffleOn = false
+                self.queueDidChange()
                 let first = songs[0]
                 update(with: first)
                 try await PlaybackManager.shared.resolveAndPlay(videoId: first.videoId)
@@ -660,10 +762,7 @@ final class NowPlaying {
         if let resolved {
             guard TextMatch.recordingsMatch(resolved.title, title),
                   TextMatch.artistsMatch(resolved.artist, artist) else { return false }
-            if !resolved.title.isEmpty { self.title = resolved.title }
-            if !resolved.artist.isEmpty { self.artist = resolved.artist }
-            if let album = resolved.album, !album.isEmpty { self.albumTitle = album }
-            PlayerController.shared.setNowPlayingMetadata()
+            acceptResolvedMetadata(resolved, videoId: videoId, replaceExisting: true)
         }
         // A remaster/live qualifier may prevent a verified track match. Its
         // known release can still supply artwork, without rewriting recording
@@ -678,6 +777,7 @@ final class NowPlaying {
         guard !Task.isCancelled, lastLoadedVideoId == videoId,
               Self.artworkSide(image) > minimumArtworkSide else { return false }
         resolvedArtworkVideoId = videoId
+        publishedArtwork = (videoId, artworkURL.absoluteString)
         publishArtwork(image)
         PlayerController.shared.setNowPlayingMetadata()
         return true
@@ -733,20 +833,14 @@ final class NowPlaying {
             guard let resolved else { return }
             guard !Task.isCancelled, lastLoadedVideoId == videoId else { return }
 
-            if kind == .episode || kind == .podcast {
-                if !resolved.title.isEmpty { self.title = resolved.title }
-                if !resolved.artist.isEmpty { self.artist = resolved.artist }
-                if let album = resolved.album, !album.isEmpty { self.albumTitle = album }
-            } else {
+            if kind != .episode && kind != .podcast {
                 let query = TextMatch.recordingQuery(title: title, artist: artist)
                 guard TextMatch.recordingsMatch(resolved.title, query.title) else { return }
                 if !artist.isEmpty {
                     guard TextMatch.artistsMatch(resolved.artist, query.artist) else { return }
                 }
-                if !resolved.title.isEmpty { self.title = resolved.title }
-                if !resolved.artist.isEmpty { self.artist = resolved.artist }
-                if let album = resolved.album, !album.isEmpty { self.albumTitle = album }
             }
+            self.acceptResolvedMetadata(resolved, videoId: videoId, replaceExisting: true)
 
             guard let artworkString = ArtworkURLs.highRes(resolved.artworkURL?.absoluteString),
                   let artworkURL = URL(string: artworkString),
@@ -756,6 +850,7 @@ final class NowPlaying {
             }
             guard lastLoadedVideoId == videoId else { return }
             resolvedArtworkVideoId = videoId
+            publishedArtwork = (videoId, artworkURL.absoluteString)
             publishArtwork(image)
             PlayerController.shared.setNowPlayingMetadata()
         }
@@ -803,6 +898,7 @@ final class NowPlaying {
     private func publishArtwork(_ image: UIImage) {
         let cropped = image.centerCroppedSquare()
         thumbnailUIImage = cropped
+        displayedArtworkVideoId = videoId
         thumbnailImage = Image(uiImage: cropped)
         thumbnailVersion &+= 1
         updateDominantColors(from: cropped)
@@ -863,6 +959,7 @@ final class NowPlaying {
             if let cached = ArtworkLoader.cachedImage(for: url), Self.isUsableArtwork(cached, for: url),
                fallbackImage.map({ Self.artworkSide(cached) > Self.artworkSide($0) }) ?? true {
                 publishArtwork(cached)
+                publishedArtwork = (videoId, url.absoluteString)
                 paintedIndex = index
                 break
             }
@@ -887,6 +984,7 @@ final class NowPlaying {
                     await MainActor.run {
                         guard self.lastLoadedVideoId == videoId, self.resolvedArtworkVideoId != videoId else { return }
                         self.publishArtwork(platformImage)
+                        self.publishedArtwork = (videoId, url.absoluteString)
                     }
                     return
                 } catch {
@@ -940,6 +1038,14 @@ final class NowPlaying {
         // `updateNowPlayingProgress`; polling it every tick doubled the
         // synchronous mpv reads on the main actor.
         progressTick += 1
+        if progressTick % 20 == 0, isPlaying, let videoId {
+            let payload: [String: Any] = [
+                "videoId": videoId,
+                "position": currentTime,
+                "at": Date().timeIntervalSince1970
+            ]
+            UserDefaults.standard.set(payload, forKey: Self.positionKey)
+        }
         if progressTick % 4 == 0 {
             PlayerController.shared.updateNowPlayingProgress()
         }
@@ -1107,4 +1213,9 @@ private func _isJunkArtistSegment(_ segment: String) -> Bool {
         return true
     }
     return false
+}
+
+
+extension Notification.Name {
+    static let tropQueueChanged = Notification.Name("trop.queueChanged")
 }

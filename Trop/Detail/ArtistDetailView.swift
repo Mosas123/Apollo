@@ -446,7 +446,7 @@ struct ArtistDetailView: View {
                 }
             }
             Button { copyArtistLink() } label: {
-                Label(linkCopied ? "Link Copied" : "Copy Link",
+                Label(LocalizedStringKey(linkCopied ? "Link Copied" : "Copy Link"),
                       systemImage: linkCopied ? "checkmark" : "link")
             }
         } label: {
@@ -648,7 +648,7 @@ struct ArtistDetailView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(isUpdatingSubscription)
-                    .accessibilityLabel(artist.isSubscribed ? "Unfollow artist" : "Follow artist")
+                    .accessibilityLabel(LocalizedStringKey(artist.isSubscribed ? "Unfollow artist" : "Follow artist"))
                 }
 
             }
@@ -1076,6 +1076,7 @@ struct ArtistDetailView: View {
                 entity.channelId = channelId
                 do {
                     try await DatabaseService.shared.save(entity)
+                    NotificationCenter.default.post(name: Notification.Name("trop.libraryChanged"), object: nil)
                     // Guest favorites belong to this device, not a Google account.
                     if await CookieStore().isLoggedIn() {
                         failureStage = "YouTube Music sync"
@@ -1101,7 +1102,7 @@ struct ArtistDetailView: View {
                 if viewModel.artist?.browseId == artist.browseId {
                     viewModel.artist?.isSubscribed = artist.isSubscribed
                     subscriptionErrorMessage = failureStage == "local storage"
-                        ? "Couldn't save the favorite on this device. Your previous selection was restored."
+                        ? String(localized: "Couldn't save the favorite on this device. Your previous selection was restored.")
                         : Self.subscriptionFailureMessage(error)
                     showSubscriptionError = true
                 }
@@ -1113,19 +1114,19 @@ struct ArtistDetailView: View {
         if let apiError = error as? InnerTubeError {
             switch apiError {
             case .sessionExpired:
-                return "Your YouTube Music session has expired. Sign in again to update your subscription."
+                return String(localized: "Your YouTube Music session has expired. Sign in again to update your subscription.")
             case .httpError(let code, _):
                 if code == 401 || code == 403 {
-                    return "YouTube Music couldn't authorize this change. Sign in again and retry."
+                    return String(localized: "YouTube Music couldn't authorize this change. Sign in again and retry.")
                 }
-                return "YouTube Music rejected the change (HTTP \(code)). Your previous selection was restored."
+                return String.localizedStringWithFormat(NSLocalizedString("YouTube Music rejected the change (HTTP %ld). Your previous selection was restored.", comment: "Favorite update rejected"), code)
             default: break
             }
         }
         if error is URLError {
-            return "Couldn't connect to YouTube Music. Check your connection and try again."
+            return String(localized: "Couldn't connect to YouTube Music. Check your connection and try again.")
         }
-        return "Couldn't save the change. Your previous selection was restored. Please try again."
+        return String(localized: "Couldn't save the change. Your previous selection was restored. Please try again.")
     }
 
 }

@@ -50,7 +50,7 @@ struct StorageSettingsView: View {
 
     private func row(_ title: String, bytes: Int64) -> some View {
         HStack {
-            Text(title)
+            Text(LocalizedStringKey(title))
             Spacer()
             Text(Self.format(bytes))
                 .foregroundStyle(.secondary)

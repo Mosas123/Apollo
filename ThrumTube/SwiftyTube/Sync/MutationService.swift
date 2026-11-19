@@ -94,7 +94,10 @@ public actor MutationService {
         }
     }
 
-    public func likeSong(videoId: String) async throws {
+    /// Likes are local-first: the song is saved in the device library even when
+    /// the YouTube Music account is a guest, offline or rate-limited. The remote
+    /// call only mirrors the change; its failure never undoes the local like.
+    public func likeSong(videoId: String, syncRemote: Bool = true) async throws {
         var song: SyncSong
         if let existing = try await store.fetchSong(id: videoId) {
             song = existing
@@ -105,18 +108,12 @@ public actor MutationService {
         song.liked = true
         song.modifyDate = Date()
         try await store.saveSong(song)
-        let applied = song
-        try await OptimisticMutation.attemptingRemote(
-            { _ = try await self.client.like(videoId: videoId) },
-            rollback: {
-                var restored = applied
-                restored.liked = false
-                try? await self.store.saveSong(restored)
-            }
-        )
+        guard syncRemote else { return }
+        _ = try? await client.like(videoId: videoId)
     }
 
-    public func unlikeSong(videoId: String) async throws {
+    /// Mirror of `likeSong`: the local unlike sticks even if the account call fails.
+    public func unlikeSong(videoId: String, syncRemote: Bool = true) async throws {
         var song: SyncSong
         if let existing = try await store.fetchSong(id: videoId) {
             song = existing
@@ -127,15 +124,8 @@ public actor MutationService {
         song.liked = false
         song.modifyDate = Date()
         try await store.saveSong(song)
-        let applied = song
-        try await OptimisticMutation.attemptingRemote(
-            { _ = try await self.client.unlike(videoId: videoId) },
-            rollback: {
-                var restored = applied
-                restored.liked = true
-                try? await self.store.saveSong(restored)
-            }
-        )
+        guard syncRemote else { return }
+        _ = try? await client.unlike(videoId: videoId)
     }
 
     public func addToLibrary(videoId: String, addToken: String) async throws {

@@ -20,6 +20,7 @@ public enum AudioQuality: String, Sendable, Hashable, Identifiable, CaseIterable
 /// Download quality preference.
 public enum DownloadQuality: String, Sendable, Hashable, Identifiable, CaseIterable, Codable {
     case auto
+    case lossless
     case high
     case standard
 

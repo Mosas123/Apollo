@@ -81,10 +81,10 @@ public extension InnerTubeClient {
         }
         guard !DurationCache.isPending(videoId) else { return nil }
         DurationCache.markPending(videoId)
+        defer { DurationCache.clearPending(videoId) }
         do {
             return try await fetchDuration(videoId: videoId)
         } catch {
-            DurationCache.clearPending(videoId)
             return nil
         }
     }

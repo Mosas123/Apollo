@@ -99,7 +99,7 @@ struct FullPlayerView: View {
                                 showLyrics = false
                             }
                         }
-                        .accessibilityLabel(showLyrics ? "Close lyrics" : "Collapse player")
+                        .accessibilityLabel(LocalizedStringKey(showLyrics ? "Close lyrics" : "Collapse player"))
 
                     if showLyrics {
                         LyricsView(
@@ -281,17 +281,17 @@ struct FullPlayerView: View {
     private var navigationSong: SongItem? {
         guard np.playbackKind == .music, let videoID = np.videoId else { return nil }
         var song = currentSong ?? SongItem(
-            videoId: videoID, title: np.title,
-            artists: np.artists.isEmpty ? [YTArtist(name: np.artist)] : np.artists,
-            album: np.albumTitle.isEmpty ? nil : np.albumTitle,
+            videoId: videoID, title: np.displayTitle,
+            artists: np.artists.isEmpty ? [YTArtist(name: np.displayArtist)] : np.artists,
+            album: np.displayAlbumTitle.isEmpty ? nil : np.displayAlbumTitle,
             duration: np.duration.isFinite ? Int(max(0, np.duration)) : 0,
             thumbnailUrl: nil, isExplicit: false
         )
-        if song.artists.isEmpty, !np.artist.isEmpty {
-            song.artists = [YTArtist(name: np.artist)]
+        if song.artists.isEmpty, !np.displayArtist.isEmpty {
+            song.artists = [YTArtist(name: np.displayArtist)]
         }
-        if song.album?.isEmpty != false, !np.albumTitle.isEmpty {
-            song.album = np.albumTitle
+        if song.album?.isEmpty != false, !np.displayAlbumTitle.isEmpty {
+            song.album = np.displayAlbumTitle
         }
         return song
     }
@@ -304,12 +304,12 @@ struct FullPlayerView: View {
     private var canOpenArtist: Bool {
         guard let song = navigationSong else { return false }
         return song.artists.contains { $0.id?.isEmpty == false }
-            || !np.artist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !np.displayArtist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !song.artistNamesDisplay.isEmpty
     }
 
     private var currentAlbumSubtitle: String? {
-        if !np.albumTitle.isEmpty { return np.albumTitle }
+        if !np.displayAlbumTitle.isEmpty { return np.displayAlbumTitle }
         if let album = currentSong?.album, !album.isEmpty { return album }
         return nil
     }
@@ -355,7 +355,7 @@ struct FullPlayerView: View {
                 .foregroundStyle(.primary)
                 .frame(width: 30)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.body)
                 if let subtitle, !subtitle.isEmpty {
                     Text(subtitle)
@@ -387,7 +387,7 @@ struct FullPlayerView: View {
         if let id = song.artists.first(where: { $0.id?.isEmpty == false })?.id {
             pendingRoute = .artist(browseId: id)
         } else {
-            let name = np.artist.isEmpty ? song.artistNamesDisplay : np.artist
+            let name = np.displayArtist.isEmpty ? song.artistNamesDisplay : np.displayArtist
             pendingRoute = .songArtist(song, name: name)
         }
     }
@@ -485,7 +485,7 @@ struct FullPlayerView: View {
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(liveSaveStatus ?? "EN RADIO AHORA")
+                Text(liveSaveStatus ?? String(localized: "On Air Now"))
                     .font(.system(size: 9, weight: .bold))
                     .tracking(1)
                     .foregroundStyle(.white.opacity(0.55))
@@ -517,7 +517,7 @@ struct FullPlayerView: View {
     }
 
     private func saveLive(_ live: LiveSongInfo) async {
-        liveSaveStatus = "GUARDANDO…"
+        liveSaveStatus = String(localized: "Saving…")
         liveSaveStatus = await RadioLiveSaver.download(artist: live.artist, title: live.title)
         try? await Task.sleep(for: .seconds(3))
         liveSaveStatus = nil
@@ -538,7 +538,7 @@ struct FullPlayerView: View {
                         .foregroundStyle(.white.opacity(0.6))
                 }
                 PlayerTitleBlock(
-                    title: np.title,
+                    title: np.displayTitle,
                     artist: playerArtistLine,
                     spacing: 5,
                     titleFont: .title2.weight(.bold),
@@ -562,7 +562,7 @@ struct FullPlayerView: View {
                         .frame(width: 36, height: 36)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(isLiked ? "Favorited" : "Favorite")
+                .accessibilityLabel(LocalizedStringKey(isLiked ? "Favorited" : "Favorite"))
 
                 if np.queueSongs.indices.contains(np.queueIndex) {
                     PlayerOptionsButton {
@@ -648,9 +648,9 @@ struct FullPlayerView: View {
                     artworkImage
                     CanvasVideoView(
                         videoId: np.videoId,
-                        title: np.title,
-                        artist: np.artist,
-                        album: np.albumTitle.isEmpty ? nil : np.albumTitle,
+                        title: np.displayTitle,
+                        artist: np.displayArtist,
+                        album: np.displayAlbumTitle.isEmpty ? nil : np.displayAlbumTitle,
                         isPlaying: np.isPlaying,
                         enabled: settings.canvasEnabled,
                         onDominantColorsChange: { canvasDominantColors = $0 }

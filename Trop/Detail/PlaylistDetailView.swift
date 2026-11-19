@@ -753,11 +753,11 @@ struct AddSongToPlaylistView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 4))
 
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(song.title)
+                                    Text(NowPlaying.shared.metadataSnapshot(for: song.id)?.title ?? song.title)
                                         .font(.subheadline)
                                         .fontWeight(.medium)
                                         .lineLimit(1)
-                                    if let artist = song.artistName {
+                                    if let artist = NowPlaying.shared.metadataSnapshot(for: song.id)?.artist ?? song.artistName {
                                         Text(artist)
                                             .font(.caption)
                                             .foregroundColor(.secondary)

@@ -57,7 +57,7 @@ struct CommentsSheet: View {
                 }
             }
             .accessibilityElement(children: .contain)
-            .accessibilityLabel(songTitle.map { "Comments for \($0)" } ?? "Comments")
+            .accessibilityLabel(songTitle.map { AppStrings.format("Comments for %@", $0) } ?? String(localized: "Comments"))
         }
         .appSheetChrome([.medium, .large])
         .sheet(item: $reportingComment) { comment in
@@ -175,7 +175,7 @@ struct CommentsSheet: View {
                             .foregroundStyle(settings.accentColor)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(editingComment == nil ? "Post comment" : "Save comment")
+                    .accessibilityLabel(LocalizedStringKey(editingComment == nil ? "Post comment" : "Save comment"))
                 }
             }
             .padding(.horizontal, 14)
@@ -524,7 +524,7 @@ private struct CommentRowView: View {
                         .foregroundStyle(comment.voteState == .liked ? accent : Color.secondary)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(comment.voteState == .liked ? "Unlike" : "Like")
+                    .accessibilityLabel(LocalizedStringKey(comment.voteState == .liked ? "Unlike" : "Like"))
 
                     Button {
                         onVote(comment, .dislike)
@@ -534,7 +534,7 @@ private struct CommentRowView: View {
                             .foregroundStyle(comment.voteState == .disliked ? accent : Color.secondary)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(comment.voteState == .disliked ? "Remove dislike" : "Dislike")
+                    .accessibilityLabel(LocalizedStringKey(comment.voteState == .disliked ? "Remove dislike" : "Dislike"))
 
                     if comment.replyCount > 0 || comment.replyContinuation != nil {
                         Button(action: onToggleReplies) {
@@ -711,7 +711,7 @@ private struct CommentReplyRow: View {
                         .foregroundStyle(comment.voteState == .liked ? accent : Color.secondary)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(comment.voteState == .liked ? "Unlike" : "Like")
+                    .accessibilityLabel(LocalizedStringKey(comment.voteState == .liked ? "Unlike" : "Like"))
 
                     Button {
                         onVote(comment, .dislike)
@@ -721,7 +721,7 @@ private struct CommentReplyRow: View {
                             .foregroundStyle(comment.voteState == .disliked ? accent : Color.secondary)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(comment.voteState == .disliked ? "Remove dislike" : "Dislike")
+                    .accessibilityLabel(LocalizedStringKey(comment.voteState == .disliked ? "Remove dislike" : "Dislike"))
                 }
             }
 

@@ -116,7 +116,7 @@ struct LyricsView<ProgressSlider: View>: View {
                             Spacer().frame(height: 20)
 
                             if let provider = LyricsState.shared.providerName {
-                                Text("Lyrics from \(provider)")
+                                Text(AppStrings.format("Lyrics from %@", provider))
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(.white.opacity(0.6))
                                     .frame(maxWidth: .infinity, alignment: settings.lyricsAlignment.textAlignment)
@@ -414,7 +414,7 @@ struct LyricsView<ProgressSlider: View>: View {
             .accessibilityLabel("Back to player")
 
             PlayerTitleBlock(
-                title: np.title, artist: np.displayArtist,
+                title: np.displayTitle, artist: np.displayArtist,
                 titleFont: .subheadline.weight(.semibold), titleHeight: 20,
                 artistFont: .caption
             )

@@ -49,7 +49,7 @@ Stable releases are available from the [releases page](../../releases). Nightly 
 
 ## Community
 
-Join the [Discord server](https://discord.gg/QrMwZAfU97) for support and discussion.
+
 
 ## License
 

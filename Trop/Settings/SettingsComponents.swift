@@ -67,17 +67,27 @@ struct SettingsPickerRow<T: SettingsOption>: View {
     @Environment(SettingsStore.self) private var settings
     let title: String
     let icon: String?
+    let options: [T]?
+    let isEnabled: Bool
     @Binding var selection: T
 
-    init(_ title: String, icon: String? = nil, selection: Binding<T>) {
+    init(
+        _ title: String,
+        icon: String? = nil,
+        options: [T]? = nil,
+        isEnabled: Bool = true,
+        selection: Binding<T>
+    ) {
         self.title = title
         self.icon = icon
+        self.options = options
+        self.isEnabled = isEnabled
         self._selection = selection
     }
 
     var body: some View {
         Picker(selection: $selection) {
-            ForEach(Array(T.allCases)) { option in
+            ForEach(options ?? Array(T.allCases)) { option in
                 Text(LocalizedStringKey(option.displayName)).tag(option)
             }
         } label: {
@@ -89,6 +99,8 @@ struct SettingsPickerRow<T: SettingsOption>: View {
         }
         .id(settings.accentName)
         .tint(settings.accentColor)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.55)
     }
 }
 

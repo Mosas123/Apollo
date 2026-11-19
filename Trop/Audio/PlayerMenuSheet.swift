@@ -42,7 +42,7 @@ struct PlayerMenuSheet: View {
                     MenuCard {
                         viewArtistRow
                         Divider()
-                        MenuRow(icon: "record.circle", title: "View Album", subtitle: song.album) {
+                        MenuRow(icon: "record.circle", title: "View Album", subtitle: song.album, subtitleIsContent: true) {
                             if let albumId = song.firstAlbumBrowseId, !albumId.isEmpty {
                                 navigate(.album(browseId: albumId))
                             } else {
@@ -237,6 +237,9 @@ struct PlayerMenuSheet: View {
                 MenuRow(icon: "checkmark.circle.fill", title: "Remove Download", destructive: true) {
                     Task { await downloadManager.delete(videoId: song.videoId) }
                 }
+            case .preparing:
+                MenuRow(icon: "waveform", title: "Preparing FLAC…") {}
+                    .disabled(true)
             case .downloading:
                 MenuRow(icon: "arrow.down.circle", title: "Downloading…") {}
                     .disabled(true)
@@ -387,7 +390,7 @@ struct AddSongToPlaylistSheet: View {
                                     Text(playlist.name)
                                         .foregroundStyle(.primary)
                                     if let count = playlist.remoteSongCount {
-                                        Text("\(count) songs")
+                                        Text(AppStrings.songs(count))
                                             .font(.footnote)
                                             .foregroundStyle(.secondary)
                                     }
@@ -424,7 +427,7 @@ struct AddSongToPlaylistSheet: View {
                 placeholder: "Playlist name",
                 text: $newPlaylistTitle,
                 okTitle: "Create",
-                message: Text("Adds “\(song.title)” once created.")
+                message: Text(AppStrings.format("Adds “%@” once created.", song.title))
             ) {
                 Task { await createAndAdd() }
             }
@@ -477,8 +480,16 @@ struct SongDetailsView: View {
     @State private var viewCountText: String?
     @State private var resolvedDuration: Int = 0
 
+    private var playbackMetadata: PlaybackMetadataSnapshot? {
+        NowPlaying.shared.metadataSnapshot(for: song.videoId)
+    }
+
     private var effectiveDuration: Int {
-        song.duration > 0 ? song.duration : resolvedDuration
+        if playbackMetadata != nil {
+            let duration = NowPlaying.shared.duration
+            if duration.isFinite, duration > 0 { return Int(duration) }
+        }
+        return song.duration > 0 ? song.duration : resolvedDuration
     }
 
     var body: some View {
@@ -504,6 +515,7 @@ struct SongDetailsView: View {
             )
             guard !Task.isCancelled else { return }
             canonicalMetadata = resolved
+            if let resolved { NowPlaying.shared.acceptResolvedMetadata(resolved, videoId: song.videoId) }
         }
     }
 
@@ -511,50 +523,72 @@ struct SongDetailsView: View {
 
     private var trackSection: some View {
         section("Track") {
-            row("Title", canonicalMetadata?.title ?? song.title)
-            row("Artists", canonicalMetadata?.artist ?? song.artistNamesDisplay)
-            if let album = canonicalMetadata?.album ?? song.album {
+            row("Title", playbackMetadata?.title ?? canonicalMetadata?.title ?? song.title)
+            row("Artists", playbackMetadata?.artist ?? canonicalMetadata?.artist ?? song.artistNamesDisplay)
+            if let album = playbackMetadata?.album ?? canonicalMetadata?.album ?? song.album {
                 row("Album", album)
             }
             row("Duration", effectiveDuration.formattedDuration)
+            if playbackMetadata != nil, song.duration > 0, abs(effectiveDuration - song.duration) > 1 {
+                row("Original duration", song.duration.formattedDuration)
+            }
             row("Video ID", song.videoId, monospaced: true)
-            if let canonicalMetadata {
-                row("Metadata source", canonicalMetadata.source)
-                if canonicalMetadata.title != song.title { row("Video title", song.title) }
-                if canonicalMetadata.artist != song.artistNamesDisplay { row("Channel / original credits", song.artistNamesDisplay) }
+            if let source = playbackMetadata?.source ?? canonicalMetadata?.source {
+                row("Metadata source", source)
+                if (playbackMetadata?.title ?? canonicalMetadata?.title) != song.title { row("Video title", song.title) }
+                if (playbackMetadata?.artist ?? canonicalMetadata?.artist) != song.artistNamesDisplay {
+                    row("Channel / original credits", song.artistNamesDisplay)
+                }
             }
         }
     }
 
     @ViewBuilder
+    private var effectiveStream: PlaybackResult? {
+        if let current = NowPlaying.shared.currentResult,
+           current.videoId == song.videoId {
+            return current
+        }
+        return stream
+    }
+
     private var streamSection: some View {
         section("Stream") {
-            if let s = stream {
-                row("Source", MusicPlaybackIdentity.sourceLabel(song.videoId))
+            if let s = effectiveStream {
+                row("Source", NowPlaying.shared.currentSourceName
+                    ?? MusicPlaybackIdentity.sourceLabel(song.videoId))
                 row("Client", s.clientName)
                 row("ITAG", "\(s.itag)", monospaced: true)
-                row("Bitrate", "\(s.bitrate / 1000) kbps")
+                if s.bitrate > 0 {
+                    row("Bitrate", "\(s.bitrate / 1000) kbps")
+                } else if NowPlaying.shared.currentLosslessLabel != nil {
+                    row("Bitrate", String(localized: "VBR (lossless)"))
+                } else {
+                    row("Bitrate", "—")
+                }
                 row("Audio quality", s.audioQuality.replacingOccurrences(of: "AUDIO_QUALITY_", with: ""))
                 if let loudness = s.loudnessDb {
                     row("Loudness", String(format: "%.1f dB", loudness))
                 }
                 row("Expires in", "\(s.expiresInSeconds)s")
             } else if let f = formatEntity {
-                row("Source", "Cached format")
+                row("Source", NowPlaying.shared.currentSourceName ?? String(localized: "YouTube · cached"))
                 row("ITAG", "\(f.itag)", monospaced: true)
                 row("Bitrate", "\(f.bitrate / 1000) kbps")
                 if f.contentLength > 0 {
                     row("Size", ByteCountFormatter.string(fromByteCount: f.contentLength, countStyle: .file))
                 }
+            } else if let sourceName = NowPlaying.shared.currentSourceName {
+                row("Source", sourceName)
             } else {
-                row("Status", "Not resolved yet")
+                row("Status", String(localized: "Not resolved yet"))
             }
         }
     }
 
     private var statsSection: some View {
         section("Stats") {
-            row("Views", viewCountText ?? "Loading…")
+            row("Views", viewCountText ?? String(localized: "Loading…"))
         }
     }
 
@@ -596,7 +630,7 @@ struct SongDetailsView: View {
 
     private func loadMetadata() async {
         guard MusicPlaybackIdentity.isYouTube(song.videoId) else {
-            viewCountText = "Unavailable"
+            viewCountText = String(localized: "Unavailable")
             return
         }
         if song.duration <= 0 {
@@ -611,7 +645,7 @@ struct SongDetailsView: View {
            let count = Int(raw) {
             viewCountText = count.formattedViews()
         } else {
-            viewCountText = "Unavailable"
+            viewCountText = String(localized: "Unavailable")
         }
     }
 }

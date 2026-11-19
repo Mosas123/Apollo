@@ -39,11 +39,11 @@ struct SongArtistDestinationView: View {
                 .navigationTitle("Choose Artist")
             } else {
                 ContentUnavailableView {
-                    Label(lookupFailed ? "Couldn't load artist" : "Artist unavailable", systemImage: "music.mic")
+                    Label(LocalizedStringKey(lookupFailed ? "Couldn't load artist" : "Artist unavailable"), systemImage: "music.mic")
                 } description: {
-                    Text(lookupFailed
+                    Text(LocalizedStringKey(lookupFailed
                          ? "Check your connection and try again."
-                         : "No matching artist was found for this song.")
+                         : "No matching artist was found for this song."))
                 } actions: {
                     Button("Try Again") { attempt += 1 }
                 }

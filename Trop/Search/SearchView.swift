@@ -298,13 +298,6 @@ struct SearchView: View {
                     }
                 }
 
-                if viewModel.showsPencariResults && !viewModel.pencariTracks.isEmpty {
-                    sectionHeader("Lossless")
-                    ForEach(viewModel.pencariTracks, id: \.id) { track in
-                        externalTrackRow(track, from: viewModel.pencariTracks)
-                    }
-                }
-
                 if viewModel.showsJioSaavnResults && !viewModel.jiosaavnTracks.isEmpty {
                     sectionHeader("JioSaavn")
                     ForEach(viewModel.jiosaavnTracks, id: \.id) { track in
@@ -358,6 +351,21 @@ struct SearchView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            let song = track.asQueueSong()
+            if MusicPlaybackIdentity.isAddon(song.videoId) {
+                Button {
+                    Task { await DownloadManager.shared.download(song: song) }
+                } label: {
+                    Label("Download", systemImage: "arrow.down.circle")
+                }
+            }
+            Button {
+                Task { await LikeStore.shared.toggle(song: song) }
+            } label: {
+                Label("Favorite", systemImage: "star")
+            }
+        }
     }
 
     /// Section title with chevron — taps drill into (or clear) the filter.
@@ -514,7 +522,7 @@ struct SearchView: View {
         ContentUnavailableView(
             "No Results",
             systemImage: "magnifyingglass",
-            description: Text("No results found for \"\(viewModel.submittedQuery)\"")
+            description: Text(AppStrings.format("No results found for “%@”", viewModel.submittedQuery))
         )
     }
 
@@ -530,7 +538,7 @@ struct SearchView: View {
         ContentUnavailableView(
             "Search failed",
             systemImage: "exclamationmark.triangle",
-            description: Text(error?.localizedDescription ?? "Something went wrong.")
+            description: Text(error?.localizedDescription ?? String(localized: "Something went wrong."))
         )
     }
 

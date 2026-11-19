@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from pathlib import Path
 
 
@@ -12,6 +13,22 @@ ROOT = Path(__file__).resolve().parent.parent
 LANGUAGES_DIR = ROOT / "languages"
 OUTPUT_DIR = ROOT / "Trop" / "Resources"
 LOCALE_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+FORMAT_PATTERN = re.compile(
+    r"%(?:(\d+)\$)?[-+ #0]*(?:\d+|\*)?(?:\.(?:\d+|\*))?"
+    r"((?:hh|ll|h|l|L|q|z|t|j)?[diouxXfFeEgGaAcCsSp@])"
+)
+
+
+def format_arguments(value: str) -> Counter[tuple[int, str]]:
+    """Describe printf arguments, allowing explicitly numbered reordering."""
+    arguments: Counter[tuple[int, str]] = Counter()
+    next_index = 1
+    for match in FORMAT_PATTERN.finditer(value.replace("%%", "")):
+        position, specifier = match.groups()
+        arguments[(int(position) if position else next_index, specifier)] += 1
+        if not position:
+            next_index += 1
+    return arguments
 
 
 def escape_strings_value(value: str) -> str:
@@ -27,8 +44,16 @@ def escape_strings_value(value: str) -> str:
 
 
 def read_language(path: Path) -> dict[str, str]:
+    def unique_keys(pairs: list[tuple[str, str]]) -> dict[str, str]:
+        values: dict[str, str] = {}
+        for key, value in pairs:
+            if key in values:
+                raise ValueError(f"{path}: duplicate translation key {key!r}")
+            values[key] = value
+        return values
+
     with path.open(encoding="utf-8") as language_file:
-        values = json.load(language_file)
+        values = json.load(language_file, object_pairs_hook=unique_keys)
     if not isinstance(values, dict) or not all(
         isinstance(key, str) and isinstance(value, str)
         for key, value in values.items()
@@ -62,6 +87,11 @@ def main() -> None:
             raise SystemExit(f"Invalid locale filename: {language_path.name}")
 
         translated = read_language(language_path)
+        for key, value in translated.items():
+            if key in source and format_arguments(value) != format_arguments(source[key]):
+                raise SystemExit(
+                    f"{language_path.name}: format arguments do not match English for {key!r}"
+                )
         unknown_keys = sorted(set(translated) - set(source))
         if unknown_keys:
             raise SystemExit(

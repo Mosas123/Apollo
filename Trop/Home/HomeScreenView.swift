@@ -101,7 +101,7 @@ struct HomeScreenView: View {
 
                 if visibleSections.isEmpty && !viewModel.isLoading {
                     ContentUnavailableView(
-                        emptyCategoryTitle,
+                        LocalizedStringKey(emptyCategoryTitle),
                         systemImage: emptyCategorySymbol,
                         description: Text("Pull to refresh or try another category.")
                     )
@@ -194,7 +194,7 @@ struct HomeScreenView: View {
             } else {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
-                        Text(section.displayTitle)
+                        Text(LocalizedStringKey(section.displayTitle))
                             .font(.title2.bold())
                         Spacer()
                         Button {
@@ -288,17 +288,18 @@ struct HomeScreenView: View {
     }
 
     private func quickPickCell(_ song: SongItem, queue: [SongItem]) -> some View {
-        HStack(spacing: 16) {
+        let metadata = NowPlaying.shared.metadataSnapshot(for: song.videoId)
+        return HStack(spacing: 16) {
             SongArtworkView(song: song)
                 .frame(width: 56, height: 56)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(song.title)
+                Text(metadata?.title ?? song.title)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                Text(quickPickSubtitle(song))
+                Text(metadata?.artist ?? quickPickSubtitle(song))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -393,10 +394,10 @@ struct HomeScreenView: View {
             result.append(.similarRecommendation(items: forYouSongs.map(YTItem.song), title: "For You"))
         }
         if music, !discoverArtists.isEmpty {
-            result.append(.similarRecommendation(items: discoverArtists.map(YTItem.artist), title: "Artistas para ti"))
+            result.append(.similarRecommendation(items: discoverArtists.map(YTItem.artist), title: "Artists for you"))
         }
         if podcasts, !podcastSuggestions.isEmpty {
-            result.append(.similarRecommendation(items: podcastSuggestions, title: "Podcasts para ti"))
+            result.append(.similarRecommendation(items: podcastSuggestions, title: "Podcasts for you"))
         }
         return result
     }
@@ -413,9 +414,9 @@ struct HomeScreenView: View {
                     .background(Circle().fill(settings.accentColor))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Sorpréndeme")
+                    Text("Surprise Me")
                         .font(.headline)
-                    Text(surpriseSubtitle)
+                    Text(LocalizedStringKey(surpriseSubtitle))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -438,9 +439,9 @@ struct HomeScreenView: View {
 
     private var surpriseSubtitle: String {
         switch selectedCategory {
-        case .all, .music: return "¿No sabes qué escuchar? Te pongo una canción."
-        case .podcast: return "¿No sabes qué escuchar? Te pongo un podcast."
-        case .audiobook: return "¿No sabes qué escuchar? Te abro un audiolibro."
+        case .all, .music: return "Not sure what to play? Discover a song."
+        case .podcast: return "Not sure what to play? Discover a podcast."
+        case .audiobook: return "Not sure what to play? Discover an audiobook."
         }
     }
 
@@ -475,7 +476,7 @@ struct HomeScreenView: View {
                     Button {
                         selectedCategory = category
                     } label: {
-                        Text(category.title)
+                        Text(LocalizedStringKey(category.title))
                             .font(.system(size: 15, weight: .semibold))
                             .padding(.horizontal, 18)
                             .padding(.vertical, 10)

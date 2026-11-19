@@ -32,6 +32,10 @@ struct SongMenuSheet: View {
     private var isLiked: Bool {
         likeStore.isLiked(videoId: song.videoId)
     }
+
+    private var playbackMetadata: PlaybackMetadataSnapshot? {
+        NowPlaying.shared.metadataSnapshot(for: song.videoId)
+    }
     var body: some View {
         SheetChrome {
             Group {
@@ -68,13 +72,15 @@ struct SongMenuSheet: View {
                         MenuRow(
                             icon: "music.mic",
                             title: "View Artist",
-                            subtitle: song.artistNamesDisplay
+                            subtitle: playbackMetadata?.artist ?? song.artistNamesDisplay,
+                            subtitleIsContent: true
                         ) { handleViewArtist() }
                         Divider()
                         MenuRow(
                             icon: "record.circle",
                             title: "View Album",
-                            subtitle: song.album
+                                subtitle: playbackMetadata?.album ?? song.album,
+                                subtitleIsContent: true
                         ) {
                             if let albumId = song.firstAlbumBrowseId, !albumId.isEmpty {
                                 navigate(.album(browseId: albumId))
@@ -103,7 +109,7 @@ struct SongMenuSheet: View {
                             MenuRowLabel(
                                 icon: "dot.radiowaves.left.and.right",
                                 title: "Similar to this song",
-                                subtitle: "More like “\(song.title)”"
+                                subtitle: AppStrings.format("More like “%@”", song.title)
                             )
                         }
                         .buttonStyle(.plain)
@@ -158,7 +164,7 @@ struct SongMenuSheet: View {
         .sheet(isPresented: $showComments) {
             CommentsSheet(
                 videoId: song.videoId,
-                songTitle: song.title,
+                songTitle: playbackMetadata?.title ?? song.title,
                 onNavigate: { route in
                     if onNavigate != nil {
                         navigate(route)
@@ -180,7 +186,7 @@ struct SongMenuSheet: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(song.title)
+            Text(playbackMetadata?.title ?? song.title)
         }
         .task { await pin.load(videoId: song.videoId) }
     }
@@ -195,12 +201,12 @@ struct SongMenuSheet: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 MarqueeText(
-                    text: song.title,
+                    text: playbackMetadata?.title ?? song.title,
                     font: .headline,
                     frameHeight: 24,
                     textColor: .primary
                 )
-                Text(song.artistNamesDisplay)
+                Text(playbackMetadata?.artist ?? song.artistNamesDisplay)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -248,6 +254,9 @@ struct SongMenuSheet: View {
                 MenuRow(icon: "checkmark.circle.fill", title: "Remove Download", destructive: true) {
                     Task { await downloadManager.delete(videoId: song.videoId) }
                 }
+            case .preparing:
+                MenuRow(icon: "waveform", title: "Preparing FLAC…") {}
+                    .disabled(true)
             case .downloading:
                 MenuRow(icon: "arrow.down.circle", title: "Downloading…") {}
                     .disabled(true)
