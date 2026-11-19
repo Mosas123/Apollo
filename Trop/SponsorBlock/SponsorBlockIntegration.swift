@@ -96,16 +96,12 @@ final class SponsorBlockIntegration {
         guard player.currentVideoId == id, player.pendingVideoId == nil else { return }
         let position = nowPlaying.currentTime
         for (index, segment) in segments.enumerated() where !skipped.contains(index) {
-            // A segment covering the beginning of a song must respect the
-            // separate "Skip intro at start" opt-in. The old periodic tick
-            // bypassed that setting and could jump forward on the first play.
-            let isIntro = segment.start < 0.5
-            if isIntro {
-                guard SponsorBlock.skipsIntroAtStart,
-                      segment.end <= 25 else { continue }
-            }
-            // Within the last second the jump isn't worth it.
-            guard position >= segment.start - 0.25, position < segment.end - 1 else { continue }
+            guard SponsorBlockSkipPolicy.shouldSkip(
+                start: segment.start,
+                end: segment.end,
+                position: position,
+                skipIntroAtStart: SponsorBlock.skipsIntroAtStart
+            ) else { continue }
             skipped.insert(index)
             player.seek(to: segment.end)
             return
