@@ -638,6 +638,10 @@ extension SongItem {
         self.isExplicit = false
         self.playlistId = nil
         self.likeStatus = nil
+        // Preserve a saved music-video identity when restoring the library.
+        // Dropping it could make an intentional video selection look like a
+        // song and trigger an inappropriate album-audio substitution.
+        self.isVideo = entity.isVideo ? true : nil
     }
 
     init(entity: DownloadedTrackEntity) {
