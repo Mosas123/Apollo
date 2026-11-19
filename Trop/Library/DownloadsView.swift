@@ -207,7 +207,12 @@ struct DownloadsView: View {
 
     private func playLocal(_ song: SongItem, intent: Int) async {
         guard let localURL = await downloadManager.localURL(for: song.videoId) else {
+            guard NowPlaying.shared.playbackGeneration == intent,
+                  NowPlaying.shared.videoId == song.videoId else { return }
+            NowPlaying.shared.isPlaying = false
             Log.downloadManager.warning("Local audio not found for \(song.videoId)")
+            importErrorMessage = "This local audio file is no longer available. Try refreshing Downloads or importing it again."
+            showingImportError = true
             return
         }
         // A file lookup may suspend while the user chooses another song.
