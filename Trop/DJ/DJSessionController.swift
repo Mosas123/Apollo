@@ -73,11 +73,25 @@ final class DJSessionController {
         state = .idle
     }
 
-    /// Approximate size for the confirmation: CD FLAC averages ~900 kbps.
+    /// Approximate size for the confirmation, following the current quality
+    /// preferences (CD FLAC ~900 kbps, Hi-Res ~2.5 Mbps, Atmos ~768 kbps).
     static func estimatedBytes(for pool: [SongItem]) -> Int64 {
-        pool.reduce(Int64(0)) { total, song in
-            total + Int64(Double(max(song.duration, 0)) * 112_500)
+        let mode = SettingsStore.shared.musicQualityMode
+        let bytesPerSecond: Double
+        if mode == .cd {
+            bytesPerSecond = 112_500
+        } else if mode == .lossless {
+            bytesPerSecond = SettingsStore.shared.preferHiRes ? 320_000 : 112_500
+        } else if mode == .auto, SettingsStore.shared.hasMusicAddons,
+                  SettingsStore.shared.losslessDownloads {
+            bytesPerSecond = SettingsStore.shared.preferHiRes ? 320_000 : 112_500
+        } else if SettingsStore.shared.preferAtmos {
+            bytesPerSecond = 96_000
+        } else {
+            bytesPerSecond = 40_000
         }
+        let seconds = pool.reduce(0.0) { $0 + max(Double($1.duration), 0) }
+        return Int64(seconds * bytesPerSecond)
     }
 
     /// Downloads and analyses the whole pool, then waits for the AI plan. No
@@ -102,40 +116,52 @@ final class DJSessionController {
         SettingsStore.shared.preferAtmos = false
         defer { SettingsStore.shared.preferAtmos = previousAtmos }
 
-        var prepared: [PreparedTrack] = []
-        state = .preparing(done: 0, total: pool.count, current: pool[0].title)
-
         do {
-            for (index, song) in pool.enumerated() {
-                try Task.checkCancellation()
-                state = .preparing(done: index, total: pool.count, current: song.title)
-                do {
-                    let file = try await ensureLocalFile(song)
-                    try Task.checkCancellation()
-                    let source = DJSourceTrack(
-                        id: song.videoId,
-                        title: song.title,
-                        artist: song.artists.map(\.name).joined(separator: ", "),
-                        fileURL: file.url,
-                        duration: TimeInterval(song.duration)
-                    )
-                    state = .analyzing(current: song.title)
-                    let analysis = try await Task.detached(priority: .userInitiated) {
-                        try await DJAnalyzer.analyze(source)
-                    }.value
-                    totalBytes += fileSize(file.url)
+        var prepared: [PreparedTrack] = []
+        // Two downloads at a time: enough to overlap network waits without
+        // hammering the add-ons or TorBox.
+        let chunkSize = 2
+        var offset = 0
+        while offset < pool.count {
+            try Task.checkCancellation()
+            let chunk = Array(pool[offset..<min(offset + chunkSize, pool.count)])
+            state = .preparing(
+                done: offset,
+                total: pool.count,
+                current: chunk.map(\.title).joined(separator: " · ")
+            )
+            let payloads = await withTaskGroup(of: DJPreparedPayload.self) { group in
+                for (relative, song) in chunk.enumerated() {
+                    group.addTask { [weak self] in
+                        guard let self else {
+                            return DJPreparedPayload.skipped(
+                                index: offset + relative,
+                                message: "Session cancelled."
+                            )
+                        }
+                        return await self.prepareOne(song, index: offset + relative)
+                    }
+                }
+                var results: [DJPreparedPayload] = []
+                for await result in group { results.append(result) }
+                return results
+            }
+            for payload in payloads.sorted(by: { $0.index < $1.index }) {
+                if let source = payload.source, let analysis = payload.analysis {
                     prepared.append(PreparedTrack(
-                        song: song,
+                        song: pool[payload.index],
                         source: source,
                         analysis: analysis,
-                        createdBySession: file.created
+                        createdBySession: payload.created
                     ))
-                } catch is CancellationError {
-                    throw CancellationError()
-                } catch {
-                    skipped.append("\(song.title): \(error.localizedDescription)")
+                    totalBytes += payload.bytes
+                } else if let message = payload.skipped {
+                    skipped.append(message)
                 }
             }
+            offset += chunk.count
+        }
+
             guard prepared.count >= 4 else {
                 throw DJSessionError.notEnoughTracks(
                     prepared.count,
@@ -155,16 +181,19 @@ final class DJSessionController {
             state = .ready
             persistManifest(createdVideoIDs)
         } catch is CancellationError {
-            await discard(created: createdVideoIDs)
+            await discardSession()
             state = .idle
         } catch {
-            await discard(created: createdVideoIDs)
-            state = .failed(error.localizedDescription)
+            let message = error.localizedDescription
+            await discardSession()
+            state = .failed(message)
         }
     }
 
     /// Ends the session: removes the temporary audio and analysis.
     func finish() async {
+        preparationTask?.cancel()
+        preparationTask = nil
         await discardSession()
         state = .idle
     }
@@ -189,6 +218,48 @@ final class DJSessionController {
             let first = await group.next() ?? nil
             group.cancelAll()
             return first
+        }
+    }
+
+    private struct DJPreparedPayload: Sendable {
+        let index: Int
+        var source: DJSourceTrack? = nil
+        var analysis: DJTrackAnalysis? = nil
+        var created = false
+        var bytes: Int64 = 0
+        var skipped: String? = nil
+
+        static func skipped(index: Int, message: String) -> DJPreparedPayload {
+            DJPreparedPayload(index: index, skipped: message)
+        }
+    }
+
+    private func prepareOne(_ song: SongItem, index: Int) async -> DJPreparedPayload {
+        do {
+            let file = try await ensureLocalFile(song)
+            try Task.checkCancellation()
+            let source = DJSourceTrack(
+                id: song.videoId,
+                title: song.title,
+                artist: song.artists.map(\.name).joined(separator: ", "),
+                fileURL: file.url,
+                duration: TimeInterval(song.duration)
+            )
+            state = .analyzing(current: song.title)
+            let analysis = try await Task.detached(priority: .userInitiated) {
+                try await DJAnalyzer.analyze(source)
+            }.value
+            return DJPreparedPayload(
+                index: index,
+                source: source,
+                analysis: analysis,
+                created: file.created,
+                bytes: fileSize(file.url)
+            )
+        } catch is CancellationError {
+            return .skipped(index: index, message: "\(song.title): cancelled")
+        } catch {
+            return .skipped(index: index, message: "\(song.title): \(error.localizedDescription)")
         }
     }
 
@@ -254,6 +325,9 @@ final class DJSessionController {
 
     /// If the app died mid-session, remove the files it downloaded last time.
     static func purgeOrphanedSession() async {
+        // Never wipe a session that is alive in this process (the root view can
+        // be recreated); only clean leftovers from previous launches.
+        guard shared.state == .idle else { return }
         if let manifest = readManifest() {
             for id in manifest.videoIDs {
                 await DownloadManager.shared.delete(videoId: id)

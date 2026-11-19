@@ -43,7 +43,7 @@ struct DJSessionView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("Estimated download: ~\(ByteCountFormatter.string(fromByteCount: estimate, countStyle: .file)) (CD estimate; Hi-Res sets can be much larger)")
+                    Text("Estimated download: ~\(ByteCountFormatter.string(fromByteCount: estimate, countStyle: .file)) (estimate based on your quality settings)")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
