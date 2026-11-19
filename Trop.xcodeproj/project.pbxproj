@@ -510,8 +510,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/Mosas123/ApoloEngine.git";
 			requirement = {
-				kind = exactVersion;
-				version = 0.1.1;
+				kind = revision;
+				revision = 3290bf7b812e0d5357bffecebeef08069fad40ce;
 			};
 		};
 		14B578D72FF1AB43006B3990 /* XCRemoteSwiftPackageReference "MPVKit" */ = {
