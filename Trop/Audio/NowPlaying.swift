@@ -58,6 +58,8 @@ final class NowPlaying {
     private var publishedArtwork: (videoId: String, url: String)?
     private var displayedArtworkVideoId: String?
     var isPlaying = false
+    /// Displays the actual engine, including automatic beta fallback.
+    var activePlaybackEngine = "MPVKit"
     /// True while the current stream is lossless (FLAC / Qobuz CD). Drives the
     /// player's "Lossless" badge.
     var isLosslessStream = false

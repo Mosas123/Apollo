@@ -286,6 +286,7 @@ extension PlayerController {
             return
         }
         deactivateApoloPlayback()
+        NowPlaying.shared.activePlaybackEngine = bypassApolo ? "MPVKit (Fallback)" : "MPVKit"
 
         let prevVideoId = sharedState.withLock { $0.currentVideoId }
         let isNewSong = prevVideoId != nil && videoId != prevVideoId
@@ -1427,6 +1428,7 @@ extension PlayerController {
         let isNewSong = oldId != nil && oldId != videoId
         deactivateApoloPlayback()
         apoloIsActive = true
+        NowPlaying.shared.activePlaybackEngine = "ApoloEngine (Beta)"
         let generation = apoloGeneration
         pendingURL = nil
         pendingMetadata = nil

@@ -537,6 +537,12 @@ struct FullPlayerView: View {
                         .tracking(1.2)
                         .foregroundStyle(.white.opacity(0.6))
                 }
+                if settings.apoloBetaEnabled, np.playbackKind == .music {
+                    Text(np.activePlaybackEngine.uppercased())
+                        .font(.system(size: 10, weight: .semibold))
+                        .tracking(0.7)
+                        .foregroundStyle(.white.opacity(0.7))
+                }
                 PlayerTitleBlock(
                     title: np.displayTitle,
                     artist: playerArtistLine,
@@ -652,7 +658,7 @@ struct FullPlayerView: View {
                         artist: np.displayArtist,
                         album: np.displayAlbumTitle.isEmpty ? nil : np.displayAlbumTitle,
                         isPlaying: np.isPlaying,
-                        enabled: settings.canvasEnabled,
+                        enabled: settings.canvasEnabled && !settings.apoloBetaEnabled,
                         onDominantColorsChange: { canvasDominantColors = $0 }
                     )
                 }
