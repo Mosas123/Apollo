@@ -1,31 +1,35 @@
 import Foundation
 
-/// Prevents a repeated station selection from tearing down a healthy native
-/// live session and recreating its AVPlayerItem. This is a *request* guard,
+/// Prevents repeated station selection from tearing down a healthy native
+/// live session and recreating its AVPlayerItem. This is a request guard,
 /// not a workaround for AVFoundation's timed-metadata crash.
 enum LiveRadioDuplicateRequestPolicy {
+    struct ActiveSession {
+        let stationID: String?
+        let streamURL: URL?
+        let apoloActive: Bool
+        let apoloRadioEnabled: Bool
+        let isLoadingOrPlaying: Bool
+        let desiredPlaying: Bool
+        let isInterrupted: Bool
+    }
+
     static func shouldSuppress(
         requestedID: String?,
         requestedURL: URL,
-        currentID: String?,
-        currentURL: URL?,
-        apoloActive: Bool,
-        apoloRadioEnabled: Bool,
         bypassApolo: Bool,
-        isLoadingOrPlaying: Bool,
-        desiredPlaying: Bool,
-        isInterrupted: Bool
+        active: ActiveSession
     ) -> Bool {
         guard !bypassApolo,
-              apoloRadioEnabled,
-              apoloActive,
-              isLoadingOrPlaying,
-              desiredPlaying,
-              !isInterrupted,
+              active.apoloRadioEnabled,
+              active.apoloActive,
+              active.isLoadingOrPlaying,
+              active.desiredPlaying,
+              !active.isInterrupted,
               let requestedID,
               requestedID.hasPrefix("radio:"),
-              requestedID == currentID,
-              let currentURL else {
+              requestedID == active.stationID,
+              let currentURL = active.streamURL else {
             return false
         }
         // Compare the exact stream, including query parameters. Same station
