@@ -1137,7 +1137,8 @@ final class NowPlaying {
         // `updateNowPlayingProgress`; polling it every tick doubled the
         // synchronous mpv reads on the main actor.
         progressTick += 1
-        if progressTick % 20 == 0, isPlaying, let videoId {
+        if progressTick % 20 == 0, isPlaying,
+           playbackKind != .radio, let videoId {
             let payload: [String: Any] = [
                 "videoId": videoId,
                 "position": currentTime,
