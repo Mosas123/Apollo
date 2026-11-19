@@ -30,7 +30,7 @@ struct LyricsView<ProgressSlider: View>: View {
     @State private var lyricsLoadGeneration = UUID()
     @State private var lyricsLoadState: LyricsLoadState = .loading
 
-    private enum LyricsLoadState {
+    private enum LyricsLoadState: Equatable {
         case loading
         case unavailable
         case failed
