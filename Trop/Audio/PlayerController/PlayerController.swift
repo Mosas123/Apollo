@@ -307,16 +307,20 @@ extension PlayerController {
         NowPlaying.shared.currentStreamURL = url.absoluteString
         NowPlaying.shared.currentLosslessLabel = losslessLabel
 
-        // Experimental music and live radio use separate switches.
-        // Thrum remains the sole owner of MPRemoteCommandCenter, queue and
-        // AVAudioSession; radio must use Apolo.loadLive, never finite load.
-        let isLiveRadio = NowPlaying.shared.playbackKind == .radio
+        // The three Apolo beta routes are independent. Thrum still owns
+        // queue, session and remote commands. Podcasts are finite/seekeable;
+        // only the radio route uses Apolo.loadLive.
+        let playbackKind = NowPlaying.shared.playbackKind
+        let isLiveRadio = playbackKind == .radio
         if isLiveRadio {
             NowPlaying.shared.radioPlaybackStatus = .connecting
         }
-        let useApolo = isLiveRadio
-            ? SettingsStore.shared.apoloRadioBetaEnabled
-            : SettingsStore.shared.apoloBetaEnabled
+        let useApolo: Bool
+        switch playbackKind {
+        case .radio: useApolo = SettingsStore.shared.apoloRadioBetaEnabled
+        case .podcast: useApolo = SettingsStore.shared.apoloPodcastsBetaEnabled
+        case .music: useApolo = SettingsStore.shared.apoloBetaEnabled
+        }
         let scheme = url.scheme?.lowercased() ?? ""
         if !bypassApolo,
            useApolo,
@@ -1541,8 +1545,11 @@ extension PlayerController {
         let pending = pendingMetadata
         deactivateApoloPlayback()
         apoloIsActive = true
-        NowPlaying.shared.activePlaybackEngine = isLiveRadio
-            ? "ApoloEngine (Radio Beta)" : "ApoloEngine (Beta)"
+        switch NowPlaying.shared.playbackKind {
+        case .radio: NowPlaying.shared.activePlaybackEngine = "ApoloEngine (Radio Beta)"
+        case .podcast: NowPlaying.shared.activePlaybackEngine = "ApoloEngine (Podcast Beta)"
+        case .music: NowPlaying.shared.activePlaybackEngine = "ApoloEngine (Beta)"
+        }
         let generation = apoloGeneration
         pendingURL = nil
         pendingMetadata = nil
