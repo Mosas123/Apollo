@@ -92,6 +92,13 @@ final class SponsorBlockIntegration {
             return
         }
         guard nowPlaying.isPlaying else { return }
+        // The queue may retain the original video ID while the *audio*
+        // comes from a verified ATV album track. SponsorBlock timestamps
+        // belong to the original video and must not seek the studio master.
+        // Also wait until Now Playing has published the current stream.
+        guard let source = nowPlaying.currentResult,
+              source.videoId == id,
+              source.streamUrl == nowPlaying.currentStreamURL else { return }
         let player = PlayerController.shared
         guard player.currentVideoId == id, player.pendingVideoId == nil else { return }
         let position = nowPlaying.currentTime
