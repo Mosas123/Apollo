@@ -87,6 +87,6 @@ struct ApoloInterruptionWatchdogChecks {
             now: at(70), isInterrupted: false, interruptionEndedAt: nil
         ), "A fully recovered player starts a new pending phase")
 
-        print("PASS: \\(checks) Apolo audio interruption and recovery checks")
+        print("PASS: \(checks) Apolo audio interruption and recovery checks")
     }
 }
