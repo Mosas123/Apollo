@@ -77,17 +77,8 @@ struct LastFMAuthWebView: View {
                     }
                 }
             }
-            .alert(
-                "Error",
-                isPresented: Binding(
-                    get: { errorText != nil },
-                    set: { if !$0 { errorText = nil } }
-                )
-            ) {
-                Button("OK") { errorText = nil }
-            } message: {
-                Text(errorText ?? "")
-            }
+            // Errors live in the persistent Retry screen. An alert that
+            // clears errorText leaves an empty WebView after dismissal.
             .task { await fetchToken() }
             .onAppear {
                 Log.lastfm.info("OAuth WebView loading host=\(authUrl.flatMap { URL(string: $0)?.host } ?? "last.fm")")
