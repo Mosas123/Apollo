@@ -828,6 +828,8 @@ extension DownloadManager {
         // Bulk downloads skip the lossless lookup: it can cost seconds per
         // track and a queue of 50 would stall for minutes.
         if allowLossless,
+           song.contentKind != .episode,
+           song.contentKind != .podcast,
            !MusicPlaybackIdentity.isExternal(song.videoId),
            SettingsStore.shared.losslessDownloads,
            let preference,
