@@ -699,7 +699,38 @@ struct FullPlayerView: View {
 
     private func progressSlider(horizontalPadding: CGFloat) -> some View {
         VStack(spacing: 6) {
-            ProgressBar(
+            if np.playbackKind == .radio {
+                // Radio has no seekable duration: never display a frozen
+                // 0:00 / -0:00 slider while audio is actually playing.
+                HStack(spacing: 8) {
+                    if np.radioPlaybackStatus == .connecting
+                        || np.radioPlaybackStatus == .reconnecting {
+                        ProgressView()
+                            .tint(.white)
+                            .scaleEffect(0.75)
+                    } else {
+                        Circle()
+                            .fill(np.radioPlaybackStatus == .live
+                                  ? Color.red : Color.white.opacity(0.55))
+                            .frame(width: 7, height: 7)
+                    }
+                    Text(np.radioPlaybackStatus.label)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                    Spacer()
+                    Text("LIVE RADIO")
+                        .font(.caption2.weight(.semibold))
+                        .tracking(0.9)
+                        .foregroundStyle(.white.opacity(0.65))
+                }
+                .frame(height: 27)
+                .accessibilityElement(children: .combine)
+
+                Capsule()
+                    .fill(.white.opacity(0.18))
+                    .frame(height: 3)
+            } else {
+                ProgressBar(
                 progress: Binding(
                     get: { isEditingSlider ? editingProgress : np.progress },
                     set: { editingProgress = $0 }
@@ -747,6 +778,7 @@ struct FullPlayerView: View {
                     .padding(.vertical, 4)
                     .background(Capsule().fill(.white.opacity(0.12)))
                 }
+            }
             }
         }
         .padding(.horizontal, horizontalPadding)
