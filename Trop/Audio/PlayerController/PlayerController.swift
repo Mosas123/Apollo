@@ -239,7 +239,8 @@ extension PlayerController {
         qualityLabel: String? = nil,
         startAt: TimeInterval = 0,
         bypassApolo: Bool = false,
-        intentGeneration: Int? = nil
+        intentGeneration: Int? = nil,
+        sourceMIMEType: String? = nil
     ) async {
         if let intentGeneration,
            intentGeneration != NowPlaying.shared.playbackGeneration {
@@ -299,7 +300,8 @@ extension PlayerController {
                 title: title,
                 artist: artist,
                 duration: duration,
-                startAt: playbackStart
+                startAt: playbackStart,
+                sourceMIMEType: sourceMIMEType
             )
             return
         }
@@ -1457,7 +1459,8 @@ extension PlayerController {
         title: String?,
         artist: String?,
         duration: TimeInterval?,
-        startAt: TimeInterval
+        startAt: TimeInterval,
+        sourceMIMEType: String? = nil
     ) async {
         let oldId = sharedState.withLock { $0.currentVideoId }
         let isNewSong = oldId != nil && oldId != videoId
@@ -1541,7 +1544,8 @@ extension PlayerController {
             try await backend.load(
                 audioURL: url,
                 title: title ?? NowPlaying.shared.displayTitle,
-                artist: artist ?? NowPlaying.shared.displayArtist
+                artist: artist ?? NowPlaying.shared.displayArtist,
+                sourceMIMEType: sourceMIMEType
             )
             Log.player.info(
                 "APOLO_BETA loadReturned videoId=\(videoId ?? "nil") ms=\(Self.msSince(apoloBegan))"

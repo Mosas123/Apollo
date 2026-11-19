@@ -974,7 +974,8 @@ actor PlaybackManager {
             thumbnailUrl: song?.thumbnailUrl,
             losslessLabel: isFLAC ? "FLAC" : nil,
             qualityLabel: isFLAC ? "Lossless" : "Standard",
-            intentGeneration: intentGeneration
+            intentGeneration: intentGeneration,
+            sourceMIMEType: isFLAC ? "audio/flac" : "audio/mp4"
         )
         if await isCurrentIntent(intentGeneration) {
             await MainActor.run {
@@ -1078,7 +1079,8 @@ actor PlaybackManager {
                 thumbnailUrl: song?.thumbnailUrl,
                 losslessLabel: Self.losslessLabel(result),
                 qualityLabel: Self.qualityLabel(result),
-                intentGeneration: intentGeneration
+                intentGeneration: intentGeneration,
+                sourceMIMEType: result.mimeType
             )
             let externalSourceName = sourceName(for: result, videoId: videoId)
             if await isCurrentIntent(intentGeneration) {
@@ -1255,7 +1257,8 @@ actor PlaybackManager {
             thumbnailUrl: queueSong?.thumbnailUrl,
             losslessLabel: Self.losslessLabel(result),
             qualityLabel: Self.qualityLabel(result),
-            intentGeneration: intentGeneration
+            intentGeneration: intentGeneration,
+            sourceMIMEType: result.mimeType
         )
         let sourceName = sourceName(for: result, videoId: videoId)
         if await isCurrentIntent(intentGeneration) {

@@ -28,7 +28,8 @@ final class ApoloAudioBackend {
         title: String,
         artist: String,
         album: String? = nil,
-        artworkData: Data? = nil
+        artworkData: Data? = nil,
+        sourceMIMEType: String? = nil
     ) async throws {
         try await engine.load(
             url: audioURL,
@@ -38,7 +39,8 @@ final class ApoloAudioBackend {
                 artist: artist,
                 album: album,
                 artworkData: artworkData
-            )
+            ),
+            sourceMIMEType: sourceMIMEType
         )
     }
 
