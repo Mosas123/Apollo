@@ -1062,6 +1062,25 @@ actor PlaybackManager {
             )
             throw CancellationError()
         }
+        // Podcasts are finite audio, not music recordings. They must not
+        // enter add-on FLAC/Atmos matching, JioSaavn music fallback or album
+        // video/audio rematching, even when the music beta is enabled.
+        if let episode = await queueSong(for: videoId),
+           episode.contentKind == .episode || episode.contentKind == .podcast {
+            var request = StreamResolveRequest.playback(videoId: videoId)
+            request.options.audioQuality = SettingsStore.shared.audioQuality
+            let result = try await StreamFallback.resolveFirstValid(
+                request,
+                using: InnerTubeClient.tropShared,
+                providers: .tropLive
+            )
+            guard await isCurrentIntent(intentGeneration) else {
+                throw CancellationError()
+            }
+            return await playNetworkResult(
+                result, videoId: videoId, intentGeneration: intentGeneration
+            )
+        }
         if MusicPlaybackIdentity.isLegacyPencari(videoId) {
             let result = try await resolveLegacyPencari(videoId: videoId)
             await playNetworkResult(result, videoId: videoId, intentGeneration: intentGeneration)
@@ -1260,6 +1279,8 @@ actor PlaybackManager {
         guard MusicPlaybackIdentity.isYouTube(videoId),
               result.videoId == videoId,
               let song,
+              song.contentKind != .episode,
+              song.contentKind != .podcast,
               !["addon", "jiosaavn", "qobuz", "audius", "local"].contains(
                   result.clientName.lowercased()
               ),
@@ -1420,6 +1441,8 @@ actor PlaybackManager {
             sourceMIMEType: audioResult.mimeType,
             isAtmos: audioResult.audioQuality.lowercased().contains("atmos"),
             bypassSponsorBlock: audioResult.videoId != videoId
+                || queueSong?.contentKind == .episode
+                || queueSong?.contentKind == .podcast
         )
         let sourceName = sourceName(for: audioResult, videoId: videoId)
         if await isCurrentIntent(intentGeneration) {
