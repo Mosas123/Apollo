@@ -772,16 +772,18 @@ extension DownloadManager {
     /// lossless, and falls back to the YouTube stream.
     private func downloadSource(for song: SongItem, allowLossless: Bool = true) async throws -> DownloadSource {
         let preference = addonPreference
+        // Playback may prefer Dolby Atmos, but Downloads must save a file
+        // whose codec matches its extension. Atmos add-ons often serve
+        // E-AC3, which cannot be copied into a FLAC container. Seek an
+        // actual FLAC (or a normal AAC fallback) for offline playback.
+        let offlinePreferAtmos = false
         if let ref = AddonPlaybackID.decode(song.videoId) {
             guard let installation = MusicAddonsStore.shared.installation(key: ref.k) else {
                 throw MusicCatalogError.unavailableTrack
             }
             let client = try MusicAddonClient(installation: installation)
-            let preferAtmos = preference?.preferAtmos ?? false
             let quality: AddonStreamQuality
-            if preferAtmos {
-                quality = .max
-            } else if preference?.requireCD == true {
+            if preference?.requireCD == true {
                 quality = .lossless
             } else {
                 quality = (preference?.preferHiRes ?? false) ? .hires : .lossless
@@ -789,10 +791,13 @@ extension DownloadManager {
             let stream = try await client.resolveStream(
                 type: ref.t,
                 id: ref.i,
-                preferAtmos: preferAtmos,
+                preferAtmos: offlinePreferAtmos,
                 quality: quality
             )
-            guard !stream.isEncrypted else { throw MusicCatalogError.unavailableTrack }
+            guard !stream.isEncrypted,
+                  stream.qualityTier != "Atmos" else {
+                throw MusicCatalogError.unavailableTrack
+            }
             switch stream.kind {
             case .youtube(let youTubeId):
                 let resolved = try await PlaybackManager.shared.resolve(
@@ -829,7 +834,7 @@ extension DownloadManager {
            let lossless = await raceLosslessSource(
                for: song,
                requireCD: preference.requireCD,
-               preferAtmos: preference.preferAtmos,
+               preferAtmos: offlinePreferAtmos,
                preferHiRes: preference.preferHiRes
            ) {
             Log.downloadManager.debug("Lossless source for \(song.videoId)")
@@ -928,11 +933,12 @@ extension DownloadManager {
                   preferAtmos: preferAtmos,
                   preferHiRes: preferHiRes
               ),
-              match.stream.qualityTier == "Lossless" || match.stream.qualityTier == "Atmos",
-              case .url(let url) = match.stream.kind else { return nil }
+              match.stream.qualityTier == "Lossless",
+              case .url(let url) = match.stream.kind,
+              Self.format(mime: match.stream.mimeType, url: url) == .flac
+        else { return nil }
         // Some addons report a size but answer HEAD badly; trust the size.
-        // Atmos is lossy (E-AC3): it's only taken when the user asked for it.
-        if match.stream.qualityTier == "Atmos", !preferAtmos { return nil }
+        // Never label a compressed Atmos/E-AC3 bitstream as FLAC.
         if match.stream.sizeBytes == nil, !(await probeAudioURL(url)) {
             await AddonHealth.shared.recordFailure(match.track.installationKey)
             return nil
