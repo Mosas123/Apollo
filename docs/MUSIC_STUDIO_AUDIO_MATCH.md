@@ -30,7 +30,9 @@ video IDs and whether multiple recordings exist remain to be confirmed.
 2. For legacy or ambiguous **song** entries whose resolved YouTube
    stream is positively typed as video, search YouTube Music for an
    ATV album audio recording with **strict recording title, credited
-   artist and duration/album validation**. Never substitute a cover,
+   artist, exact release and bounded duration validation** (20 seconds
+   without release proof or 60 seconds when the album matches, allowing
+   video-only introductions). Never substitute a cover,
    remix, live version or an unverified type. Unknown metadata and
    explicit user-selected videos do not trigger rematching.
 3. When an ATV match is found, the actual audio comes from its own
