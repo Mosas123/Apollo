@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import ApoloEngine
 import Synchronization
 import Libmpv
 import MediaPlayer
