@@ -1422,7 +1422,7 @@ extension Array where Element == String {
     }
 }
 
-// MARK: - ApoloEngine beta (music only)
+// MARK: - ApoloEngine beta (music and podcasts)
 
 extension PlayerController {
     /// Releases the experimental renderer before mpv takes over. Also makes
@@ -1662,6 +1662,7 @@ extension PlayerController {
         guard apoloIsActive, apoloGeneration == generation,
               NowPlaying.shared.videoId == videoId else { return }
         let position = currentTime
+        NowPlaying.shared.rememberInterruptedPlayback(position, for: videoId)
         let title = NowPlaying.shared.displayTitle
         let artist = NowPlaying.shared.displayArtist
         let duration = NowPlaying.shared.duration
