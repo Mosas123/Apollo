@@ -139,6 +139,9 @@ final class PlayerController {
     private var apoloBackend: ApoloAudioBackend?
     private var apoloIsActive = false
     private var apoloGeneration: UInt64 = 0
+    /// Every explicit source load, not only queue-owned intents, receives a
+    /// serial token. Older async operations cannot publish onto a new load.
+    private var playRequestSerial: UInt64 = 0
     private var apoloMonitorTask: Task<Void, Never>?
     private var apoloTrackingTask: Task<Void, Never>?
     var isApoloActive: Bool { apoloIsActive }
@@ -252,23 +255,16 @@ extension PlayerController {
             )
             return
         }
-        currentLoudnessDb = loudnessDb
-        NowPlaying.shared.losslessFormatLabel = losslessLabel
-        NowPlaying.shared.isLosslessStream = losslessLabel != nil
-        NowPlaying.shared.qualityBadgeLabel = qualityLabel ?? losslessLabel
-        NowPlaying.shared.currentStreamURL = url
-        NowPlaying.shared.currentLosslessLabel = losslessLabel
+        playRequestSerial &+= 1
+        let requestSerial = playRequestSerial
         guard let url = URL(string: url) else {
-            Log.player.error("Invalid URL: \(url)")
+            Log.player.error("Invalid playback source URL")
             return
         }
 
-        if let videoId, let title, videoId != NowPlaying.shared.videoId {
-            NowPlaying.shared.beginTransition(to: videoId)
-            pendingMetadata = PendingMetadata(title: title, artist: artist, videoId: videoId, artists: artists, thumbnailUrl: thumbnailUrl)
-            NowPlaying.shared.videoId = videoId
-        }
-
+        // SponsorBlock may await its segment prefetch. Do not change the
+        // displayed title, stream quality or progress until the request still
+        // owns the player after that asynchronous boundary.
         var skipStart: Double = 0
         if SponsorBlock.skipsIntroAtStart, MusicPlaybackIdentity.isYouTube(videoId) {
             skipStart = await SponsorBlockIntegration.shared.preloadedStartOffset(for: videoId)
@@ -280,9 +276,31 @@ extension PlayerController {
             )
             return
         }
-        guard NowPlaying.shared.videoId == videoId else {
+        guard requestSerial == playRequestSerial else {
+            Log.player.info(
+                "PLAY_INTENT drop superseded source request videoId=\(videoId ?? "nil") serial=\(requestSerial)"
+            )
             return
         }
+        if let videoId, let title, videoId != NowPlaying.shared.videoId {
+            NowPlaying.shared.beginTransition(to: videoId)
+            pendingMetadata = PendingMetadata(
+                title: title,
+                artist: artist,
+                videoId: videoId,
+                artists: artists,
+                thumbnailUrl: thumbnailUrl
+            )
+            NowPlaying.shared.videoId = videoId
+        }
+        guard NowPlaying.shared.videoId == videoId else { return }
+
+        currentLoudnessDb = loudnessDb
+        NowPlaying.shared.losslessFormatLabel = losslessLabel
+        NowPlaying.shared.isLosslessStream = losslessLabel != nil
+        NowPlaying.shared.qualityBadgeLabel = qualityLabel ?? losslessLabel
+        NowPlaying.shared.currentStreamURL = url.absoluteString
+        NowPlaying.shared.currentLosslessLabel = losslessLabel
 
         // Experimental music and live radio use separate switches.
         // Thrum remains the sole owner of MPRemoteCommandCenter, queue and
@@ -389,7 +407,9 @@ extension PlayerController {
         if isNewSong {
             await PlaybackStateService.shared.stopTracking()
         }
+        guard requestSerial == playRequestSerial else { return }
         if let videoId { await PlaybackStateService.shared.startTracking(videoId: videoId) }
+        guard requestSerial == playRequestSerial else { return }
         playState.send(.playing)
         NowPlaying.shared.isPlaying = true
         NowPlaying.shared.currentTime = playbackStart
@@ -400,8 +420,10 @@ extension PlayerController {
             applyPlayerVolume()
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .milliseconds(120))
-                guard let self else { return }
+                guard let self,
+                      self.playRequestSerial == requestSerial else { return }
                 await self.fadeVolume(to: SettingsStore.shared.playerVolume, duration: 0.3)
+                guard self.playRequestSerial == requestSerial else { return }
                 self.setVolumeOverride(nil)
             }
         }
