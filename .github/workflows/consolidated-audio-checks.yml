@@ -1,0 +1,27 @@
+name: Consolidated Music and Download Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Core/Metadata/TextMatch.swift"
+      - "Trop/Core/Metadata/MusicRecordingSelectionPolicy.swift"
+      - "Trop/Services/OfflineAudioFormatPolicy.swift"
+      - "Trop/Services/DownloadManager.swift"
+      - "tests/Playback/ConsolidatedAudioChecks.swift"
+      - ".github/workflows/consolidated-audio-checks.yml"
+
+jobs:
+  album-and-codec-policy:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run production recording and FLAC guard policies
+        run: |
+          set -euo pipefail
+          swiftc \
+            Trop/Core/Metadata/TextMatch.swift \
+            Trop/Core/Metadata/MusicRecordingSelectionPolicy.swift \
+            Trop/Services/OfflineAudioFormatPolicy.swift \
+            tests/Playback/ConsolidatedAudioChecks.swift \
+            -o "$RUNNER_TEMP/consolidated-audio-checks"
+          "$RUNNER_TEMP/consolidated-audio-checks"
