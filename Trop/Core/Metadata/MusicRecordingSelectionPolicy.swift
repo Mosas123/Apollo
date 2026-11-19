@@ -21,10 +21,25 @@ enum MusicRecordingSelectionPolicy {
     static func shouldFindAlbumAudio(
         selectedVideo: Bool,
         rowType: String?,
-        sourceType: String?
+        sourceType: String?,
+        rowIsVideo: Bool = false,
+        albumKnown: Bool = false,
+        expectedDuration: Int = 0,
+        resolvedDuration: Int = 0
     ) -> Bool {
-        !selectedVideo
-            && (isVideoRecording(rowType) || isVideoRecording(sourceType))
+        // A video ID is not an explicit request to hear its soundtrack.
+        // Only a user choosing Videos asks for the video recording.
+        guard !selectedVideo, !isStudioAudio(sourceType) else { return false }
+        if rowIsVideo || isVideoRecording(rowType)
+            || isVideoRecording(sourceType) { return true }
+
+        // Old saved library rows and some InnerTube responses omit
+        // musicVideoType. With a known album, an untyped source merits a
+        // verified ATV lookup, particularly if its timing is inconsistent.
+        if albumKnown, sourceType == nil { return true }
+        return albumKnown && expectedDuration > 0
+            && resolvedDuration > 0
+            && abs(expectedDuration - resolvedDuration) > 18
     }
 
     /// Do not use fuzzy substring title matches for audio substitution.
@@ -40,7 +55,8 @@ enum MusicRecordingSelectionPolicy {
         candidateArtists: [String],
         candidateAlbum: String?,
         candidateDuration: Int,
-        candidateType: String?
+        candidateType: String?,
+        originalWasVideo: Bool = false
     ) -> Bool {
         guard isStudioAudio(candidateType),
               !wantedArtist.isEmpty,
@@ -73,7 +89,10 @@ enum MusicRecordingSelectionPolicy {
         // A music video may include a spoken introduction or outro that
         // is absent from the official studio master. The exact release
         // identity allows a wider range than a title/artist-only match.
-        let maxDifference = sameAlbum ? 60 : 20
+        // A confirmed video often has a 30–60 second scene around a
+        // 3-minute song. Exact artist/title plus an official ATV identity
+        // justify the wider limit even if the old video row has no album.
+        let maxDifference = (sameAlbum || originalWasVideo) ? 60 : 20
         return abs(wantedDuration - candidateDuration) <= maxDifference
     }
 }
