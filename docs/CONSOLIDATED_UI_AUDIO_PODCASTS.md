@@ -98,3 +98,54 @@ A functional login requires valid secrets and a real on-device login.
   next/previous, 15/30s seek, background, AirPods and MPVKit fallback.
 - Retest Dolby Atmos, Lossless, radio LIVE and reconnect, local imports.
 - Do not merge until device checks are signed off by the user.
+
+
+## Follow-up #8 — Atmos-only queue transition (reported on iPhone)
+
+**Report:** When a Dolby Atmos track follows another track in the queue, it
+sometimes does not start automatically, or starts after a noticeably longer
+silent pause. The user suspects this is specific to Atmos. Treat as a new,
+unresolved **subset of #6 (track-to-track gap)**, not a proven Dolby decoder
+failure or a confirmed missing autoplay event. No device timestamps yet.
+
+### Code-path audit
+
+- `PlaybackManager.prefetchUpcomingUpgrades` prefetches the **resolved signed
+  URL/PlaybackResult**, including the Atmos add-on result, but Thrum does not
+  yet feed `ApoloEngine.enqueueNext`; it is not a decoded/ready AVPlayerItem.
+- On EOF, `NowPlaying.stopped` calls `playNext(automatic: true)`, which starts
+  a fresh resolve/load rather than using an engine-level queued item.
+- `PlayerController.playWithApolo` explicitly stops the old Apolo backend,
+  calls the new `load`, and only then calls `play()`.
+- In Apolo's `AVPlayerHost.load(track:)`, the old AVQueuePlayer items are reset
+  and `AVAsset.loadTracks(withMediaType: .audio)` is awaited **before**
+  inserting and starting the new player item. Dolby/E-AC3 is intentionally
+  routed through native AVFoundation without a processing tap. Additional
+  codec/asset/route preparation time is a credible explanation for a longer
+  gap, not yet measured.
+- Apolo supports `enqueueNext` and AVQueuePlayer already, but Thrum must
+  synchronize its own queue identity/state with Apolo auto-advance before
+  enabling it, particularly for mixed Atmos → AAC/FLAC and vice versa.
+
+### Investigation / reproduction matrix
+
+Compare automatic transitions (not manual Next):
+1. AAC → AAC and FLAC → FLAC (baseline).
+2. AAC → Atmos, FLAC → Atmos and Atmos → Atmos.
+3. Atmos → AAC and Atmos → FLAC.
+4. Repeat with a prefetched/cached Atmos result and with a cold result.
+5. Repeat with `upgradeDuringPlayback` off/on, Wi-Fi/cellular, Bluetooth
+   AirPods and built-in iPhone speaker.
+6. Confirm whether the UI changes song and shows pause/playing while the
+   audio is silent, or whether the queue itself waits.
+7. Capture redacted `TRANSITION`, `APOLO_BETA begin/loadReturned/firstPlaying`,
+   `PLAY_INTENT`, and prefetch logs. Measure milliseconds from EOF to
+   source load, first playing, and first audible sample. Preserve the MIME
+   and `isAtmos` signal, never signed URLs/authorization headers.
+
+**Provisional diagnosis:** a prefetched stream URL is not a pre-buffered
+Dolby decoder/AVPlayerItem. No codec-specific crash or failure has been
+established. Implementation needs a single-owner queue handoff and
+verified spatial-audio route readiness. Do not disable Atmos or bypass
+native AVFoundation as a quick workaround. No code changes were made for
+this issue at the time of logging.
