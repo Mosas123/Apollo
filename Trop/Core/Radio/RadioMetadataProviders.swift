@@ -193,9 +193,12 @@ struct BBCRadioProvider: RadioMetadataProvider {
               let artist = segment.titles?.primary?.trimmingCharacters(in: .whitespacesAndNewlines),
               let title = segment.titles?.secondary?.trimmingCharacters(in: .whitespacesAndNewlines),
               !artist.isEmpty, title.count >= 2 else { return nil }
-        let cover = segment.imageURL?
-            .replacingOccurrences(of: "{recipe}", with: "400x400")
-            .flatMap(URL.init(string:))
+        let cover: URL?
+        if let rawCover = segment.imageURL?.replacingOccurrences(of: "{recipe}", with: "400x400") {
+            cover = URL(string: rawCover)
+        } else {
+            cover = nil
+        }
         return RadioNowPlaying(artist: artist, title: title, album: nil, coverURL: cover)
     }
 
