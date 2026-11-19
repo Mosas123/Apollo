@@ -149,3 +149,54 @@ established. Implementation needs a single-owner queue handoff and
 verified spatial-audio route readiness. Do not disable Atmos or bypass
 native AVFoundation as a quick workaround. No code changes were made for
 this issue at the time of logging.
+
+
+## Bug #9 — Instagram interruption triggers premature MPVKit fallback (FIXED IN CODE, NEEDS DEVICE TEST)
+
+**Reproduction:** With *Raindrops (Insane)* playing under Apolo, Instagram pauses
+music. Without reopening Thrum, after Instagram's audio session eventually
+releases ownership, the song resumes under **MPVKit instead of Apolo**.
+
+Evidence from uploaded `log(2).txt`, 19 Nov 2026:
+- 12:03:13.614 Apolo `firstPlaying` for Raindrops.
+- 12:03:52.155 `AUDIO_INTERRUPTION began`.
+- 12:04:32.835 `AUDIO_INTERRUPTION ended` (40.680 seconds of iOS interruption).
+- 12:04:33.146 `APOLO_BETA loading timeout; using mpv fallback` and
+  `APOLO_BETA switching back to mpv` (only **311 ms** later).
+- 12:04:33.347 MPVKit `TRANSITION FILE_LOADED`, same track.
+There was no logged Apolo decoder error. Prior *Superhero* case showed the
+same post-interruption premature watchdog behavior.
+
+**Root cause in Thrum:** `monitorApolo` used `Date().timeIntervalSince(begun)`
+to enforce a 20-second `.loading`/`.idle` timeout even after Apolo had
+already reached `.playing`. A transient recovery state after >20 seconds
+of ordinary playback or a long iOS interruption therefore immediately
+triggered MPVKit fallback. The original code had no independent
+post-interruption recovery deadline.
+
+**Change in this PR:**
+- Add `ApoloFiniteAudioWatchdog`, which measures a *continuous*
+  `.loading`/`.idle` phase for **finite** audio. It resets on `.playing`
+  and `.paused`, keeps the deadline across idle ↔ loading, and
+  excludes time during a system audio interruption.
+- Store the time of `AVAudioSession.interruptionNotification` **ended**
+  so the deadline still resets if iOS suspends the app and it never polls
+  the watchdog during the interruption itself.
+- Preserve the 20-second real-stall fallback and the existing separate
+  bounded live-radio reconnect policy.
+- CI `ApoloInterruptionWatchdogChecks` tests cold-load stalls, a long
+  Instagram-like interruption, 311-ms recovery check, suspended polling,
+  continuous idle/loading stalls, and pause/play phase resets.
+
+**Remaining question:** iOS owns the exact duration of Instagram's
+interruption. The log proves the interruption lasted ~40.7 seconds but
+cannot tell when the user physically left Instagram. This fix removes
+Thrum's *incorrect* forced engine switch; it does not guarantee that
+Instagram relinquishes the audio session within 15 seconds.
+
+**Acceptance:** With Apolo music beta on and the engine indicator visible,
+play a track for >30 seconds, open Instagram with audio enabled, return
+without reopening Thrum, and verify it resumes via **Apolo**, not MPVKit.
+Repeat with short and long interruptions, background/suspended application,
+paused-before-interruption, lockscreen and AirPods. Deliberately simulate
+a genuine >20-second pending audio state to confirm MPVKit fallback remains.
