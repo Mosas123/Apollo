@@ -281,11 +281,12 @@ extension PlayerController {
             return
         }
 
-        // Audio-only experiment: bypass mpv while keeping Thrum as owner of
-        // the queue, remote commands, Now Playing artwork and audio session.
+        // Audio-only beta: route music and podcasts through Apolo while Thrum
+        // owns the queue, commands, artwork and audio session. Keep live radio
+        // on mpv; Apolo's HTTP AVIO does not support segmented/live streams.
         if !bypassApolo,
            SettingsStore.shared.apoloBetaEnabled,
-           NowPlaying.shared.playbackKind == .music,
+           NowPlaying.shared.playbackKind != .radio,
            ["file", "http", "https"].contains(url.scheme?.lowercased() ?? "") {
             var playbackStart = startAt > 0 ? startAt : skipStart
             if startAt == 0,
@@ -1538,7 +1539,7 @@ extension PlayerController {
         // must be able to fall back instead of waiting forever.
         monitorApolo(url: url, videoId: videoId, generation: generation)
         Log.player.info(
-            "APOLO_BETA begin videoId=\(videoId ?? "nil") source=\(Self.apoloSource(url))"
+            "APOLO_BETA begin videoId=\(videoId ?? "nil") kind=\(NowPlaying.shared.playbackKind) source=\(Self.apoloSource(url))"
         )
         do {
             try await backend.load(
