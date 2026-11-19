@@ -5,13 +5,13 @@ import Foundation
 /// not a workaround for AVFoundation's timed-metadata crash.
 enum LiveRadioDuplicateRequestPolicy {
     struct ActiveSession {
-        let stationID: String?
-        let streamURL: URL?
-        let apoloActive: Bool
-        let apoloRadioEnabled: Bool
-        let isLoadingOrPlaying: Bool
-        let desiredPlaying: Bool
-        let isInterrupted: Bool
+        var stationID: String?
+        var streamURL: URL?
+        var apoloActive: Bool
+        var apoloRadioEnabled: Bool
+        var isLoadingOrPlaying: Bool
+        var desiredPlaying: Bool
+        var isInterrupted: Bool
     }
 
     static func shouldSuppress(
