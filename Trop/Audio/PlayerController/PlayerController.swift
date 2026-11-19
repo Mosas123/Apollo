@@ -1477,7 +1477,7 @@ extension PlayerController {
             NowPlaying.shared.duration = max(0, duration ?? 0)
             setNowPlayingMetadata()
             monitorApolo(url: url, videoId: videoId, generation: generation)
-            Log.player.info("APOLO_BETA active audio only videoId=\(videoId ?? \"nil\")")
+            Log.player.info("APOLO_BETA active audio only videoId=\(videoId ?? "nil")")
         } catch {
             guard apoloIsActive, apoloGeneration == generation else { return }
             Log.player.error("APOLO_BETA load failed: \(error)")
