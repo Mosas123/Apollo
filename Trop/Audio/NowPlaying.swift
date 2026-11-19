@@ -34,6 +34,25 @@ enum PlaybackKind: Sendable {
     case radio
 }
 
+/// Real-time station state, independent of finite song progress or mpv/Apolo.
+enum RadioPlaybackStatus: Equatable, Sendable {
+    case connecting
+    case live
+    case reconnecting
+    case paused
+    case unavailable
+
+    var label: String {
+        switch self {
+        case .connecting: "Connecting…"
+        case .live: "LIVE"
+        case .reconnecting: "Reconnecting…"
+        case .paused: "Paused"
+        case .unavailable: "Unavailable"
+        }
+    }
+}
+
 /// Display metadata for one playback identity. Original SongItem artist/album
 /// IDs remain untouched and continue to be used for navigation.
 struct PlaybackMetadataSnapshot: Sendable {
@@ -56,6 +75,8 @@ final class NowPlaying {
     var artist = ""
     /// For internet radio: the song currently playing on the station (ICY title).
     var liveTitle: String?
+    /// Shows an honest connection state instead of a fake 0:00 song progress.
+    var radioPlaybackStatus: RadioPlaybackStatus = .connecting
     /// Enriched live radio song (parsed + album/artwork from a catalogue).
     var liveSongInfo: LiveSongInfo?
     var albumTitle = ""
@@ -451,6 +472,7 @@ final class NowPlaying {
         self.videoId = videoId
         self.liveTitle = nil
         self.liveSongInfo = nil
+        self.radioPlaybackStatus = .connecting
         self.hasVideo = false
         self.isVideoMode = false
         self.isVideoReady = false
@@ -493,6 +515,7 @@ final class NowPlaying {
         artistVideoId = nil
         liveTitle = nil
         liveSongInfo = nil
+        radioPlaybackStatus = .connecting
         currentSourceName = nil
         currentResult = nil
         currentTime = 0
@@ -603,6 +626,15 @@ final class NowPlaying {
 
     func stopped(videoId: String?, isEof: Bool = true) {
         guard self.videoId == videoId else { return }
+        if playbackKind == .radio {
+            // Radio is an indefinite station, never a completed queue song.
+            // Avoid YouTube re-resolve/queue advance after a station error.
+            radioPlaybackStatus = .unavailable
+            isPlaying = false
+            stopTimer()
+            PlayerController.shared.updateNowPlayingProgress()
+            return
+        }
         if let skipTime = lastManualSkipTime, Date().timeIntervalSince(skipTime) < 2, isResolvingNext {
             return
         }
