@@ -29,9 +29,14 @@ struct PlayerSettingsView: View {
         List {
             Section {
                 SettingsToggleRow(
-                    "ApoloEngine Beta (Music Only)",
+                    "ApoloEngine Beta (Music)",
                     icon: "waveform.path",
                     isOn: $settings.apoloBetaEnabled
+                )
+                SettingsToggleRow(
+                    "ApoloEngine Beta (Podcasts)",
+                    icon: "mic",
+                    isOn: $settings.apoloPodcastsBetaEnabled
                 )
                 SettingsToggleRow(
                     "ApoloEngine Beta (Live Radio)",
@@ -41,7 +46,7 @@ struct PlayerSettingsView: View {
             } header: {
                 Text("Experimental Playback")
             } footer: {
-                Text("Music and Live Radio have independent beta switches. The radio switch applies to the next station and uses Apolo's continuous live transport; MPVKit remains the fallback if it fails. Video restrictions and ten-band EQ limitations apply only to the existing music beta.")
+                Text("Music, Podcasts and Live Radio have independent beta switches. Changes apply to the next selection. Podcasts keep their saved position and use finite audio playback; live radio uses Apolo's continuous transport. MPVKit remains the fallback if Apolo cannot load a source.")
             }
 
             Section {
