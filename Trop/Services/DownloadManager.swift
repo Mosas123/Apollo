@@ -198,7 +198,16 @@ final class DownloadManager: ObservableObject {
                 LocalAudioFilePolicy.isValidAudioSize(properties.fileSize ?? 0)
             else { throw LocalAudioImportError.invalidFile }
 
-            try FileManager.default.copyItem(at: sourceURL, to: destination)
+            do {
+                try FileManager.default.copyItem(
+                    at: sourceURL, to: destination
+                )
+            } catch {
+                // File-provider transfers can fail mid-copy or run out of disk
+                // space. Do not leave a damaged file for the scanner to adopt.
+                try? FileManager.default.removeItem(at: destination)
+                throw error
+            }
         }.value
 
         let entity = DownloadedTrackEntity(
@@ -245,8 +254,17 @@ final class DownloadManager: ObservableObject {
 
     @discardableResult
     func ensureDirectories() -> Bool {
-        try? fileManager.createDirectory(at: downloadsDir, withIntermediateDirectories: true)
-        return true
+        do {
+            try fileManager.createDirectory(
+                at: downloadsDir, withIntermediateDirectories: true
+            )
+            return true
+        } catch {
+            Log.downloadManager.error(
+                "Unable to create Downloads folder: \(error.localizedDescription)"
+            )
+            return false
+        }
     }
 
     private func resolvedURL(for track: DownloadedTrackEntity) -> URL? {
