@@ -274,17 +274,20 @@ extension PlayerController {
             default:
                 isApoloLoadingOrPlaying = false
             }
-            if LiveRadioDuplicateRequestPolicy.shouldSuppress(
-                requestedID: videoId,
-                requestedURL: candidateURL,
-                currentID: currentVideoId,
-                currentURL: NowPlaying.shared.currentStreamURL.flatMap(URL.init(string:)),
+            let activeSession = LiveRadioDuplicateRequestPolicy.ActiveSession(
+                stationID: currentVideoId,
+                streamURL: NowPlaying.shared.currentStreamURL.flatMap(URL.init(string:)),
                 apoloActive: apoloIsActive,
                 apoloRadioEnabled: SettingsStore.shared.apoloRadioBetaEnabled,
-                bypassApolo: bypassApolo,
                 isLoadingOrPlaying: isApoloLoadingOrPlaying,
                 desiredPlaying: sharedState.withLock { $0.desiredPlaying },
                 isInterrupted: apoloAudioInterruptionActive
+            )
+            if LiveRadioDuplicateRequestPolicy.shouldSuppress(
+                requestedID: videoId,
+                requestedURL: candidateURL,
+                bypassApolo: bypassApolo,
+                active: activeSession
             ) {
                 // No serial/metadata/engine mutation: an old HLS item's
                 // metadata output must not be repeatedly torn down.
