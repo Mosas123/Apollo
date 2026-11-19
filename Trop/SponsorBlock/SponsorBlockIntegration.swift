@@ -79,7 +79,11 @@ final class SponsorBlockIntegration {
     /// Called by NowPlaying's timer after it updates the position.
     func tick() {
         let nowPlaying = NowPlaying.shared
-        guard SponsorBlock.isEnabled, let id = nowPlaying.videoId else { return }
+        // Podcast episodes have their own editorial timeline and resume
+        // position; don't apply SponsorBlock music/video offsets to them.
+        guard nowPlaying.playbackKind == .music,
+              SponsorBlock.isEnabled,
+              let id = nowPlaying.videoId else { return }
         if id != videoId {
             videoId = id
             segments = []
