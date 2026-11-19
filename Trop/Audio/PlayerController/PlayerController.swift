@@ -100,6 +100,7 @@ final class PlayerController {
     private var recoveryEnd: TimeInterval?
     private var recoveryPositionAtEnd: TimeInterval?
     private var recoveryAdvanced = false
+    private var recoveryObservedState: String?
 
     /// Video-mode state. Reads happen on the event loop thread from event handlers;
     /// writes happen on the main actor from `setVideoMode` / `loadFileReplacing`.
@@ -1270,6 +1271,7 @@ extension PlayerController {
             recoveryEnd = nil
             recoveryPositionAtEnd = nil
             recoveryAdvanced = false
+            recoveryObservedState = nil
             apoloAudioInterruptionActive = true
             traceRecovery("legacyBegan")
             let wasSuspended = (userInfo[AVAudioSessionInterruptionWasSuspendedKey] as? Bool) ?? false
@@ -1817,6 +1819,23 @@ extension PlayerController {
                       self.apoloGeneration == generation,
                       NowPlaying.shared.videoId == videoId,
                       let backend = self.apoloBackend else { return }
+                // Sample transitions while an interruption trace is active.
+                // This is observer-only: no backend state is modified.
+                if self.recoveryBegin != nil {
+                    let observed: String
+                    switch backend.state {
+                    case .idle: observed = "idle"
+                    case .loading: observed = "loading"
+                    case .playing: observed = "playing"
+                    case .paused: observed = "paused"
+                    case .finished: observed = "finished"
+                    case .failed: observed = "failed"
+                    }
+                    if observed != self.recoveryObservedState {
+                        self.recoveryObservedState = observed
+                        self.traceRecovery("apoloState.\(observed)")
+                    }
+                }
                 if self.recoveryEnd != nil,
                    !self.recoveryAdvanced,
                    case .playing = backend.state,
