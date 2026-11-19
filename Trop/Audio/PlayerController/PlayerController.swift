@@ -265,9 +265,39 @@ extension PlayerController {
             )
             return
         }
+        let candidateURL = URL(string: url)
+        if let candidateURL {
+            let isApoloLoadingOrPlaying: Bool
+            switch apoloBackend?.state {
+            case .some(.loading), .some(.playing):
+                isApoloLoadingOrPlaying = true
+            default:
+                isApoloLoadingOrPlaying = false
+            }
+            if LiveRadioDuplicateRequestPolicy.shouldSuppress(
+                requestedID: videoId,
+                requestedURL: candidateURL,
+                currentID: currentVideoId,
+                currentURL: NowPlaying.shared.currentStreamURL.flatMap(URL.init(string:)),
+                apoloActive: apoloIsActive,
+                apoloRadioEnabled: SettingsStore.shared.apoloRadioBetaEnabled,
+                bypassApolo: bypassApolo,
+                isLoadingOrPlaying: isApoloLoadingOrPlaying,
+                desiredPlaying: sharedState.withLock { $0.desiredPlaying },
+                isInterrupted: apoloAudioInterruptionActive
+            ) {
+                // No serial/metadata/engine mutation: an old HLS item's
+                // metadata output must not be repeatedly torn down.
+                Log.player.info(
+                    "RADIO_DUPLICATE_SUPPRESSED videoId=\(videoId ?? "nil") "
+                        + "phase=\(isApoloLoadingOrPlaying ? "loadingOrPlaying" : "other")"
+                )
+                return
+            }
+        }
         playRequestSerial &+= 1
         let requestSerial = playRequestSerial
-        guard let url = URL(string: url) else {
+        guard let url = candidateURL else {
             Log.player.error("Invalid playback source URL")
             return
         }
