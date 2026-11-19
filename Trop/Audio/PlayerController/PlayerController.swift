@@ -246,7 +246,8 @@ extension PlayerController {
         bypassApolo: Bool = false,
         intentGeneration: Int? = nil,
         sourceMIMEType: String? = nil,
-        isAtmos: Bool = false
+        isAtmos: Bool = false,
+        bypassSponsorBlock: Bool = false
     ) async {
         if let intentGeneration,
            intentGeneration != NowPlaying.shared.playbackGeneration {
@@ -266,7 +267,9 @@ extension PlayerController {
         // displayed title, stream quality or progress until the request still
         // owns the player after that asynchronous boundary.
         var skipStart: Double = 0
-        if SponsorBlock.skipsIntroAtStart, MusicPlaybackIdentity.isYouTube(videoId) {
+        if !bypassSponsorBlock,
+           SponsorBlock.skipsIntroAtStart,
+           MusicPlaybackIdentity.isYouTube(videoId) {
             skipStart = await SponsorBlockIntegration.shared.preloadedStartOffset(for: videoId)
         }
         if let intentGeneration,
