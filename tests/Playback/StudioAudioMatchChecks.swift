@@ -11,14 +11,16 @@ struct StudioAudioMatchChecks {
         candidateArtist: [String] = ["Bad Bunny"],
         candidateAlbum: String? = "Un Verano Sin Ti",
         candidateDuration: Int = 245,
-        candidateType: String? = "MUSIC_VIDEO_TYPE_ATV"
+        candidateType: String? = "MUSIC_VIDEO_TYPE_ATV",
+        originalWasVideo: Bool = false
     ) -> Bool {
         MusicRecordingSelectionPolicy.verifiedAlbumAudio(
             wantedTitle: title, wantedArtist: artist,
             wantedAlbum: album, wantedDuration: duration,
             candidateTitle: candidateTitle, candidateArtists: candidateArtist,
             candidateAlbum: candidateAlbum, candidateDuration: candidateDuration,
-            candidateType: candidateType
+            candidateType: candidateType,
+            originalWasVideo: originalWasVideo
         )
     }
 
@@ -76,6 +78,55 @@ struct StudioAudioMatchChecks {
             "Do not trust candidates with missing performer credits")
         precondition(!verified(artist: ""),
             "Do not rematch when source artist is unknown")
-        print("PASS: 22 studio album-audio vs music-video matching assertions")
+        // Repro: NUEVAYoL was presented as a 3:42 video soundtrack,
+        // while the original album recording is ~3:03 (39s shorter).
+        precondition(verified(
+            title: "NUEVAYoL", album: "DeBÍ TiRAR MáS FOToS",
+            duration: 222, candidateTitle: "NUEVAYoL",
+            candidateAlbum: "DeBÍ TiRAR MáS FOToS",
+            candidateDuration: 183
+        ), "NUEVAYoL album recording must survive the video intro offset")
+        precondition(verified(
+            title: "NUEVAYoL", album: nil, duration: 222,
+            candidateTitle: "NUEVAYoL", candidateAlbum: "DeBÍ TiRAR MáS FOToS",
+            candidateDuration: 183, originalWasVideo: true
+        ), "Known video intro can differ 39s even if old row lacks album")
+        precondition(!verified(
+            title: "NUEVAYoL", album: nil, duration: 222,
+            candidateTitle: "NUEVAYoL", candidateAlbum: "DeBÍ TiRAR MáS FOToS",
+            candidateDuration: 183, originalWasVideo: false
+        ), "An unknown source cannot permit a 39s duration mismatch")
+        precondition(MusicRecordingSelectionPolicy.shouldFindAlbumAudio(
+            selectedVideo: false,
+            rowType: "MUSIC_VIDEO_TYPE_OMV",
+            sourceType: "MUSIC_VIDEO_TYPE_OMV",
+            rowIsVideo: true
+        ), "Songs tap must seek album audio even for an OMV-classified row")
+        precondition(!MusicRecordingSelectionPolicy.shouldFindAlbumAudio(
+            selectedVideo: true,
+            rowType: "MUSIC_VIDEO_TYPE_OMV",
+            sourceType: "MUSIC_VIDEO_TYPE_OMV",
+            rowIsVideo: true
+        ), "Videos tap must keep the intentionally selected video audio")
+        precondition(MusicRecordingSelectionPolicy.shouldFindAlbumAudio(
+            selectedVideo: false, rowType: nil, sourceType: nil,
+            albumKnown: true, expectedDuration: 222, resolvedDuration: 222
+        ), "Untyped album rows must seek a verified ATV when possible")
+        precondition(!MusicRecordingSelectionPolicy.shouldFindAlbumAudio(
+            selectedVideo: false, rowType: nil,
+            sourceType: "MUSIC_VIDEO_TYPE_ATV",
+            albumKnown: true
+        ), "A verified album track must not be searched again")
+        precondition(!MusicRecordingSelectionPolicy.shouldFindAlbumAudio(
+            selectedVideo: false, rowType: nil, sourceType: nil,
+            albumKnown: false, expectedDuration: 222, resolvedDuration: 222
+        ), "Untyped no-album entries should not cause extra searches")
+        precondition(!verified(
+            title: "NUEVAYoL", album: "DeBÍ TiRAR MáS FOToS",
+            duration: 222, candidateTitle: "NUEVAYoL",
+            candidateAlbum: "Different Album", candidateDuration: 183,
+            originalWasVideo: true
+        ), "Even video intro allowance must reject a different album")
+        print("PASS: 31 studio album-audio vs music-video matching assertions")
     }
 }
