@@ -1184,7 +1184,8 @@ extension PlayerController {
         let now = ProcessInfo.processInfo.systemUptime
         let elapsed = Int((now - start) * 1000)
         let postEnd = recoveryEnd.map { Int((now - $0) * 1000) } ?? -1
-        Log.player.info("AUDIO_RECOVERY id=\(self.recoveryID) event=\(event, privacy: .public) uptimeMs=\(Int(now * 1000)) sinceBeginMs=\(elapsed) sinceEndMs=\(postEnd)")
+        let uptimeMs = Int(now * 1000)
+        Log.player.info("AUDIO_RECOVERY id=\(self.recoveryID) event=\(event, privacy: .public) uptimeMs=\(uptimeMs) sinceBeginMs=\(elapsed) sinceEndMs=\(postEnd)")
     }
 
     func assertAudioSession(reason: String = "unspecified") {
@@ -1200,12 +1201,14 @@ extension PlayerController {
             stage = "activation"
             try session.setActive(true)
             let ms = Int((ProcessInfo.processInfo.systemUptime - start) * 1000)
-            Log.player.info("AUDIO_SESSION_ACTIVATION reason=\(reason, privacy: .public) result=success ms=\(ms) uptimeMs=\(Int(ProcessInfo.processInfo.systemUptime * 1000))")
+            let uptimeMs = Int(ProcessInfo.processInfo.systemUptime * 1000)
+            Log.player.info("AUDIO_SESSION_ACTIVATION reason=\(reason, privacy: .public) result=success ms=\(ms) uptimeMs=\(uptimeMs)")
             traceRecovery("activation.success.\(reason)")
         } catch {
             let ms = Int((ProcessInfo.processInfo.systemUptime - start) * 1000)
             let code = (error as NSError).code
-            Log.player.error("AUDIO_SESSION_ACTIVATION reason=\(reason, privacy: .public) result=failed stage=\(stage, privacy: .public) code=\(code) ms=\(ms) uptimeMs=\(Int(ProcessInfo.processInfo.systemUptime * 1000))")
+            let uptimeMs = Int(ProcessInfo.processInfo.systemUptime * 1000)
+            Log.player.error("AUDIO_SESSION_ACTIVATION reason=\(reason, privacy: .public) result=failed stage=\(stage, privacy: .public) code=\(code) ms=\(ms) uptimeMs=\(uptimeMs)")
             traceRecovery("activation.failed.\(reason)")
             Log.player.error("Failed to assert audio session: \(error)")
         }
