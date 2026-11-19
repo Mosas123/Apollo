@@ -70,6 +70,10 @@ enum MusicRecordingSelectionPolicy {
         if wantedDuration <= 0 || candidateDuration <= 0 {
             return sameAlbum
         }
-        return abs(wantedDuration - candidateDuration) <= 8
+        // A music video may include a spoken introduction or outro that
+        // is absent from the official studio master. The exact release
+        // identity allows a wider range than a title/artist-only match.
+        let maxDifference = sameAlbum ? 60 : 20
+        return abs(wantedDuration - candidateDuration) <= maxDifference
     }
 }
