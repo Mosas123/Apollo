@@ -85,8 +85,8 @@ struct LiveRadioDuplicateRequestChecks {
         session = baseline
         session.apoloActive = false
         expect(!ignored(session), "MPV active path must be unaffected")
-        expect(!ignored(baseline, requestedURL: URL(string: "https://radio.example/other.m3u8")!),
-               "Different stream URL under same ID must proceed")
+        let differentStream = URL(string: "https://radio.example/other.m3u8")!
+        expect(!ignored(baseline, requestedURL: differentStream), "Different stream URL under same ID must proceed")
 
         // Simulated app behavior: same station while playing keeps the engine,
         // but an explicit retry after .failed remains possible.
