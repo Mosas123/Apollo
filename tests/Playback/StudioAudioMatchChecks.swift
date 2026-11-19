@@ -59,8 +59,13 @@ struct StudioAudioMatchChecks {
             "Exact recording title is mandatory")
         precondition(!verified(candidateAlbum: "Different Album"),
             "Different release should not match")
-        precondition(!verified(candidateDuration: 260),
-            "Different duration must be rejected")
+        precondition(verified(candidateDuration: 260),
+            "An album-verified studio recording can omit video-only intro")
+        precondition(!verified(candidateDuration: 330),
+            "Excessive duration mismatch must still be rejected")
+        precondition(!verified(album: nil, candidateAlbum: nil,
+                               candidateDuration: 270),
+            "Without release proof, large duration mismatches are rejected")
         precondition(verified(candidateDuration: 252),
             "A small duration difference is acceptable")
         precondition(!verified(album: nil, duration: 0),
@@ -71,6 +76,6 @@ struct StudioAudioMatchChecks {
             "Do not trust candidates with missing performer credits")
         precondition(!verified(artist: ""),
             "Do not rematch when source artist is unknown")
-        print("PASS: 20 studio album-audio vs music-video matching assertions")
+        print("PASS: 22 studio album-audio vs music-video matching assertions")
     }
 }
