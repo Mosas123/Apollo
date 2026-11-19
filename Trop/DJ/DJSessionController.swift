@@ -124,7 +124,8 @@ final class DJSessionController {
         var offset = 0
         while offset < pool.count {
             try Task.checkCancellation()
-            let chunk = Array(pool[offset..<min(offset + chunkSize, pool.count)])
+            let baseIndex = offset
+            let chunk = Array(pool[baseIndex..<min(baseIndex + chunkSize, pool.count)])
             state = .preparing(
                 done: offset,
                 total: pool.count,
@@ -132,14 +133,14 @@ final class DJSessionController {
             )
             let payloads = await withTaskGroup(of: DJPreparedPayload.self) { group in
                 for (relative, song) in chunk.enumerated() {
-                    group.addTask { [weak self] in
+                    group.addTask { [weak self, baseIndex] in
                         guard let self else {
                             return DJPreparedPayload.skipped(
-                                index: offset + relative,
+                                index: baseIndex + relative,
                                 message: "Session cancelled."
                             )
                         }
-                        return await self.prepareOne(song, index: offset + relative)
+                        return await self.prepareOne(song, index: baseIndex + relative)
                     }
                 }
                 var results: [DJPreparedPayload] = []
