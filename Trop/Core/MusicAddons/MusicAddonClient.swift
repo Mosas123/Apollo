@@ -380,7 +380,9 @@ actor MusicAddonClient {
             resolvingAgainstBaseURL: false
         )
         components?.queryItems = [
-            URLQueryItem(name: "atmos", value: preferAtmos ? "on" : "off"),
+            // NullBeat expects a boolean here; "on"/"off" silently fell back
+            // to FLAC, so the Atmos toggle never worked.
+            URLQueryItem(name: "atmos", value: preferAtmos ? "true" : "false"),
             URLQueryItem(name: "quality", value: quality.rawValue)
         ]
         let url = components?.url
