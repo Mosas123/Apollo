@@ -14,6 +14,20 @@ enum LocalAudioFilePolicy {
             && supportedExtensions.contains(url.pathExtension.lowercased())
     }
 
+    static func mimeHint(for url: URL) -> String? {
+        switch url.pathExtension.lowercased() {
+        case "mp3": return "audio/mpeg"
+        case "m4a", "m4b", "mp4": return "audio/mp4"
+        case "flac": return "audio/flac"
+        case "wav": return "audio/wav"
+        case "aac": return "audio/aac"
+        case "ogg", "oga": return "audio/ogg"
+        case "opus": return "audio/opus"
+        case "webm", "weba": return "audio/webm"
+        default: return nil
+        }
+    }
+
     static func isValidAudioSize(_ bytes: Int) -> Bool {
         // Keep the original download integrity threshold; never register a
         // zero-length or truncated external file as an offline song.
