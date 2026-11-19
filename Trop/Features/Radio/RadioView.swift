@@ -150,7 +150,10 @@ struct RadioView: View {
 
     private func play(_ station: RadioStation) {
         guard let stream = station.streamURL else { return }
-        Task {
+        Task { @MainActor in
+            // A station selection is a fresh playback intent. Invalidate
+            // outstanding song-resolver tasks before they can steal the player.
+            NowPlaying.shared.bumpPlaybackIntent()
             await PlayerController.shared.play(
                 url: stream,
                 title: station.name,
