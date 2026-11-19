@@ -33,10 +33,15 @@ struct PlayerSettingsView: View {
                     icon: "waveform.path",
                     isOn: $settings.apoloBetaEnabled
                 )
+                SettingsToggleRow(
+                    "ApoloEngine Beta (Live Radio)",
+                    icon: "dot.radiowaves.left.and.right",
+                    isOn: $settings.apoloRadioBetaEnabled
+                )
             } header: {
                 Text("Experimental Playback")
             } footer: {
-                Text("Apolo plays music on the next track. Video mode is disabled while the beta is enabled; mpv is used if a source fails. Ten-band EQ support is not yet migrated.")
+                Text("Music and Live Radio have independent beta switches. The radio switch applies to the next station and uses Apolo's continuous live transport; MPVKit remains the fallback if it fails. Video restrictions and ten-band EQ limitations apply only to the existing music beta.")
             }
 
             Section {
