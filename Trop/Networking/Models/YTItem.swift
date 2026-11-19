@@ -267,6 +267,14 @@ enum ContentKind: String, Codable, Hashable, Sendable {
     case episode
 }
 
+/// Selection intent is distinct from what the upstream YouTube ID
+/// represents. A music video mistakenly embedded in a Songs row is still
+/// a request for album audio; an explicit Videos tap is not.
+enum MusicRecordingPreference: String, Codable, Hashable, Sendable {
+    case albumAudio
+    case musicVideo
+}
+
 struct SongItem: Codable, Hashable {
     var videoId: String
     var title: String
@@ -287,6 +295,10 @@ struct SongItem: Codable, Hashable {
     /// art-tracks), when the row carried one. Nil for stored rows parsed
     /// before this existed — previously persisted queues keep decoding.
     var musicVideoType: String?
+
+    /// What the listener requested, not what a YouTube source ID happens
+    /// to contain. Optional for older saved queues (music-first default).
+    var recordingPreference: MusicRecordingPreference?
 
     /// Content kind for routing metadata enrichment. Optional so previously
     /// persisted queue snapshots keep decoding; nil means `.music`.
