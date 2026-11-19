@@ -87,6 +87,81 @@ struct ApoloInterruptionWatchdogChecks {
             now: at(70), isInterrupted: false, interruptionEndedAt: nil
         ), "A fully recovered player starts a new pending phase")
 
+        // Radio previously used station age as the loading deadline. In
+        // log(9), a healthy station playing for >40s entered .loading after
+        // a video interruption and fell back to mpv in 186ms.
+        var radio = ApoloLiveRadioWatchdog()
+        expect(!radio.hasTimedOut(
+            now: at(0), timeout: 40, isInterrupted: false, interruptionEndedAt: nil
+        ), "Radio initial load starts fresh deadline")
+        expect(!radio.hasTimedOut(
+            now: at(39.9), timeout: 40, isInterrupted: false, interruptionEndedAt: nil
+        ), "Initial radio loading gets its full 40-second allowance")
+        expect(radio.hasTimedOut(
+            now: at(40.1), timeout: 40, isInterrupted: false, interruptionEndedAt: nil
+        ), "Real 40-second radio loading stall still falls back")
+
+        radio.reset() // .playing after initial load
+        expect(!radio.hasTimedOut(
+            now: at(180), timeout: 40, isInterrupted: false, interruptionEndedAt: nil
+        ), "Healthy station age must not immediately time out a new loading phase")
+        expect(!radio.hasTimedOut(
+            now: at(180.186), timeout: 40, isInterrupted: false, interruptionEndedAt: nil
+        ), "Exactly the 186ms video interruption reproduction")
+        radio.reset() // .playing again
+
+        expect(!radio.hasTimedOut(
+            now: at(250), timeout: 40, isInterrupted: true, interruptionEndedAt: nil
+        ), "Do not count iOS video interruption against radio transport")
+        expect(!radio.hasTimedOut(
+            now: at(430), timeout: 40, isInterrupted: true, interruptionEndedAt: nil
+        ), "Very long interruption must not trigger mpv")
+        expect(!radio.hasTimedOut(
+            now: at(430.186), timeout: 40, isInterrupted: false,
+            interruptionEndedAt: at(430)
+        ), "Return from video interruption gets fresh radio grace")
+        expect(!radio.hasTimedOut(
+            now: at(469), timeout: 40, isInterrupted: false,
+            interruptionEndedAt: at(430)
+        ), "Post-interruption recovery is not a station-age timeout")
+        expect(radio.hasTimedOut(
+            now: at(471), timeout: 40, isInterrupted: false,
+            interruptionEndedAt: at(430)
+        ), "Radio can still fall back after a genuine continuous stall")
+
+        var radioSuspend = ApoloLiveRadioWatchdog()
+        expect(!radioSuspend.hasTimedOut(
+            now: at(10), timeout: 40, isInterrupted: false,
+            interruptionEndedAt: nil
+        ), "Radio pending time begins before app suspension")
+        expect(!radioSuspend.hasTimedOut(
+            now: at(501), timeout: 40, isInterrupted: false,
+            interruptionEndedAt: at(500)
+        ), "Late wake must use interruption end timestamp")
+        expect(radioSuspend.hasTimedOut(
+            now: at(541), timeout: 40, isInterrupted: false,
+            interruptionEndedAt: at(500)
+        ), "Radio remains bounded after wake")
+
+        var reconnect = ApoloLiveRadioWatchdog()
+        expect(!reconnect.hasTimedOut(
+            now: at(0), timeout: 35, isInterrupted: false,
+            interruptionEndedAt: nil
+        ), "First failed state begins retry budget")
+        expect(!reconnect.hasTimedOut(
+            now: at(20), timeout: 40, isInterrupted: false,
+            interruptionEndedAt: nil
+        ), "Switch to loading does not reset shared pending phase")
+        expect(reconnect.hasTimedOut(
+            now: at(36), timeout: 35, isInterrupted: false,
+            interruptionEndedAt: nil
+        ), "Failed reconnect retains 35-second deadline across states")
+        reconnect.reset() // .paused must clear pending deadline
+        expect(!reconnect.hasTimedOut(
+            now: at(120), timeout: 40, isInterrupted: false,
+            interruptionEndedAt: nil
+        ), "Explicit pause clears stale failure deadline")
+
         print("PASS: \(checks) Apolo audio interruption and recovery checks")
     }
 }
