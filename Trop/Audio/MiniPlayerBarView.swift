@@ -228,10 +228,16 @@ struct MiniPlayerBarView: View {
 
     private var progressLine: some View {
         GeometryReader { geo in
-            let progressWidth = max(0, min(geo.size.width, geo.size.width * CGFloat(np.progress)))
-            Rectangle()
-                .fill(.tint)
-                .frame(width: progressWidth, height: 2)
+            if np.playbackKind != .radio {
+                let progressWidth = max(
+                    0, min(geo.size.width, geo.size.width * CGFloat(np.progress))
+                )
+                Rectangle()
+                    .fill(.tint)
+                    .frame(width: progressWidth, height: 2)
+            }
+            // A live station is nonseekable. Show state in the text row,
+            // not a false 0% song progress bar.
         }
         .frame(height: 2)
         .allowsHitTesting(false)
@@ -290,11 +296,28 @@ struct MiniPlayerBarView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .foregroundStyle(titleColor)
-                Text(nowPlayingArtistLine)
-                    .font(.system(size: 12, weight: .regular))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .foregroundStyle(artistColor)
+                if np.playbackKind == .radio {
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(np.radioPlaybackStatus == .live
+                                  ? Color.red : Color.orange)
+                            .frame(width: 5, height: 5)
+                        Text(np.radioPlaybackStatus.label)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(artistColor)
+                        Text(nowPlayingArtistLine)
+                            .font(.system(size: 11))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .foregroundStyle(artistColor)
+                    }
+                } else {
+                    Text(nowPlayingArtistLine)
+                        .font(.system(size: 12, weight: .regular))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .foregroundStyle(artistColor)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .clipped()
