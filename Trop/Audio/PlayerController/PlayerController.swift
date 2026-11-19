@@ -239,6 +239,42 @@ final class PlayerController {
 // MARK: - Playback
 
 extension PlayerController {
+    /// Ignore only truly identical, already-playing/connecting radio requests.
+    /// This guard precedes all source-load serial and AVPlayer teardown work.
+    private func shouldSuppressDuplicateLiveRadioLoad(
+        url: URL,
+        videoId: String?,
+        bypassApolo: Bool
+    ) -> Bool {
+        guard videoId?.hasPrefix(NowPlaying.radioPrefix) == true else { return false }
+        let isApoloLoadingOrPlaying: Bool
+        switch apoloBackend?.state {
+        case .some(.loading), .some(.playing):
+            isApoloLoadingOrPlaying = true
+        default:
+            isApoloLoadingOrPlaying = false
+        }
+        let activeSession = LiveRadioDuplicateRequestPolicy.ActiveSession(
+            stationID: currentVideoId,
+            streamURL: NowPlaying.shared.currentStreamURL.flatMap(URL.init(string:)),
+            apoloActive: apoloIsActive,
+            apoloRadioEnabled: SettingsStore.shared.apoloRadioBetaEnabled,
+            isLoadingOrPlaying: isApoloLoadingOrPlaying,
+            desiredPlaying: sharedState.withLock { $0.desiredPlaying },
+            isInterrupted: apoloAudioInterruptionActive
+        )
+        let shouldSuppress = LiveRadioDuplicateRequestPolicy.shouldSuppress(
+            requestedID: videoId,
+            requestedURL: url,
+            bypassApolo: bypassApolo,
+            active: activeSession
+        )
+        if shouldSuppress {
+            // No request serial/metadata/AVPlayerItem modification.
+            Log.player.info("RADIO_DUPLICATE_SUPPRESSED videoId=\(videoId ?? "nil")")
+        }
+        return shouldSuppress
+    }
     @MainActor
     func play(
         url: String,
@@ -266,37 +302,13 @@ extension PlayerController {
             return
         }
         let candidateURL = URL(string: url)
-        if let candidateURL {
-            let isApoloLoadingOrPlaying: Bool
-            switch apoloBackend?.state {
-            case .some(.loading), .some(.playing):
-                isApoloLoadingOrPlaying = true
-            default:
-                isApoloLoadingOrPlaying = false
-            }
-            let activeSession = LiveRadioDuplicateRequestPolicy.ActiveSession(
-                stationID: currentVideoId,
-                streamURL: NowPlaying.shared.currentStreamURL.flatMap(URL.init(string:)),
-                apoloActive: apoloIsActive,
-                apoloRadioEnabled: SettingsStore.shared.apoloRadioBetaEnabled,
-                isLoadingOrPlaying: isApoloLoadingOrPlaying,
-                desiredPlaying: sharedState.withLock { $0.desiredPlaying },
-                isInterrupted: apoloAudioInterruptionActive
-            )
-            if LiveRadioDuplicateRequestPolicy.shouldSuppress(
-                requestedID: videoId,
-                requestedURL: candidateURL,
-                bypassApolo: bypassApolo,
-                active: activeSession
-            ) {
-                // No serial/metadata/engine mutation: an old HLS item's
-                // metadata output must not be repeatedly torn down.
-                Log.player.info(
-                    "RADIO_DUPLICATE_SUPPRESSED videoId=\(videoId ?? "nil") "
-                        + "phase=\(isApoloLoadingOrPlaying ? "loadingOrPlaying" : "other")"
-                )
-                return
-            }
+        if let candidateURL,
+           shouldSuppressDuplicateLiveRadioLoad(
+               url: candidateURL,
+               videoId: videoId,
+               bypassApolo: bypassApolo
+           ) {
+            return
         }
         playRequestSerial &+= 1
         let requestSerial = playRequestSerial
