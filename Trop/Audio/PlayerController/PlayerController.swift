@@ -405,6 +405,8 @@ extension PlayerController {
     }
 
     func seek(to time: TimeInterval) {
+        // A live station is nonseekable, regardless of MPV or Apolo route.
+        guard NowPlaying.shared.playbackKind != .radio else { return }
         pendingSeek = (time, Date().addingTimeInterval(1.5))
         NowPlaying.shared.currentTime = time
         if apoloIsActive {
@@ -1293,8 +1295,22 @@ extension PlayerController {
                 mpv_get_property(mpv, "time-pos", MPV_FORMAT_DOUBLE, &pos)
                 return (dur, pos)
             }
-        guard var props, props.dur > 0 else { return }
+        guard var props else { return }
         let np = NowPlaying.shared
+        if np.playbackKind == .radio {
+            // Live radio has no finite duration, but pause/lock-screen rate
+            // still needs publishing even when progress cannot be displayed.
+            var info = nowPlayingInfo
+            info.removeValue(forKey: MPMediaItemPropertyPlaybackDuration)
+            info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = 0
+            info[MPNowPlayingInfoPropertyPlaybackRate] = np.isPlaying ? 1 : 0
+            nowPlayingInfo = info
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+            MPNowPlayingInfoCenter.default().playbackState =
+                np.isPlaying ? .playing : .paused
+            return
+        }
+        guard props.dur > 0 else { return }
 
         if let seek = pendingSeek {
             if abs(props.pos - seek.target) > 1, Date() < seek.deadline {
@@ -1600,6 +1616,13 @@ extension PlayerController {
                     videoId: videoId,
                     generation: generation
                 )
+            } else if isNewSong {
+                // Leaving music for a station must stop the previous song's
+                // listening-history timer without creating a fake radio song.
+                Task { @MainActor [weak self] in
+                    guard let self, self.apoloGeneration == generation else { return }
+                    await PlaybackStateService.shared.stopTracking()
+                }
             }
             Log.player.info(
                 "APOLO_BETA active kind=\(isLiveRadio ? "radio" : "audio") videoId=\(videoId ?? "nil")"
