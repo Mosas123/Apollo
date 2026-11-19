@@ -20,6 +20,13 @@ struct LiveSongInfo: Equatable {
     var artwork: Data?
 }
 
+/// Last known position while a failed network stream is being re-resolved.
+private struct InterruptedPlaybackPosition {
+    let videoId: String
+    let position: TimeInterval
+    let expiresAt: Date
+}
+
 /// What is currently playing, used to route metadata and label the UI.
 enum PlaybackKind: Sendable {
     case music
@@ -155,9 +162,7 @@ final class NowPlaying {
     private var pendingResumeAt: Date?
     /// Short-lived position from a failed Apolo stream, used only if a fresh
     /// resolution for the same track is needed after the mpv fallback.
-    @ObservationIgnored private var interruptedPlayback: (
-        videoId: String, position: TimeInterval, expiresAt: Date
-    )?
+    @ObservationIgnored private var interruptedPlayback: InterruptedPlaybackPosition?
     private static let queueIndexKey = "nowPlaying.queueIndex"
     private static let shuffleKey = "nowPlaying.shuffle"
     private static let repeatKey = "nowPlaying.repeat"
@@ -181,7 +186,7 @@ final class NowPlaying {
     func rememberInterruptedPlayback(_ position: TimeInterval, for videoId: String?) {
         guard let videoId, self.videoId == videoId,
               position.isFinite, position > 1 else { return }
-        interruptedPlayback = (
+        interruptedPlayback = InterruptedPlaybackPosition(
             videoId: videoId,
             position: position,
             expiresAt: Date().addingTimeInterval(45)
