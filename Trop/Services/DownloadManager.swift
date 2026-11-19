@@ -59,18 +59,18 @@ final class DownloadManager: ObservableObject {
         switch SettingsStore.shared.musicQualityMode {
         case .off:
             // Downloads are independent from the playback source preference:
-            // the "Lossless When Available" toggle decides, so Off behaves as
-            // Auto here instead of disabling FLAC downloads.
+            // the "Lossless When Available" toggle decides. Atmos stays off
+            // because its toggle is only meaningful in Auto/Lossless.
             return AddonQualityPreference(
                 requireCD: false,
                 preferHiRes: SettingsStore.shared.preferHiRes,
-                preferAtmos: SettingsStore.shared.preferAtmos
+                preferAtmos: false
             )
         case .cd:
             return AddonQualityPreference(
                 requireCD: true,
                 preferHiRes: false,
-                preferAtmos: SettingsStore.shared.preferAtmos
+                preferAtmos: false
             )
         case .lossless:
             return AddonQualityPreference(

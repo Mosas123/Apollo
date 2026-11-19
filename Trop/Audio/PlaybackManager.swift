@@ -209,7 +209,7 @@ actor PlaybackManager {
         }
         let client = try MusicAddonClient(installation: installation)
         let mode = SettingsStore.shared.musicQualityMode
-        let atmos = mode != .off && SettingsStore.shared.preferAtmos
+        let atmos = (mode == .auto || mode == .lossless) && SettingsStore.shared.preferAtmos
         let streamQuality: AddonStreamQuality = atmos
             ? .max
             : (mode == .cd ? .lossless : (SettingsStore.shared.preferHiRes ? .hires : .lossless))
@@ -226,10 +226,6 @@ actor PlaybackManager {
         Log.player.info(
             "ADDON_STREAM quality=\(stream.qualityTier) mime=\(stream.mimeType) atmos=\(isAtmosStream) requested=\(atmos)"
         )
-        if atmos, !isAtmosStream {
-            Log.player.info("ADDON_STREAM skipped: Dolby only is on")
-            throw MusicCatalogError.unavailableTrack
-        }
         resolvedSourceNames[videoId] = installation.manifest.name
 
         if case .youtube(let youTubeId) = stream.kind {
@@ -326,7 +322,7 @@ actor PlaybackManager {
             return AddonQualityPreference(
                 requireCD: true,
                 preferHiRes: false,
-                preferAtmos: SettingsStore.shared.preferAtmos
+                preferAtmos: false
             )
         case .lossless:
             return AddonQualityPreference(
@@ -377,8 +373,7 @@ actor PlaybackManager {
             let qualitySetting = SettingsStore.shared.audioQuality
             return allowedMode && (qualitySetting == .auto || qualitySetting == .high)
         }
-        if preference.preferAtmos { return quality.contains("atmos") }
-        if quality.contains("atmos") { return false }
+        if quality.contains("atmos") { return preference.preferAtmos }
         guard isLosslessResult(result) else { return false }
         if isHiResResult(result), !preference.preferHiRes { return false }
         if preference.requireCD, isHiResResult(result) { return false }
