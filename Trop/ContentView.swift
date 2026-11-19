@@ -87,6 +87,7 @@ struct ContentView: View {
             // Load installed add-ons early: FLAC/CD/Atmos settings depend on it.
             _ = MusicAddonsStore.shared
             await PlaybackManager.shared.startQueueObserver()
+            await DJSessionController.purgeOrphanedSession()
             await MusicAddonsStore.shared.refreshAll()
         }
         .simultaneousGesture(backSwipeGesture)

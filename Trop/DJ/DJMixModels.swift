@@ -17,15 +17,46 @@ struct DJTrackAnalysis: Sendable, Equatable {
     let duration: TimeInterval
 }
 
+enum DJTransitionKind: String, Codable, Sendable, CaseIterable {
+    case crossfade
+    case cut
+    case filterSweep
+    case echoOut
+    case bassSwap
+    case loopRoll
+    case backspin
+    case custom
+}
+
+/// One effect the AI wants during a transition. The live engine will apply the
+/// ones it supports; the offline renderer currently only honours the fade.
+struct DJEffect: Codable, Sendable, Equatable {
+    let name: String
+    let amount: Double?
+    let startSeconds: Double?
+    let endSeconds: Double?
+}
+
+/// How a slot enters: the AI decides between which tracks it mixes and with
+/// which effects. `seconds` is also the crossfade length for the renderer.
+struct DJTransition: Codable, Sendable, Equatable {
+    let kind: DJTransitionKind
+    let seconds: Double
+    let effects: [DJEffect]
+}
+
 struct DJMixPlan: Sendable, Equatable {
     struct Slot: Sendable, Equatable {
         let track: DJSourceTrack
         let analysis: DJTrackAnalysis
         /// Crossfade length into the next slot, in seconds.
         let crossfadeSeconds: Double
+        var transition: DJTransition? = nil
+        var cueInSeconds: Double? = nil
     }
     let slots: [Slot]
     let masterTempo: Double?
+    var notes: String? = nil
 }
 
 enum DJMixPlanner {
@@ -51,7 +82,12 @@ enum DJMixPlanner {
             let isLast = index == ordered.count - 1
             let jump = abs((pair.1.bpm ?? master ?? 0) - (master ?? 0))
             let fade = isLast ? 0 : min(max(targetCrossfade, 1), jump > 6 ? 2 : targetCrossfade)
-            return DJMixPlan.Slot(track: pair.0, analysis: pair.1, crossfadeSeconds: fade)
+            return DJMixPlan.Slot(
+                track: pair.0,
+                analysis: pair.1,
+                crossfadeSeconds: fade,
+                transition: isLast ? nil : DJTransition(kind: .crossfade, seconds: fade, effects: [])
+            )
         }
         return DJMixPlan(slots: slots, masterTempo: master)
     }
