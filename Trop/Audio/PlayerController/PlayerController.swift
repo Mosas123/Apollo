@@ -102,16 +102,22 @@ final class PlayerController {
     /// A real user Pause fences every delayed load for this selection,
     /// including mpv fallback. An unrelated new selection can still play.
     private var explicitlyPausedSelectionGeneration: Int?
+    private var explicitlyPausedSelectionVideoId: String?
     private var lastStartedSelectionGeneration: Int?
     private var lastStartedSelectionVideoId: String?
     var wantsPlayback: Bool { sharedState.withLock { $0.desiredPlaying } }
+    private func userPauseGeneration(for videoId: String?) -> Int? {
+        guard explicitlyPausedSelectionVideoId == videoId else { return nil }
+        return explicitlyPausedSelectionGeneration
+    }
     var isExplicitlyPausedForCurrentSelection: Bool {
-        explicitlyPausedSelectionGeneration == NowPlaying.shared.playbackGeneration
+        userPauseGeneration(for: NowPlaying.shared.videoId)
+            == NowPlaying.shared.playbackGeneration
     }
     func wantsPlaybackForSelection(videoId: String) -> Bool {
         PlaybackPausePolicy.shouldPlay(
             generation: NowPlaying.shared.playbackGeneration,
-            explicitlyPausedGeneration: explicitlyPausedSelectionGeneration,
+            explicitlyPausedGeneration: userPauseGeneration(for: videoId),
             desiredPlaying: wantsPlayback,
             isNewSelection: lastStartedSelectionGeneration != NowPlaying.shared.playbackGeneration
                 || lastStartedSelectionVideoId != videoId,
@@ -121,7 +127,7 @@ final class PlayerController {
     var canAdvanceQueueAutomatically: Bool {
         PlaybackPausePolicy.shouldAdvanceAutomatically(
             generation: NowPlaying.shared.playbackGeneration,
-            explicitlyPausedGeneration: explicitlyPausedSelectionGeneration,
+            explicitlyPausedGeneration: userPauseGeneration(for: NowPlaying.shared.videoId),
             desiredPlaying: wantsPlayback
         )
     }
@@ -353,7 +359,7 @@ extension PlayerController {
                 || lastStartedSelectionVideoId != videoId
             let shouldPlay = PlaybackPausePolicy.shouldPlay(
                 generation: currentSelectionGeneration,
-                explicitlyPausedGeneration: explicitlyPausedSelectionGeneration,
+                explicitlyPausedGeneration: userPauseGeneration(for: videoId),
                 desiredPlaying: wantsPlayback,
                 isNewSelection: isNewSelection,
                 isEngineFallback: false
@@ -602,6 +608,7 @@ extension PlayerController {
             // Pause, Play and explicit commands must survive every async load.
             explicitlyPausedSelectionGeneration = paused
                 ? NowPlaying.shared.playbackGeneration : nil
+            explicitlyPausedSelectionVideoId = paused ? NowPlaying.shared.videoId : nil
             if paused {
                 wasPlayingBeforeInterruption = false
                 headsetHandoffIntent = nil
