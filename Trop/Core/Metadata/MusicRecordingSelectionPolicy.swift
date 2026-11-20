@@ -140,12 +140,13 @@ enum MusicArtworkSelectionPolicy {
         guard let requested, !requested.isEmpty else { return true }
         guard let candidate, !candidate.isEmpty else { return false }
         // A similarly titled single/compilation must not replace an album.
-        return TextMatch.normalizeTitle(requested) == TextMatch.normalizeTitle(candidate)
+        return TextMatch.normalize(requested) == TextMatch.normalize(candidate)
     }
 
     static func acceptableVideoImageSize(width: Int, height: Int) -> Bool {
-        // 120x90 and 320x180 video frames are inappropriate for the large
-        // Now Playing cover. Request sddefault/maxres before using them.
-        min(width, height) >= 480
+        // 120x90 and 320x180 frames are inappropriate for large artwork.
+        // Accept hqdefault (480x360) only as a final fallback when neither
+        // maxres nor sddefault exists and no verified cover is available.
+        min(width, height) >= 320
     }
 }
