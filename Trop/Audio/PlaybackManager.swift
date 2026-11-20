@@ -1317,19 +1317,23 @@ actor PlaybackManager {
                 let valid = candidates.filter { candidate in
                     candidate.videoId != videoId
                         && MusicRecordingSelectionPolicy.verifiedAlbumAudio(
-                            wantedTitle: song.title,
-                            wantedArtist: artist,
-                            wantedAlbum: song.album,
-                            wantedDuration: song.duration,
-                            candidateTitle: candidate.title,
-                            candidateArtists: candidate.artists.map(\.name),
-                            candidateAlbum: candidate.album,
-                            candidateDuration: candidate.duration,
-                            candidateType: candidate.musicVideoType,
-                            originalWasVideo: song.isMusicVideo
-                                || MusicRecordingSelectionPolicy.isVideoRecording(
-                                    result.musicVideoType
-                                )
+                            wanted: .init(
+                                title: song.title,
+                                artist: artist,
+                                album: song.album,
+                                duration: song.duration,
+                                originalWasVideo: song.isMusicVideo
+                                    || MusicRecordingSelectionPolicy.isVideoRecording(
+                                        result.musicVideoType
+                                    )
+                            ),
+                            candidate: .init(
+                                title: candidate.title,
+                                artists: candidate.artists.map(\.name),
+                                album: candidate.album,
+                                duration: candidate.duration,
+                                type: candidate.musicVideoType
+                            )
                         )
                 }
                 // De-duplicate top-card and shelf copies of the same ATV.

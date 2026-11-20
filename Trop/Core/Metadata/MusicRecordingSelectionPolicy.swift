@@ -46,35 +46,45 @@ enum MusicRecordingSelectionPolicy {
     /// Exact recording title, real performer credits and close duration or
     /// verified album identity are required. Remixes/live/covers must not
     /// silently become the studio version or vice versa.
+    /// Strongly typed groups prevent positional mix-ups between the expected
+    /// album recording and a returned YouTube Music candidate.
+    struct WantedRecording {
+        let title: String
+        let artist: String
+        let album: String?
+        let duration: Int
+        let originalWasVideo: Bool
+    }
+
+    struct CandidateRecording {
+        let title: String
+        let artists: [String]
+        let album: String?
+        let duration: Int
+        let type: String?
+    }
+
     static func verifiedAlbumAudio(
-        wantedTitle: String,
-        wantedArtist: String,
-        wantedAlbum: String?,
-        wantedDuration: Int,
-        candidateTitle: String,
-        candidateArtists: [String],
-        candidateAlbum: String?,
-        candidateDuration: Int,
-        candidateType: String?,
-        originalWasVideo: Bool = false
+        wanted: WantedRecording,
+        candidate: CandidateRecording
     ) -> Bool {
-        guard isStudioAudio(candidateType),
-              !wantedArtist.isEmpty,
-              candidateArtists.contains(where: {
+        guard isStudioAudio(candidate.type),
+              !wanted.artist.isEmpty,
+              candidate.artists.contains(where: {
                   // Cross-catalogue fuzzy artist matching accepts
                   // "Bad Bunny Tribute" as a substring of "Bad Bunny".
                   // Recording substitution requires stricter identity.
                   TextMatch.normalizeArtist($0)
-                      == TextMatch.normalizeArtist(wantedArtist)
+                      == TextMatch.normalizeArtist(wanted.artist)
               }),
-              TextMatch.recordingsMatch(wantedTitle, candidateTitle),
-              !TextMatch.isSuspiciousVersion(candidateTitle)
+              TextMatch.recordingsMatch(wanted.title, candidate.title),
+              !TextMatch.isSuspiciousVersion(candidate.title)
         else { return false }
 
-        let targetAlbum = TextMatch.normalizeTitle(wantedAlbum ?? "")
-        let sourceAlbum = TextMatch.normalizeTitle(candidateAlbum ?? "")
+        let targetAlbum = TextMatch.normalizeTitle(wanted.album ?? "")
+        let sourceAlbum = TextMatch.normalizeTitle(candidate.album ?? "")
         if !targetAlbum.isEmpty, !sourceAlbum.isEmpty,
-           !TextMatch.albumsMatch(wantedAlbum ?? "", candidateAlbum ?? "") {
+           !TextMatch.albumsMatch(wanted.album ?? "", candidate.album ?? "") {
             return false
         }
 
@@ -82,8 +92,8 @@ enum MusicRecordingSelectionPolicy {
         // demand time alignment; two same-name recordings can be different.
         let sameAlbum = !targetAlbum.isEmpty
             && !sourceAlbum.isEmpty
-            && TextMatch.albumsMatch(wantedAlbum ?? "", candidateAlbum ?? "")
-        if wantedDuration <= 0 || candidateDuration <= 0 {
+            && TextMatch.albumsMatch(wanted.album ?? "", candidate.album ?? "")
+        if wanted.duration <= 0 || candidate.duration <= 0 {
             return sameAlbum
         }
         // A music video may include a spoken introduction or outro that
@@ -92,7 +102,7 @@ enum MusicRecordingSelectionPolicy {
         // A confirmed video often has a 30–60 second scene around a
         // 3-minute song. Exact artist/title plus an official ATV identity
         // justify the wider limit even if the old video row has no album.
-        let maxDifference = (sameAlbum || originalWasVideo) ? 60 : 20
-        return abs(wantedDuration - candidateDuration) <= maxDifference
+        let maxDifference = (sameAlbum || wanted.originalWasVideo) ? 60 : 20
+        return abs(wanted.duration - candidate.duration) <= maxDifference
     }
 }
