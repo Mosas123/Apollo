@@ -468,9 +468,10 @@ extension PlayerController {
             "TRANSITION play videoId=\(videoId ?? "nil") isNewSong=\(isNewSong) muxedActive=\(muxedActive) "
                 + "source=\(Self.apoloSource(url))"
         )
+        let holdForInterruption = apoloAudioInterruptionActive
         let cmdResult = withMpv { mpv -> Int32 in
             mpv_set_property_string(
-                mpv, "pause", apoloAudioInterruptionActive ? "yes" : "no"
+                mpv, "pause", holdForInterruption ? "yes" : "no"
             )
             return loadArguments.withUnsafeCArg { mpv_command(mpv, $0) }
         } ?? -1
