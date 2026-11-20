@@ -59,20 +59,24 @@ final class DownloadManager: ObservableObject {
         switch SettingsStore.shared.musicQualityMode {
         case .off:
             // Downloads are independent from the playback source preference:
-            // the "Lossless When Available" toggle decides, so Off behaves as
-            // Auto here instead of disabling FLAC downloads.
-            return AddonQualityPreference(
-                requireCD: false,
-                preferHiRes: SettingsStore.shared.preferHiRes,
-                preferAtmos: SettingsStore.shared.preferAtmos
-            )
-        case .cd:
-            return AddonQualityPreference(requireCD: true, preferHiRes: false, preferAtmos: false)
-        case .lossless:
+            // the "Lossless When Available" toggle decides. Atmos stays off
+            // because its toggle is only meaningful in Auto/Lossless.
             return AddonQualityPreference(
                 requireCD: false,
                 preferHiRes: SettingsStore.shared.preferHiRes,
                 preferAtmos: false
+            )
+        case .cd:
+            return AddonQualityPreference(
+                requireCD: true,
+                preferHiRes: false,
+                preferAtmos: false
+            )
+        case .lossless:
+            return AddonQualityPreference(
+                requireCD: false,
+                preferHiRes: SettingsStore.shared.preferHiRes,
+                preferAtmos: SettingsStore.shared.preferAtmos
             )
         case .auto, .high:
             return AddonQualityPreference(
@@ -103,8 +107,7 @@ final class DownloadManager: ObservableObject {
     private var lastProgressTime: [String: CFTimeInterval] = [:]
     private var progressBoxes: [String: DownloadProgressBox] = [:]
     private var activeFFmpegSessions: [String: FFmpegSession] = [:]
-    /// Identifies the current session per video so a finishing prior session
-    /// cannot unregister its successor.
+    /// A late completion must not unregister a newer session for this ID.
     private var activeFFmpegTokens: [String: UUID] = [:]
 
     private var tracksById: [String: DownloadedTrackEntity] = [:]
@@ -166,6 +169,70 @@ final class DownloadManager: ObservableObject {
         return downloadsDir.appendingPathComponent("\(stem) [\(videoId)].\(fileExtension)")
     }
 
+    /// Imports an audio file from Files into this app's sandbox. Copying it
+    /// means the player does not need to keep an external security-scoped URL
+    /// alive after the picker closes, even across launches or offline use.
+    /// The copy is done off-main and never loads the whole file into RAM.
+    func importLocalAudio(from sourceURL: URL) async throws {
+        guard LocalAudioFilePolicy.supports(sourceURL) else {
+            throw LocalAudioImportError.unsupportedFormat
+        }
+        guard ensureDirectories() else {
+            throw LocalAudioImportError.unavailableDestination
+        }
+        let sourceName = sourceURL.deletingPathExtension().lastPathComponent
+        let title = Self.sanitizeFileName(sourceName)
+        let newId = "local:\(UUID().uuidString)"
+        let fileName = LocalAudioFilePolicy.storedFilename(
+            title: title,
+            videoId: newId,
+            fileExtension: sourceURL.pathExtension
+        )
+        let destination = downloadsDir.appendingPathComponent(fileName)
+        try await Task.detached(priority: .userInitiated) {
+            let scoped = sourceURL.startAccessingSecurityScopedResource()
+            defer {
+                if scoped { sourceURL.stopAccessingSecurityScopedResource() }
+            }
+            guard let properties = try? sourceURL.resourceValues(
+                forKeys: [.isRegularFileKey, .fileSizeKey]
+            ), properties.isRegularFile == true,
+                LocalAudioFilePolicy.isValidAudioSize(properties.fileSize ?? 0)
+            else { throw LocalAudioImportError.invalidFile }
+
+            do {
+                try FileManager.default.copyItem(
+                    at: sourceURL, to: destination
+                )
+            } catch {
+                // File-provider transfers can fail mid-copy or run out of disk
+                // space. Do not leave a damaged file for the scanner to adopt.
+                try? FileManager.default.removeItem(at: destination)
+                throw error
+            }
+        }.value
+
+        let entity = DownloadedTrackEntity(
+            id: newId,
+            title: title,
+            artist: "",
+            duration: 0,
+            thumbnailUrl: nil,
+            localPath: storedPath(for: destination),
+            downloadedAt: Date()
+        )
+        do {
+            _ = try await DatabaseService.shared.insertOrReplace(entity)
+        } catch {
+            try? fileManager.removeItem(at: destination)
+            throw error
+        }
+        tracksById[newId] = entity
+        apply(tracksById)
+        isLoaded = true
+        Log.downloadManager.notice("Imported local audio format=\(sourceURL.pathExtension.lowercased())")
+    }
+
     /// Strips characters illegal on filesystems, trims whitespace/dots and
     /// caps length for APFS's 255-byte limit.
     nonisolated static func sanitizeFileName(_ name: String) -> String {
@@ -189,8 +256,17 @@ final class DownloadManager: ObservableObject {
 
     @discardableResult
     func ensureDirectories() -> Bool {
-        try? fileManager.createDirectory(at: downloadsDir, withIntermediateDirectories: true)
-        return true
+        do {
+            try fileManager.createDirectory(
+                at: downloadsDir, withIntermediateDirectories: true
+            )
+            return true
+        } catch {
+            Log.downloadManager.error(
+                "Unable to create Downloads folder: \(error.localizedDescription)"
+            )
+            return false
+        }
     }
 
     private func resolvedURL(for track: DownloadedTrackEntity) -> URL? {
@@ -294,9 +370,11 @@ final class DownloadManager: ObservableObject {
         var found: [String: URL] = [:]
         var dates: [String: Date] = [:]
 
-        for url in urls where url.pathExtension.lowercased() == "m4a" {
+        for url in urls where LocalAudioFilePolicy.supports(url) {
             let values = try? url.resourceValues(forKeys: Set(keys))
-            guard (values?.fileSize ?? 0) >= minimumAudioBytes else { continue }
+            guard LocalAudioFilePolicy.isValidAudioSize(
+                values?.fileSize ?? 0
+            ) else { continue }
             guard let videoId = Self.videoId(from: url.lastPathComponent) else { continue }
             let modified = values?.contentModificationDate ?? .distantPast
             if let existingDate = dates[videoId], existingDate >= modified { continue }
@@ -308,12 +386,7 @@ final class DownloadManager: ObservableObject {
 
     /// Extracts the video id from `Artist - Title [<id>].m4a`.
     nonisolated static func videoId(from fileName: String) -> String? {
-        let base = (fileName as NSString).deletingPathExtension
-        guard let range = base.range(of: #"\[([A-Za-z0-9_:-]{6,})\]$"#, options: .regularExpression) else {
-            return nil
-        }
-        let bracketed = base[range]
-        return bracketed.dropFirst().dropLast().description
+        LocalAudioFilePolicy.videoId(from: fileName)
     }
 
     nonisolated private static func displayTitle(from url: URL) -> String {
@@ -699,16 +772,18 @@ extension DownloadManager {
     /// lossless, and falls back to the YouTube stream.
     private func downloadSource(for song: SongItem, allowLossless: Bool = true) async throws -> DownloadSource {
         let preference = addonPreference
+        // Playback may prefer Dolby Atmos, but Downloads must save a file
+        // whose codec matches its extension. Atmos add-ons often serve
+        // E-AC3, which cannot be copied into a FLAC container. Seek an
+        // actual FLAC (or a normal AAC fallback) for offline playback.
+        let offlinePreferAtmos = false
         if let ref = AddonPlaybackID.decode(song.videoId) {
             guard let installation = MusicAddonsStore.shared.installation(key: ref.k) else {
                 throw MusicCatalogError.unavailableTrack
             }
             let client = try MusicAddonClient(installation: installation)
-            let preferAtmos = preference?.preferAtmos ?? false
             let quality: AddonStreamQuality
-            if preferAtmos {
-                quality = .max
-            } else if preference?.requireCD == true {
+            if preference?.requireCD == true {
                 quality = .lossless
             } else {
                 quality = (preference?.preferHiRes ?? false) ? .hires : .lossless
@@ -716,10 +791,13 @@ extension DownloadManager {
             let stream = try await client.resolveStream(
                 type: ref.t,
                 id: ref.i,
-                preferAtmos: preferAtmos,
+                preferAtmos: offlinePreferAtmos,
                 quality: quality
             )
-            guard !stream.isEncrypted else { throw MusicCatalogError.unavailableTrack }
+            guard !stream.isEncrypted,
+                  stream.qualityTier != "Atmos" else {
+                throw MusicCatalogError.unavailableTrack
+            }
             switch stream.kind {
             case .youtube(let youTubeId):
                 let resolved = try await PlaybackManager.shared.resolve(
@@ -750,13 +828,15 @@ extension DownloadManager {
         // Bulk downloads skip the lossless lookup: it can cost seconds per
         // track and a queue of 50 would stall for minutes.
         if allowLossless,
+           song.contentKind != .episode,
+           song.contentKind != .podcast,
            !MusicPlaybackIdentity.isExternal(song.videoId),
            SettingsStore.shared.losslessDownloads,
            let preference,
            let lossless = await raceLosslessSource(
                for: song,
                requireCD: preference.requireCD,
-               preferAtmos: preference.preferAtmos,
+               preferAtmos: offlinePreferAtmos,
                preferHiRes: preference.preferHiRes
            ) {
             Log.downloadManager.debug("Lossless source for \(song.videoId)")
@@ -855,11 +935,15 @@ extension DownloadManager {
                   preferAtmos: preferAtmos,
                   preferHiRes: preferHiRes
               ),
-              match.stream.qualityTier == "Lossless" || match.stream.qualityTier == "Atmos",
-              case .url(let url) = match.stream.kind else { return nil }
+              case .url(let url) = match.stream.kind,
+              OfflineAudioFormatPolicy.isVerifiedFLAC(
+                  qualityTier: match.stream.qualityTier,
+                  mimeType: match.stream.mimeType,
+                  pathExtension: url.pathExtension
+              )
+        else { return nil }
         // Some addons report a size but answer HEAD badly; trust the size.
-        // Atmos is lossy (E-AC3): it's only taken when the user asked for it.
-        if match.stream.qualityTier == "Atmos", !preferAtmos { return nil }
+        // Never label a compressed Atmos/E-AC3 bitstream as FLAC.
         if match.stream.sizeBytes == nil, !(await probeAudioURL(url)) {
             await AddonHealth.shared.recordFailure(match.track.installationKey)
             return nil
@@ -1154,9 +1238,7 @@ extension DownloadManager {
         onSize: (@MainActor @Sendable (Int64) -> Void)? = nil
     ) async throws {
         let token = UUID()
-        if let videoId {
-            activeFFmpegTokens[videoId] = token
-        }
+        if let videoId { activeFFmpegTokens[videoId] = token }
         let sessionBox = FFmpegSessionBox()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -1166,20 +1248,15 @@ extension DownloadManager {
                     sessionBox: sessionBox,
                     onSize: onSize,
                     onCompletion: { [weak self] _ in
-                        guard let self, let videoId else { return }
-                        // Only the session that owns the current token may
-                        // unregister it; a stale completion must not clear a
-                        // newer session for the same video.
-                        guard self.activeFFmpegTokens[videoId] == token else {
-                            return
-                        }
+                        guard let self, let videoId,
+                              self.activeFFmpegTokens[videoId] == token else { return }
                         self.activeFFmpegTokens.removeValue(forKey: videoId)
                         self.activeFFmpegSessions.removeValue(forKey: videoId)
                     }
                 )
                 sessionBox.set(session)
                 // Register synchronously on MainActor, before the completion
-                // task can remove it.
+                // task can remove it. A previous session cannot remove its successor.
                 if let videoId, let session {
                     activeFFmpegSessions[videoId] = session
                 } else if let videoId {
@@ -1496,6 +1573,23 @@ extension DownloadManager {
         let artist: String
         let album: String?
         let artworkData: Data?
+    }
+}
+
+enum LocalAudioImportError: LocalizedError {
+    case unsupportedFormat
+    case invalidFile
+    case unavailableDestination
+
+    var errorDescription: String? {
+        switch self {
+        case .unsupportedFormat:
+            return "This file format is not supported for local audio."
+        case .invalidFile:
+            return "The selected audio file is missing, incomplete or unreadable."
+        case .unavailableDestination:
+            return "Thrum could not create its local audio folder."
+        }
     }
 }
 

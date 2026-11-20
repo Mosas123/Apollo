@@ -82,9 +82,13 @@ enum SearchParser {
 
                 guard !items.isEmpty else { continue }
 
-                if let title = runsText(shelf["title"]) {
+                if let title = runsText(shelf["title"]),
+                   title != "Songs", title != "Videos" {
                     allSections.append(SearchSection(title: title, items: items))
                 } else {
+                    // InnerTube sometimes mixes OMV/UGC video rows into
+                    // shelves labeled Songs. Honor each row's watch endpoint
+                    // type instead of presenting a music video as album audio.
                     allSections.append(contentsOf: groupItemsByType(items))
                 }
             }
@@ -171,6 +175,9 @@ enum SearchParser {
 
         if let watch = nav?["watchEndpoint"] as? [String: Any],
            let videoId = watch["videoId"] as? String {
+            let configs = watch["watchEndpointMusicSupportedConfigs"] as? [String: Any]
+            let musicConfig = configs?["watchEndpointMusicConfig"] as? [String: Any]
+            let type = musicConfig?["musicVideoType"] as? String
             return .song(SongItem(
                 videoId: videoId,
                 title: title,
@@ -179,7 +186,9 @@ enum SearchParser {
                 duration: 0,
                 thumbnailUrl: thumbnailUrl,
                 isExplicit: false,
-                playlistId: watch["playlistId"] as? String
+                playlistId: watch["playlistId"] as? String,
+                isVideo: MusicRecordingSelectionPolicy.isVideoRecording(type) ? true : nil,
+                musicVideoType: type
             ))
         }
 

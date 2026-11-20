@@ -57,7 +57,9 @@ final class SponsorBlockIntegration {
     }
 
     func preloadedStartOffset(for videoId: String?) async -> Double {
-        guard SponsorBlock.isEnabled, let videoId else { return 0 }
+        guard SponsorBlock.isEnabled,
+              SponsorBlock.skipsIntroAtStart,
+              let videoId else { return 0 }
         let found: [Segment]
         if let cached = prefetchedSegments[videoId] {
             found = cached
@@ -77,7 +79,11 @@ final class SponsorBlockIntegration {
     /// Called by NowPlaying's timer after it updates the position.
     func tick() {
         let nowPlaying = NowPlaying.shared
-        guard SponsorBlock.isEnabled, let id = nowPlaying.videoId else { return }
+        // Podcast episodes have their own editorial timeline and resume
+        // position; don't apply SponsorBlock music/video offsets to them.
+        guard nowPlaying.playbackKind == .music,
+              SponsorBlock.isEnabled,
+              let id = nowPlaying.videoId else { return }
         if id != videoId {
             videoId = id
             segments = []
@@ -90,12 +96,23 @@ final class SponsorBlockIntegration {
             return
         }
         guard nowPlaying.isPlaying else { return }
+        // The queue may retain the original video ID while the *audio*
+        // comes from a verified ATV album track. SponsorBlock timestamps
+        // belong to the original video and must not seek the studio master.
+        // Also wait until Now Playing has published the current stream.
+        guard let source = nowPlaying.currentResult,
+              source.videoId == id,
+              source.streamUrl == nowPlaying.currentStreamURL else { return }
         let player = PlayerController.shared
         guard player.currentVideoId == id, player.pendingVideoId == nil else { return }
         let position = nowPlaying.currentTime
         for (index, segment) in segments.enumerated() where !skipped.contains(index) {
-            // Within the last second the jump isn't worth it.
-            guard position >= segment.start - 0.25, position < segment.end - 1 else { continue }
+            guard SponsorBlockSkipPolicy.shouldSkip(
+                start: segment.start,
+                end: segment.end,
+                position: position,
+                skipIntroAtStart: SponsorBlock.skipsIntroAtStart
+            ) else { continue }
             skipped.insert(index)
             player.seek(to: segment.end)
             return

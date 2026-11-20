@@ -39,10 +39,15 @@ enum LastFMError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notConfigured: return "Last.fm API keys not configured"
+        case .notConfigured:
+            return "This Thrum build has no Last.fm credentials. The app developer must configure them before login can work."
         case .network(let e): return e.localizedDescription
         case .http(let code, let body): return "HTTP \(code): \(body)"
-        case .api(let code, let msg): return "Last.fm error \(code): \(msg)"
+        case .api(let code, let msg):
+            if code == 10 {
+                return "Last.fm rejected this app's API key (error 10). The build credentials need to be corrected; retrying login will not fix it."
+            }
+            return "Last.fm error \(code): \(msg)"
         case .missingSession: return "Missing session key"
         case .unauthorizedToken: return "Token not yet authorized — please approve on Last.fm and tap Done"
         case .invalidResponse: return "Invalid response"

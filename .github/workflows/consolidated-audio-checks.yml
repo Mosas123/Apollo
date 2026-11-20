@@ -1,0 +1,52 @@
+name: Consolidated Music and Download Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Core/Metadata/TextMatch.swift"
+      - "Trop/Core/Metadata/MusicRecordingSelectionPolicy.swift"
+      - "Trop/Services/OfflineAudioFormatPolicy.swift"
+      - "Trop/Services/DownloadManager.swift"
+      - "Trop/Audio/PlayerController/PlayerController.swift"
+      - "Trop/Audio/PlayerController/ApoloFiniteAudioWatchdog.swift"
+      - "Trop/Audio/PlayerController/ApoloLiveRadioWatchdog.swift"
+      - "Trop/Audio/PlayerController/LiveRadioDuplicateRequestPolicy.swift"
+      - "Trop/Features/Radio/RadioView.swift"
+      - "tests/Playback/ConsolidatedAudioChecks.swift"
+      - "tests/Playback/ApoloInterruptionWatchdogChecks.swift"
+      - "tests/Playback/LiveRadioDuplicateRequestChecks.swift"
+      - ".github/workflows/consolidated-audio-checks.yml"
+
+jobs:
+  album-and-codec-policy:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run production recording and FLAC guard policies
+        run: |
+          set -euo pipefail
+          swiftc \
+            Trop/Core/Metadata/TextMatch.swift \
+            Trop/Core/Metadata/MusicRecordingSelectionPolicy.swift \
+            Trop/Services/OfflineAudioFormatPolicy.swift \
+            tests/Playback/ConsolidatedAudioChecks.swift \
+            -o "$RUNNER_TEMP/consolidated-audio-checks"
+          "$RUNNER_TEMP/consolidated-audio-checks"
+      - name: Check iOS interruption recovery and real timeout fallback
+        run: |
+          set -euo pipefail
+          swiftc \
+            Trop/Audio/PlayerController/ApoloFiniteAudioWatchdog.swift \
+            Trop/Audio/PlayerController/ApoloLiveRadioWatchdog.swift \
+            tests/Playback/ApoloInterruptionWatchdogChecks.swift \
+            -o "$RUNNER_TEMP/apolo-interruption-watchdog-checks"
+          "$RUNNER_TEMP/apolo-interruption-watchdog-checks"
+
+      - name: Check live radio duplicate station request gate
+        run: |
+          set -euo pipefail
+          swiftc \
+            Trop/Audio/PlayerController/LiveRadioDuplicateRequestPolicy.swift \
+            tests/Playback/LiveRadioDuplicateRequestChecks.swift \
+            -o "$RUNNER_TEMP/live-radio-duplicate-request-checks"
+          "$RUNNER_TEMP/live-radio-duplicate-request-checks"

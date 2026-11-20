@@ -91,7 +91,7 @@ extension UIImage {
         }
         // Sort keys to make equal-population palettes reproducible.
         let all = bins.keys.sorted().compactMap { key -> Sample? in
-            guard let bin = bins[key], bin.count > 0 else { return nil }
+            guard let bin = bins[key], !bin.count.isZero else { return nil }
             return Sample(r: bin.r / bin.count, g: bin.g / bin.count,
                           b: bin.b / bin.count, count: bin.count)
         }
@@ -123,7 +123,7 @@ extension UIImage {
                 sums[index].b += sample.b * sample.count
                 sums[index].count += sample.count
             }
-            centers = sums.filter { $0.count > 0 }.map {
+            centers = sums.filter { !$0.count.isZero }.map {
                 Sample(r: $0.r / $0.count, g: $0.g / $0.count, b: $0.b / $0.count, count: $0.count)
             }
         }

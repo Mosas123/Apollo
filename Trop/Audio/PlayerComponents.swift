@@ -167,33 +167,27 @@ struct SecondaryActionsRow: View {
             PlayerAirPlayControl()
                 .frame(maxWidth: .infinity)
 
-            // Queue + Repeat stacked like Apple Music
-            ZStack(alignment: .topTrailing) {
-                Button {
-                    showQueue.toggle()
-                    if showQueue { showLyrics?.wrappedValue = false }
-                } label: {
-                    Image(systemName: "list.bullet")
-                        .font(.title3)
-                        .foregroundStyle(showQueue ? .white : .white.opacity(0.7))
-                        .padding(10)
-                        .background(showQueue ? Circle().fill(.white.opacity(0.15)) : Circle().fill(.clear))
-                }
-                .accessibilityLabel("Queue")
-
-                if !showQueue {
-                    Button {
-                        isRepeatOn.toggle()
-                    } label: {
-                        Image(systemName: isRepeatOn ? "repeat.1" : "repeat")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(isRepeatOn ? .white : .white.opacity(0.7))
-                            .padding(4)
-                    }
-                    .offset(x: 2, y: -2)
-                    .accessibilityLabel(LocalizedStringKey(isRepeatOn ? "Repeat one" : "Repeat all"))
-                }
+            // One full-size, unambiguous Queue target. Repeat stays in
+            // QueueView's playback pills; a tiny overlapping repeat button
+            // used to toggle accidentally when opening the queue.
+            Button {
+                showQueue.toggle()
+                if showQueue { showLyrics?.wrappedValue = false }
+            } label: {
+                Image(systemName: "list.bullet")
+                    .font(.title3)
+                    .foregroundStyle(showQueue ? .white : .white.opacity(0.7))
+                    .padding(10)
+                    .background(
+                        showQueue
+                            ? Circle().fill(.white.opacity(0.15))
+                            : Circle().fill(.clear)
+                    )
+                    .frame(minWidth: 44, minHeight: 44)
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Queue")
+            .accessibilityHint("Show upcoming songs and repeat controls")
             .frame(maxWidth: .infinity)
         }
         .padding(.vertical, 16)

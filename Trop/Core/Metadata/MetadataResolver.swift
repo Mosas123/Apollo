@@ -22,7 +22,7 @@ enum MetadataResolver {
         guard !title.isEmpty, !artist.isEmpty else { return nil }
 
         let key = "track-v3|\(TextMatch.normalize(TextMatch.recordingTitle(title)))|\(TextMatch.normalize(TextMatch.queryArtist(artist)))"
-            + "|\(TextMatch.normalizeTitle(album ?? ""))|\(duration ?? 0)"
+            + "|\(TextMatch.normalize(album ?? ""))|\(duration ?? 0)"
         if let cached = await MetadataCache.shared.lookup(key) {
             return cached.value
         }
@@ -55,7 +55,7 @@ enum MetadataResolver {
         guard let url = components?.url,
               let response: ITunesResponse = try? await decode(url, headers: [:]) else { return nil }
         let match = response.results.first {
-            TextMatch.normalizeTitle($0.collectionName ?? "") == TextMatch.normalizeTitle(title)
+            TextMatch.albumsMatch($0.collectionName ?? "", title)
                 && TextMatch.artistsMatch($0.artistName ?? "", artist)
         }
         let artwork = ArtworkURLs.highRes(match?.artworkUrl100).flatMap(URL.init(string:))

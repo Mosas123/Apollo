@@ -46,7 +46,10 @@ struct DownloadSettingsView: View {
             } header: {
                 Text("Preferences")
             } footer: {
-                Text("Auto-download saves liked songs for offline playback. Lossless tries your music add-ons first and saves FLAC; without add-ons it uses the quality above. Wi-Fi Only blocks downloads on cellular data.")
+                Text(LocalizedStringKey(
+                    "Auto-download saves liked songs for offline playback. Lossless tries your music add-ons first and saves FLAC; without add-ons it uses the " +
+                    "quality above. Wi-Fi Only blocks downloads on cellular data."
+                ))
             }
         }
         .navigationTitle("Download Settings")

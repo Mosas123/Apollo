@@ -278,7 +278,7 @@ struct SearchView: View {
                     default:
                         ForEach(section.items, id: \.id) { item in
                             YouTubeListItemView(item: item, onTap: {
-                                handleItemTap(item)
+                                handleItemTap(item, section: section.title)
                             }, onNavigate: { pendingRoute = $0 })
                         }
                     }
@@ -542,10 +542,17 @@ struct SearchView: View {
         )
     }
 
-    private func handleItemTap(_ item: YTItem) {
+    private func handleItemTap(_ item: YTItem, section: String? = nil) {
         YTItemRouter.route(
             item,
-            playSong: { PlaybackQueue.playSingleWithRadio($0, log: Log.searchView) },
+            playSong: { original in
+                var song = original
+                // An OMV might be listed under Songs by an upstream shelf.
+                // The tapped UI section—not the videoId—expresses intent.
+                song.recordingPreference = section == "Videos"
+                    ? .musicVideo : .albumAudio
+                PlaybackQueue.playSingleWithRadio(song, log: Log.searchView)
+            },
             appendRoute: { router.searchPath.append($0) }
         )
     }

@@ -28,6 +28,13 @@ struct LyricsView<ProgressSlider: View>: View {
     @State private var timedLineStarts: [TimeInterval] = []
     @State private var romanizedLines: [String?] = []
     @State private var lyricsLoadGeneration = UUID()
+    @State private var lyricsLoadState: LyricsLoadState = .loading
+
+    private enum LyricsLoadState: Equatable {
+        case loading
+        case unavailable
+        case failed
+    }
 
     struct InstrumentalGap {
         let afterIndex: Int
@@ -96,11 +103,44 @@ struct LyricsView<ProgressSlider: View>: View {
 
     private var lyricsBody: some View {
         Group {
-            if lines.isEmpty {
-                EmptyView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
+            if !lines.isEmpty {
                 lyricsContentView
+            } else {
+                VStack(spacing: 14) {
+                    switch lyricsLoadState {
+                    case .loading:
+                        ProgressView()
+                            .tint(.white)
+                        Text("Searching for lyrics…")
+                            .font(.callout)
+                            .foregroundStyle(.white.opacity(0.8))
+                    case .unavailable, .failed:
+                        Image(systemName: "text.quote")
+                            .font(.system(size: 35, weight: .light))
+                            .foregroundStyle(.white.opacity(0.65))
+                        Text(lyricsLoadState == .failed
+                             ? "Couldn't load lyrics" : "No lyrics available")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                        Text(lyricsLoadState == .failed
+                             ? "Check your connection or try another source."
+                             : "No source has lyrics for this song yet.")
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.65))
+                            .multilineTextAlignment(.center)
+                        Button {
+                            Task { await loadLyrics() }
+                        } label: {
+                            Label("Try Again", systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.white)
+                        .padding(.top, 6)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 28)
+                .accessibilityElement(children: .contain)
             }
         }
     }
@@ -487,8 +527,10 @@ struct LyricsView<ProgressSlider: View>: View {
     private func loadLyrics() async {
         let generation = UUID()
         lyricsLoadGeneration = generation
+        lyricsLoadState = .loading
         guard let videoId = np.videoId else {
             lines = []
+            lyricsLoadState = .unavailable
             return
         }
         lines = []
@@ -504,14 +546,22 @@ struct LyricsView<ProgressSlider: View>: View {
         do {
             let result = try await LyricsService.shared.fetchLyrics(videoId: videoId)
             guard !Task.isCancelled, lyricsLoadGeneration == generation,
-                  np.videoId == videoId, !result.isEmpty else { return }
+                  np.videoId == videoId else { return }
+            guard !result.isEmpty else {
+                lyricsLoadState = .unavailable
+                return
+            }
             let withoutMarkers = result.filter { !Self.isInstrumentalMarker($0) }
             lines = withoutMarkers.isEmpty ? result : withoutMarkers
             instrumentalGaps = detectGaps(in: result)
             rebuildLyricLookups()
             updateActiveLine()
+            lyricsLoadState = .unavailable
             await rebuildRomanization()
         } catch {
+            guard !Task.isCancelled, lyricsLoadGeneration == generation,
+                  np.videoId == videoId else { return }
+            lyricsLoadState = .failed
         }
     }
 

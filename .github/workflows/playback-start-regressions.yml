@@ -1,0 +1,27 @@
+name: Playback Start Regression Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Audio/PlaybackIntentGuard.swift"
+      - "Trop/Audio/PlayerController/PlayerController.swift"
+      - "Trop/Audio/NowPlaying.swift"
+      - "Trop/SponsorBlock/SponsorBlockSkipPolicy.swift"
+      - "Trop/SponsorBlock/SponsorBlockIntegration.swift"
+      - "tests/Playback/**"
+      - ".github/workflows/playback-start-regressions.yml"
+
+jobs:
+  guards:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run real app playback policies
+        run: |
+          set -euo pipefail
+          swiftc \
+            Trop/Audio/PlaybackIntentGuard.swift \
+            Trop/SponsorBlock/SponsorBlockSkipPolicy.swift \
+            tests/Playback/PlaybackGuardChecks.swift \
+            -o "$RUNNER_TEMP/playback-guard-checks"
+          "$RUNNER_TEMP/playback-guard-checks"

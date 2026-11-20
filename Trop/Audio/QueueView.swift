@@ -315,9 +315,14 @@ struct QueueView<ProgressSlider: View>: View {
             let nextIndex = min(index, np.queueSongs.count - 1)
             np.queueIndex = nextIndex
             let song = np.queueSongs[nextIndex]
+            np.bumpPlaybackIntent()
+            let intent = np.playbackGeneration
             np.update(with: song)
             loggedTask(Log.nowPlaying, "removeSong auto-play failed") {
-                try await PlaybackManager.shared.resolveAndPlay(videoId: song.videoId)
+                try await PlaybackManager.shared.resolveAndPlay(
+                    videoId: song.videoId,
+                    intent: intent
+                )
             }
         } else {
             np.repairQueueIndex()

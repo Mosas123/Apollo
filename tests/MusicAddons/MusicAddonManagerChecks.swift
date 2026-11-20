@@ -19,18 +19,23 @@ struct MusicAddonManagerChecks {
         precondition(MusicAddonPackage.validatedManifestURL(URL(string: "http://addons.example.org/manifest.json")!) == nil)
         precondition(MusicAddonPackage.validatedManifestURL(URL(string: "https://localhost/manifest.json")!) == nil)
 
-        // Flix-Music is a Stremio manifest, even though its catalogs
-        // contain songs. It must show a precise compatibility error,
-        // not pretend it was installed as a functional Trop provider.
+        // Stremio music catalogs are supported as declarative addons.
+        // Verify protocol classification, permissions and disabled-by-default
+        // installation rather than expecting the removed incompatibility error.
         let stremio = Data("""
         {"id":"community.lastfm.telegram","name":"Flix-Music","version":"1.0.0",
          "resources":["catalog","meta","stream"],"types":["movie"],
          "catalogs":[{"type":"movie","id":"lastfm-top","name":"Music - Top"}]}
         """.utf8)
-        do {
-            _ = try MusicAddonPackage.parse(stremio, from: alpha)
-            preconditionFailure("Stremio manifests must be detected")
-        } catch MusicAddonError.incompatibleStremioProtocol {}
+        let stremioPackage = try MusicAddonPackage.parse(stremio, from: alpha)
+        precondition(stremioPackage.manifest.protocolKind == .stremio)
+        precondition(Set(stremioPackage.manifest.capabilities) == Set([.search, .stream, .metadata]))
+        precondition(stremioPackage.manifest.stremio?.catalogs.first?.id == "lastfm-top")
+        var stremioRegistry = MusicAddonRegistry()
+        try stremioRegistry.install(data: stremio, from: alpha)
+        precondition(stremioRegistry.installations.count == 1)
+        precondition(stremioRegistry.installations[0].manifest.protocolKind == .stremio)
+        precondition(!stremioRegistry.installations[0].isEnabled)
 
         // Native Trop manifests remain installable.
         var registry = MusicAddonRegistry()

@@ -1,0 +1,28 @@
+name: Studio Audio Matching Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Core/Metadata/MusicRecordingSelectionPolicy.swift"
+      - "Trop/Core/Metadata/TextMatch.swift"
+      - "Trop/Audio/PlaybackManager.swift"
+      - "Trop/Networking/Models/YTItem.swift"
+      - "Trop/Search/SearchParser.swift"
+      - "Trop/SponsorBlock/SponsorBlockIntegration.swift"
+      - "tests/Playback/StudioAudioMatchChecks.swift"
+      - ".github/workflows/studio-audio-matching-checks.yml"
+
+jobs:
+  source-matching:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run actual recording match rules
+        run: |
+          set -euo pipefail
+          swiftc \
+            Trop/Core/Metadata/TextMatch.swift \
+            Trop/Core/Metadata/MusicRecordingSelectionPolicy.swift \
+            tests/Playback/StudioAudioMatchChecks.swift \
+            -o "$RUNNER_TEMP/studio-audio-match-checks"
+          "$RUNNER_TEMP/studio-audio-match-checks"

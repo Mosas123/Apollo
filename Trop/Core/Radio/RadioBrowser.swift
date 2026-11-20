@@ -24,6 +24,26 @@ struct RadioStation: Identifiable, Hashable, Decodable, Sendable {
         return nil
     }
 
+    /// Radio Browser's codec is a hint, not proof of a stream's container.
+    /// It helps Apolo choose FFmpeg for opaque Ogg/Opus/FLAC endpoints.
+    var apoloMIMEHint: String? {
+        let format = (codec ?? "").uppercased()
+        if format.contains("OPUS") { return "audio/opus" }
+        if format.contains("OGG") || format.contains("VORBIS") {
+            return "audio/ogg"
+        }
+        if format.contains("FLAC") { return "audio/flac" }
+        if format.contains("MP3") || format.contains("MPEG") {
+            return "audio/mpeg"
+        }
+        if format.contains("AAC") { return "audio/aac" }
+        if format.contains("HLS") { return "application/vnd.apple.mpegurl" }
+        // Legacy raw ICY requires a known station hint, not a guess based on
+        // a generic MP3 codec label (which most modern stations also use).
+        if format.contains("ICY") { return "application/x-icy" }
+        return nil
+    }
+
     var iconURL: String? {
         guard let favicon, favicon.hasPrefix("http") else { return nil }
         return favicon

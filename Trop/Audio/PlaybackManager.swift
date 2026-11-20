@@ -12,6 +12,9 @@ actor PlaybackManager {
     static let shared = PlaybackManager()
 
     private var inflightResolutions: [String: Task<PlaybackResult, Error>] = [:]
+    private var albumAudioMatchCache: [String: (videoId: String?, at: Date)] = [:]
+
+
 
     private func resolutionKey(videoId: String, forDownload: Bool) -> String {
         forDownload ? "\(videoId):download" : "\(videoId):resolve"
@@ -20,8 +23,14 @@ actor PlaybackManager {
     /// Playback resolution must never share an in-flight entry with a bare
     /// `resolve(...)` (preload/Top-100 warmup), because that task never calls
     /// `play()` — awaiting it would return a result without starting audio.
-    private func playKey(videoId: String) -> String {
-        "\(videoId):play"
+    private func playKey(videoId: String, intentGeneration: Int) -> String {
+        "\(videoId):play:\(intentGeneration)"
+    }
+
+    private func isCurrentIntent(_ intentGeneration: Int) async -> Bool {
+        await MainActor.run {
+            NowPlaying.shared.playbackGeneration == intentGeneration
+        }
     }
 
     private init() {}
@@ -203,7 +212,7 @@ actor PlaybackManager {
         }
         let client = try MusicAddonClient(installation: installation)
         let mode = SettingsStore.shared.musicQualityMode
-        let atmos = mode == .auto && SettingsStore.shared.preferAtmos
+        let atmos = (mode == .auto || mode == .lossless) && SettingsStore.shared.preferAtmos
         let streamQuality: AddonStreamQuality = atmos
             ? .max
             : (mode == .cd ? .lossless : (SettingsStore.shared.preferHiRes ? .hires : .lossless))
@@ -214,6 +223,12 @@ actor PlaybackManager {
             quality: streamQuality
         )
         guard !stream.isEncrypted else { throw MusicCatalogError.unavailableTrack }
+        let isAtmosStream = stream.qualityTier.lowercased().contains("atmos")
+            || stream.mimeType.lowercased().contains("eac3")
+            || stream.mimeType.lowercased().contains("ec+3")
+        Log.player.info(
+            "ADDON_STREAM quality=\(stream.qualityTier) mime=\(stream.mimeType) atmos=\(isAtmosStream) requested=\(atmos)"
+        )
         resolvedSourceNames[videoId] = installation.manifest.name
 
         if case .youtube(let youTubeId) = stream.kind {
@@ -307,12 +322,16 @@ actor PlaybackManager {
         case .off:
             return nil
         case .cd:
-            return AddonQualityPreference(requireCD: true, preferHiRes: false, preferAtmos: false)
+            return AddonQualityPreference(
+                requireCD: true,
+                preferHiRes: false,
+                preferAtmos: false
+            )
         case .lossless:
             return AddonQualityPreference(
                 requireCD: false,
                 preferHiRes: SettingsStore.shared.preferHiRes,
-                preferAtmos: false
+                preferAtmos: SettingsStore.shared.preferAtmos
             )
         case .auto, .high:
             return AddonQualityPreference(
@@ -357,8 +376,7 @@ actor PlaybackManager {
             let qualitySetting = SettingsStore.shared.audioQuality
             return allowedMode && (qualitySetting == .auto || qualitySetting == .high)
         }
-        if preference.preferAtmos { return quality.contains("atmos") }
-        if quality.contains("atmos") { return false }
+        if quality.contains("atmos") { return preference.preferAtmos }
         guard isLosslessResult(result) else { return false }
         if isHiResResult(result), !preference.preferHiRes { return false }
         if preference.requireCD, isHiResResult(result) { return false }
@@ -604,6 +622,9 @@ actor PlaybackManager {
         let oldLabel = await MainActor.run { NowPlaying.shared.qualityBadgeLabel }
         let oldURL = await MainActor.run { NowPlaying.shared.currentStreamURL }
         let oldLossless = await MainActor.run { NowPlaying.shared.currentLosslessLabel }
+        let intentGeneration = await MainActor.run {
+            NowPlaying.shared.playbackGeneration
+        }
 
         let newLabel = Self.qualityLabel(result)
         guard Self.tierRank(newLabel) > Self.tierRank(oldLabel) else { return }
@@ -616,6 +637,7 @@ actor PlaybackManager {
 
         let song = await queueSong(for: videoId)
         let targetVolume = await MainActor.run { SettingsStore.shared.playerVolume }
+        guard await isCurrentIntent(intentGeneration) else { return }
         await PlayerController.shared.fadeVolume(to: 0, duration: 0.12)
         await PlayerController.shared.play(
             url: result.streamUrl,
@@ -627,12 +649,21 @@ actor PlaybackManager {
             thumbnailUrl: song?.thumbnailUrl,
             losslessLabel: Self.losslessLabel(result),
             qualityLabel: newLabel,
-            startAt: position
+            startAt: position,
+            intentGeneration: intentGeneration
         )
+        guard await isCurrentIntent(intentGeneration) else {
+            await MainActor.run {
+                PlayerController.shared.setVolumeOverride(targetVolume)
+            }
+            return
+        }
         let upgradeSourceName = sourceName(for: result, videoId: videoId)
-        await MainActor.run {
-            NowPlaying.shared.currentResult = result
-            NowPlaying.shared.currentSourceName = upgradeSourceName
+        if await isCurrentIntent(intentGeneration) {
+            await MainActor.run {
+                NowPlaying.shared.currentResult = result
+                NowPlaying.shared.currentSourceName = upgradeSourceName
+            }
         }
         // Stay muted while the new stream buffers; fade in only once audio is
         // actually advancing. Fading during buffering made it enter abruptly
@@ -642,8 +673,18 @@ actor PlaybackManager {
             try? await Task.sleep(for: .milliseconds(50))
             let time = await MainActor.run { NowPlaying.shared.currentTime }
             let currentId = await MainActor.run { NowPlaying.shared.videoId }
-            if currentId != videoId { break }
+            let generation = await MainActor.run {
+                NowPlaying.shared.playbackGeneration
+            }
+            if currentId != videoId || generation != intentGeneration { break }
             if time > position + 0.05 { started = true; break }
+        }
+
+        guard await isCurrentIntent(intentGeneration) else {
+            await MainActor.run {
+                PlayerController.shared.setVolumeOverride(targetVolume)
+            }
+            return
         }
 
         if started {
@@ -666,7 +707,8 @@ actor PlaybackManager {
                 thumbnailUrl: song?.thumbnailUrl,
                 losslessLabel: oldLossless,
                 qualityLabel: oldLabel ?? "Standard",
-                startAt: position
+                startAt: position,
+                intentGeneration: intentGeneration
             )
         }
         await MainActor.run { PlayerController.shared.setVolumeOverride(nil) }
@@ -926,7 +968,11 @@ actor PlaybackManager {
 
     /// Plays a downloaded copy if one exists, no matter which source it came
     /// from. Returns nil when the track isn't available offline.
-    private func playLocalFile(videoId: String) async -> PlaybackResult? {
+    private func playLocalFile(
+        videoId: String,
+        intentGeneration: Int
+    ) async -> PlaybackResult? {
+        guard await isCurrentIntent(intentGeneration) else { return nil }
         guard let localPath = await DownloadManager.shared.localURL(for: videoId) else { return nil }
         let isFLAC = localPath.pathExtension.lowercased() == "flac"
         let song = await MainActor.run { NowPlaying.shared.queueSongs.first { $0.videoId == videoId } }
@@ -939,11 +985,15 @@ actor PlaybackManager {
             artists: song?.artists ?? [],
             thumbnailUrl: song?.thumbnailUrl,
             losslessLabel: isFLAC ? "FLAC" : nil,
-            qualityLabel: isFLAC ? "Lossless" : "Standard"
+            qualityLabel: isFLAC ? "Lossless" : "Standard",
+            intentGeneration: intentGeneration,
+            sourceMIMEType: isFLAC ? "audio/flac" : "audio/mp4"
         )
-        await MainActor.run {
-            NowPlaying.shared.currentSourceName = "Downloaded"
-            NowPlaying.shared.updateVideoAvailability()
+        if await isCurrentIntent(intentGeneration) {
+            await MainActor.run {
+                NowPlaying.shared.currentSourceName = "Downloaded"
+                NowPlaying.shared.updateVideoAvailability()
+            }
         }
         let localResult = PlaybackResult(
             streamUrl: localPath.absoluteString,
@@ -962,15 +1012,32 @@ actor PlaybackManager {
             muxedStreamUrl: nil,
             loudnessDb: nil
         )
-        await MainActor.run {
-            NowPlaying.shared.currentResult = localResult
+        if await isCurrentIntent(intentGeneration) {
+            await MainActor.run {
+                NowPlaying.shared.currentResult = localResult
+            }
         }
         return localResult
     }
 
     /// Resolve a video and start playback. Returns the result used, or throws.
     @discardableResult
-    func resolveAndPlay(videoId: String) async throws -> PlaybackResult {
+    func resolveAndPlay(
+        videoId: String,
+        intent: Int? = nil
+    ) async throws -> PlaybackResult {
+        let intentGeneration = await MainActor.run {
+            intent ?? NowPlaying.shared.playbackGeneration
+        }
+        Log.player.info(
+            "PLAY_INTENT begin gen=\(intentGeneration) videoId=\(videoId)"
+        )
+        guard await isCurrentIntent(intentGeneration) else {
+            Log.player.info(
+                "PLAY_INTENT drop gen=\(intentGeneration) videoId=\(videoId)"
+            )
+            throw CancellationError()
+        }
         // Metadata already switched; stop the previous track so its audio
         // doesn't keep playing while the new stream resolves.
         let previous = await MainActor.run { PlayerController.shared.currentVideoId }
@@ -982,13 +1049,41 @@ actor PlaybackManager {
         }
         // Downloaded files win over every network source, including add-ons:
         // an add-on track saved for offline use must play without the addon.
-        if let local = await playLocalFile(videoId: videoId) {
+        if let local = await playLocalFile(
+            videoId: videoId,
+            intentGeneration: intentGeneration
+        ) {
             scheduleUpgradePrefetch(videoId: videoId)
             return local
         }
+        guard await isCurrentIntent(intentGeneration) else {
+            Log.player.info(
+                "PLAY_INTENT drop after local gen=\(intentGeneration) videoId=\(videoId)"
+            )
+            throw CancellationError()
+        }
+        // Podcasts are finite audio, not music recordings. They must not
+        // enter add-on FLAC/Atmos matching, JioSaavn music fallback or album
+        // video/audio rematching, even when the music beta is enabled.
+        if let episode = await queueSong(for: videoId),
+           episode.contentKind == .episode || episode.contentKind == .podcast {
+            var request = StreamResolveRequest.playback(videoId: videoId)
+            request.options.audioQuality = SettingsStore.shared.audioQuality
+            let result = try await StreamFallback.resolveFirstValid(
+                request,
+                using: InnerTubeClient.tropShared,
+                providers: .tropLive
+            )
+            guard await isCurrentIntent(intentGeneration) else {
+                throw CancellationError()
+            }
+            return await playNetworkResult(
+                result, videoId: videoId, intentGeneration: intentGeneration
+            )
+        }
         if MusicPlaybackIdentity.isLegacyPencari(videoId) {
             let result = try await resolveLegacyPencari(videoId: videoId)
-            await playNetworkResult(result, videoId: videoId)
+            await playNetworkResult(result, videoId: videoId, intentGeneration: intentGeneration)
             scheduleUpgradePrefetch(videoId: videoId)
             return result
         }
@@ -1004,6 +1099,7 @@ actor PlaybackManager {
                 result = try await resolveAudius(videoId: videoId)
             }
             let song = await queueSong(for: videoId)
+            guard await isCurrentIntent(intentGeneration) else { return result }
             await PlayerController.shared.play(
                 url: result.streamUrl,
                 title: song?.title,
@@ -1013,12 +1109,17 @@ actor PlaybackManager {
                 artists: song?.artists ?? [],
                 thumbnailUrl: song?.thumbnailUrl,
                 losslessLabel: Self.losslessLabel(result),
-                qualityLabel: Self.qualityLabel(result)
+                qualityLabel: Self.qualityLabel(result),
+                intentGeneration: intentGeneration,
+                sourceMIMEType: result.mimeType,
+                isAtmos: result.audioQuality.lowercased().contains("atmos")
             )
             let externalSourceName = sourceName(for: result, videoId: videoId)
-            await MainActor.run {
-                NowPlaying.shared.currentSourceName = externalSourceName
-                NowPlaying.shared.currentResult = result
+            if await isCurrentIntent(intentGeneration) {
+                await MainActor.run {
+                    NowPlaying.shared.currentSourceName = externalSourceName
+                    NowPlaying.shared.currentResult = result
+                }
             }
             scheduleUpgradePrefetch(videoId: videoId)
             return result
@@ -1034,7 +1135,7 @@ actor PlaybackManager {
             var usable = cached.age < 90
             if !usable { usable = await Self.verifyStream(upgrade.streamUrl) }
             if usable {
-                await playNetworkResult(upgrade, videoId: videoId)
+                await playNetworkResult(upgrade, videoId: videoId, intentGeneration: intentGeneration)
                 scheduleUpgradePrefetch(videoId: videoId)
                 return upgrade
             }
@@ -1049,7 +1150,7 @@ actor PlaybackManager {
                 upgradeResultCache.removeAll(keepingCapacity: true)
             }
             upgradeResultCache[videoId] = (lossy, Date())
-            await playNetworkResult(lossy, videoId: videoId)
+            await playNetworkResult(lossy, videoId: videoId, intentGeneration: intentGeneration)
             scheduleUpgradePrefetch(videoId: videoId)
             return lossy
         }
@@ -1059,27 +1160,35 @@ actor PlaybackManager {
             if let upgrade = prefetchedUpgrade(videoId: videoId),
                Self.shouldPreferUpgrade(upgrade, over: cached) {
                 if await Self.verifyStream(upgrade.streamUrl) {
-                    await playNetworkResult(upgrade, videoId: videoId)
+                    await playNetworkResult(upgrade, videoId: videoId, intentGeneration: intentGeneration)
                     scheduleUpgradePrefetch(videoId: videoId)
                     return upgrade
                 }
                 upgradeResultCache[videoId] = nil
             }
-            // Cache contains transport metadata, whose author can be an upload
-            // channel. Use the same queue-credit policy as fresh resolutions.
-            await playNetworkResult(cached, videoId: videoId)
+            // Cache can hold the video's transport response; still apply
+            // album-audio verification when the selected row is a song.
+            let played = await playNetworkResult(
+                cached, videoId: videoId, intentGeneration: intentGeneration
+            )
             scheduleUpgradePrefetch(videoId: videoId)
-            return cached
+            return played
         }
 
-        let key = playKey(videoId: videoId)
+        let key = playKey(
+            videoId: videoId,
+            intentGeneration: intentGeneration
+        )
         if let existing = inflightResolutions[key] {
             return try await existing.value
         }
 
         let task = Task { [self] in
             do {
-                return try await resolveAndPlayFromNetwork(videoId: videoId)
+                return try await resolveAndPlayFromNetwork(
+                    videoId: videoId,
+                    intentGeneration: intentGeneration
+                )
             } catch {
                 // YouTube has no stream: JioSaavn/AAC can still cover it, even
                 // in Standard/Low (only when YouTube failed).
@@ -1089,7 +1198,7 @@ actor PlaybackManager {
                         self.upgradeResultCache.removeAll(keepingCapacity: true)
                     }
                     self.upgradeResultCache[videoId] = (lossy, Date())
-                    await self.playNetworkResult(lossy, videoId: videoId)
+                    await self.playNetworkResult(lossy, videoId: videoId, intentGeneration: intentGeneration)
                     self.scheduleUpgradePrefetch(videoId: videoId)
                     return lossy
                 }
@@ -1103,7 +1212,10 @@ actor PlaybackManager {
 
     /// Runs the client fallback chain for playback. Only called once per
     /// videoId by `resolveAndPlay`, which owns the in-flight dedup entry.
-    private func resolveAndPlayFromNetwork(videoId: String) async throws -> PlaybackResult {
+    private func resolveAndPlayFromNetwork(
+        videoId: String,
+        intentGeneration: Int
+    ) async throws -> PlaybackResult {
         var request = StreamResolveRequest.playback(videoId: videoId)
         request.options.audioQuality = SettingsStore.shared.audioQuality
         let result = try await StreamFallback.resolveFirstValid(
@@ -1117,18 +1229,20 @@ actor PlaybackManager {
         if let upgrade = prefetchedUpgrade(videoId: videoId),
            Self.shouldPreferUpgrade(upgrade, over: result) {
             if await Self.verifyStream(upgrade.streamUrl) {
-                await playNetworkResult(upgrade, videoId: videoId)
+                await playNetworkResult(upgrade, videoId: videoId, intentGeneration: intentGeneration)
                 scheduleUpgradePrefetch(videoId: videoId)
                 return upgrade
             }
             // Dead cached URL (origin rotated/expired): drop it, use YouTube.
             upgradeResultCache[videoId] = nil
         }
-        await playNetworkResult(result, videoId: videoId)
+        let played = await playNetworkResult(
+            result, videoId: videoId, intentGeneration: intentGeneration
+        )
         // Warm this track (for replays) and the next two while it plays. Off
         // the play path: never delays audio.
         scheduleUpgradePrefetch(videoId: videoId)
-        return result
+        return played
     }
 
     private func addonName(for key: String) async -> String? {
@@ -1152,30 +1266,208 @@ actor PlaybackManager {
         }
     }
 
-    private func playNetworkResult(_ result: PlaybackResult, videoId: String) async {
+    /// When an old/ambiguous song entry resolves to a YouTube music VIDEO,
+    /// look for an independently typed ATV album audio track. A video's
+    /// audio-bearing stream is still the video's mix; codec selection alone
+    /// cannot turn it into the album master.
+    private func albumAudioVersion(
+        of result: PlaybackResult,
+        for videoId: String,
+        song: SongItem?,
+        intentGeneration: Int
+    ) async -> PlaybackResult {
+        guard MusicPlaybackIdentity.isYouTube(videoId),
+              result.videoId == videoId,
+              let song,
+              song.contentKind != .episode,
+              song.contentKind != .podcast,
+              !["addon", "jiosaavn", "qobuz", "audius", "local"].contains(
+                  result.clientName.lowercased()
+              ),
+              MusicRecordingSelectionPolicy.shouldFindAlbumAudio(
+                  selectedVideo: song.recordingPreference == .musicVideo,
+                  rowType: song.musicVideoType,
+                  sourceType: result.musicVideoType,
+                  rowIsVideo: song.isVideo == true,
+                  albumKnown: !(song.album ?? "").isEmpty || song.albumId != nil,
+                  expectedDuration: song.duration,
+                  resolvedDuration: result.duration ?? 0
+              ),
+              let artist = song.artists.first?.name,
+              !artist.isEmpty
+        else { return result }
+
+        let candidateID: String?
+        if let cached = albumAudioMatchCache[videoId],
+           Date().timeIntervalSince(cached.at) < (cached.videoId == nil ? 600 : 3_600) {
+            candidateID = cached.videoId
+        } else {
+            let query = "\(artist) \(song.title)"
+            let found: String?
+            do {
+                let data = try await InnerTubeClient.tropShared.search(
+                    query: query, client: .webRemix
+                )
+                guard await isCurrentIntent(intentGeneration) else { return result }
+                let parsed = SearchParser.parseSearchResults(from: data.value)
+                let candidates = parsed.flatMap(\.items).compactMap { item -> SongItem? in
+                    if case .song(let song) = item { return song }
+                    return nil
+                }
+                let valid = candidates.filter { candidate in
+                    candidate.videoId != videoId
+                        && MusicRecordingSelectionPolicy.verifiedAlbumAudio(
+                            wanted: .init(
+                                title: song.title,
+                                artist: artist,
+                                album: song.album,
+                                duration: song.duration,
+                                originalWasVideo: song.isMusicVideo
+                                    || MusicRecordingSelectionPolicy.isVideoRecording(
+                                        result.musicVideoType
+                                    )
+                            ),
+                            candidate: .init(
+                                title: candidate.title,
+                                artists: candidate.artists.map(\.name),
+                                album: candidate.album,
+                                duration: candidate.duration,
+                                type: candidate.musicVideoType
+                            )
+                        )
+                }
+                // De-duplicate top-card and shelf copies of the same ATV.
+                // If no album metadata survives and distinct ATV releases
+                // match, refuse an arbitrary selection: one might be a
+                // clean/radio edit or an alternate official recording.
+                let unique = Array(
+                    Dictionary(valid.map { ($0.videoId, $0) },
+                               uniquingKeysWith: { first, _ in first }).values
+                )
+                let releaseKeys = Set(unique.map {
+                    TextMatch.normalize($0.album ?? "")
+                })
+                let ambiguous = (song.album ?? "").isEmpty
+                    && unique.count > 1
+                    && releaseKeys.count > 1
+                // Prefer the same release first, then the closest duration.
+                let sorted = unique.sorted { lhs, rhs in
+                    let lhsAlbum = song.album != nil
+                        && lhs.album != nil
+                        && TextMatch.albumsMatch(lhs.album ?? "", song.album ?? "")
+                    let rhsAlbum = song.album != nil
+                        && rhs.album != nil
+                        && TextMatch.albumsMatch(rhs.album ?? "", song.album ?? "")
+                    if lhsAlbum != rhsAlbum { return lhsAlbum }
+                    return abs(lhs.duration - song.duration)
+                        < abs(rhs.duration - song.duration)
+                }
+                if ambiguous {
+                    Log.player.info(
+                        "MUSIC_MATCH ambiguous ATV candidates videoId=\(videoId) count=\(unique.count)"
+                    )
+                }
+                found = ambiguous ? nil : sorted.first?.videoId
+            } catch {
+                // Search is optional. Network errors must not block music.
+                return result
+            }
+            if albumAudioMatchCache.count >= 100 {
+                albumAudioMatchCache.removeAll(keepingCapacity: true)
+            }
+            albumAudioMatchCache[videoId] = (found, Date())
+            candidateID = found
+        }
+
+        guard let candidateID, await isCurrentIntent(intentGeneration) else {
+            let preference = String(describing: song.recordingPreference)
+            let rowType = song.musicVideoType ?? "unknown"
+            let streamType = result.musicVideoType ?? "unknown"
+            let duration = result.duration ?? 0
+            Log.player.info(
+                "MUSIC_MATCH no verified ATV source for selected=\(videoId) preference=\(preference) rowType=\(rowType) streamType=\(streamType) duration=\(duration)"
+            )
+            return result
+        }
+        var request = StreamResolveRequest.playback(videoId: candidateID)
+        request.options.audioQuality = SettingsStore.shared.audioQuality
+        guard let albumAudio = try? await StreamFallback.resolveFirstValid(
+            request,
+            using: InnerTubeClient.tropShared,
+            providers: .tropLive
+        ), albumAudio.videoId == candidateID,
+           !MusicRecordingSelectionPolicy.isVideoRecording(albumAudio.musicVideoType),
+           await isCurrentIntent(intentGeneration)
+        else { return result }
+
+        Log.player.notice(
+            "MUSIC_MATCH album audio selected original=\(videoId) audio=\(candidateID)"
+        )
+        return albumAudio
+    }
+
+    @discardableResult
+    private func playNetworkResult(
+        _ result: PlaybackResult,
+        videoId: String,
+        intentGeneration: Int
+    ) async -> PlaybackResult {
+        guard await isCurrentIntent(intentGeneration) else {
+            Log.player.info(
+                "PLAY_INTENT drop result gen=\(intentGeneration) videoId=\(videoId)"
+            )
+            return result
+        }
         let queueSong = await queueSong(for: videoId)
+        let audioResult = await albumAudioVersion(
+            of: result,
+            for: videoId,
+            song: queueSong,
+            intentGeneration: intentGeneration
+        )
+        guard await isCurrentIntent(intentGeneration) else { return result }
         let queueArtistName = queueSong.map { artistDisplayString(from: $0.artists) } ?? ""
         let fallbackAuthor = result.author?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let artistName = !queueArtistName.isEmpty ? queueArtistName : fallbackAuthor
         let rawTitle = queueSong?.title ?? result.title ?? ""
         await PlayerController.shared.play(
-            url: result.streamUrl,
+            url: audioResult.streamUrl,
             title: cleanedTitle(rawTitle, artist: artistName),
             artist: artistName,
             videoId: videoId,
-            duration: result.duration.flatMap { $0 > 0 ? TimeInterval($0) : nil },
+            duration: audioResult.duration.flatMap {
+                $0 > 0 ? TimeInterval($0) : nil
+            } ?? queueSong.flatMap { $0.duration > 0
+                ? TimeInterval($0.duration) : nil
+            },
             artists: queueSong?.artists ?? [],
-            loudnessDb: result.loudnessDb,
+            loudnessDb: audioResult.loudnessDb,
             thumbnailUrl: queueSong?.thumbnailUrl,
-            losslessLabel: Self.losslessLabel(result),
-            qualityLabel: Self.qualityLabel(result)
+            losslessLabel: Self.losslessLabel(audioResult),
+            qualityLabel: Self.qualityLabel(audioResult),
+            intentGeneration: intentGeneration,
+            sourceMIMEType: audioResult.mimeType,
+            isAtmos: audioResult.audioQuality.lowercased().contains("atmos"),
+            bypassSponsorBlock: audioResult.videoId != videoId
+                || queueSong?.contentKind == .episode
+                || queueSong?.contentKind == .podcast
         )
-        let sourceName = sourceName(for: result, videoId: videoId)
-        await MainActor.run {
-            NowPlaying.shared.currentSourceName = sourceName
-            NowPlaying.shared.currentResult = result
+        let sourceName = sourceName(for: audioResult, videoId: videoId)
+        if await isCurrentIntent(intentGeneration) {
+            await MainActor.run {
+                NowPlaying.shared.currentSourceName = sourceName
+                NowPlaying.shared.currentResult = audioResult
+            }
         }
-        await publishVideoAvailability(result: result, videoId: videoId, rowType: queueSong?.musicVideoType)
+        await publishVideoAvailability(
+            // Video mode still belongs to the user's original YouTube ID.
+            // Only the audio stream is substituted with its album recording.
+            result: result,
+            videoId: videoId,
+            rowType: queueSong?.musicVideoType,
+            intentGeneration: intentGeneration
+        )
+        return audioResult
     }
 
     private func clearInflight(key: String) {
@@ -1211,12 +1503,19 @@ actor PlaybackManager {
     /// Publishes video availability for a resolve result. The row type wins
     /// (resolve responses often omit it); unknown rows fall back to an
     /// authoritative lookup inside the shared availability check.
-    private func publishVideoAvailability(result: PlaybackResult, videoId: String, rowType: String?) async {
+    private func publishVideoAvailability(
+        result: PlaybackResult,
+        videoId: String,
+        rowType: String?,
+        intentGeneration: Int
+    ) async {
+        guard await isCurrentIntent(intentGeneration) else { return }
         let type = result.musicVideoType ?? rowType
         let hasVideo = await VideoAvailability.shared.hasVideo(
             videoId: videoId, rowType: rowType, result: result, using: InnerTubeClient.tropShared
         )
         await MainActor.run {
+            guard NowPlaying.shared.playbackGeneration == intentGeneration else { return }
             NowPlaying.shared.updateVideoAvailability(musicVideoType: type, hasVideo: hasVideo)
         }
     }

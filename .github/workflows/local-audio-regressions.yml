@@ -1,0 +1,24 @@
+name: Local Audio Regression Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Services/LocalAudioFilePolicy.swift"
+      - "Trop/Services/DownloadManager.swift"
+      - "Trop/Library/DownloadsView.swift"
+      - "tests/Playback/LocalAudioFileChecks.swift"
+      - ".github/workflows/local-audio-regressions.yml"
+
+jobs:
+  local-audio:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate actual local audio file policy
+        run: |
+          set -euo pipefail
+          swiftc \
+            Trop/Services/LocalAudioFilePolicy.swift \
+            tests/Playback/LocalAudioFileChecks.swift \
+            -o "$RUNNER_TEMP/local-audio-checks"
+          "$RUNNER_TEMP/local-audio-checks"

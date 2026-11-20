@@ -11,6 +11,7 @@ enum AddonSourceResolver {
     private static func cacheKey(
         title: String,
         artist: String,
+        album: String?,
         duration: Int?,
         requireCD: Bool,
         preferAtmos: Bool,
@@ -18,7 +19,18 @@ enum AddonSourceResolver {
     ) -> String {
         // Duration bucket: copies differ by a second or two, versions don't.
         let bucket = (duration ?? 0) / 5
-        return "\(title.lowercased())|\(artist.lowercased())|\(bucket)|\(requireCD ? "cd" : "any")|\(preferAtmos ? "atmos" : "")|\(preferHiRes ? "hires" : "")"
+        // Full labels and album edition go in the key; a cached
+        // instrumental copy must NEVER be served to a vocal track.
+        let components = [
+            TextMatch.normalize(title),
+            TextMatch.normalize(artist),
+            TextMatch.normalize(album ?? ""),
+            String(bucket),
+            requireCD ? "cd" : "any",
+            preferAtmos ? "atmos" : "",
+            preferHiRes ? "hires" : ""
+        ]
+        return components.joined(separator: "|")
     }
 
     private struct Criteria: Sendable {
@@ -62,8 +74,9 @@ enum AddonSourceResolver {
         )
 
         let cacheKey = Self.cacheKey(
-            title: title,
+            title: song.title,
             artist: artist,
+            album: song.album,
             duration: criteria.duration,
             requireCD: requireCD,
             preferAtmos: preferAtmos,
@@ -383,8 +396,9 @@ enum AddonSourceResolver {
     }
 
     private static func albumKey(installationKey: String, artist: String, album: String) -> String {
-        let name = TextMatch.normalizeTitle(album)
-        return "\(installationKey)|\(artist.lowercased())|\(name)"
+        // Album edition is part of identity, not just a search hint.
+        let name = TextMatch.normalize(album)
+        return "\(installationKey)|\(TextMatch.normalize(artist))|\(name)"
     }
 
     /// Resolves the given candidates in order and returns the best tier found.

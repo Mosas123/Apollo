@@ -1119,7 +1119,13 @@ struct ArtistDetailView: View {
                 if code == 401 || code == 403 {
                     return String(localized: "YouTube Music couldn't authorize this change. Sign in again and retry.")
                 }
-                return String.localizedStringWithFormat(NSLocalizedString("YouTube Music rejected the change (HTTP %ld). Your previous selection was restored.", comment: "Favorite update rejected"), code)
+                return String.localizedStringWithFormat(
+                    NSLocalizedString(
+                        "YouTube Music rejected the change (HTTP %ld). Your previous selection was restored.",
+                        comment: "Favorite update rejected"
+                    ),
+                    code
+                )
             default: break
             }
         }

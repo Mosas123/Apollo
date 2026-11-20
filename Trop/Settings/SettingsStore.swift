@@ -254,6 +254,25 @@ final class SettingsStore: @unchecked Sendable {
         didSet { Self.defaults.set(upgradeDuringPlayback, forKey: Keys.upgradeDuringPlayback) }
     }
 
+    /// Experimental, audio-only ApoloEngine. Changes apply on the next track.
+    /// Default OFF: the stable mpv playback path remains unchanged.
+    var apoloBetaEnabled: Bool {
+        didSet { Self.defaults.set(apoloBetaEnabled, forKey: Keys.apoloBetaEnabled) }
+    }
+
+    /// Independent Apolo route for podcast episodes. On upgrade, preserve
+    /// the old beta behavior (podcasts followed the music toggle); users can
+    /// then enable or disable each category without affecting the other.
+    var apoloPodcastsBetaEnabled: Bool {
+        didSet { Self.defaults.set(apoloPodcastsBetaEnabled, forKey: Keys.apoloPodcastsBetaEnabled) }
+    }
+
+    /// Opt-in Apolo live radio, independent of the music beta. Default OFF;
+    /// enabling/disabling it applies to the next station selection.
+    var apoloRadioBetaEnabled: Bool {
+        didSet { Self.defaults.set(apoloRadioBetaEnabled, forKey: Keys.apoloRadioBetaEnabled) }
+    }
+
     // MARK: - Liquid Glass
 
     /// Translucency of the player's floating glass chips (iOS 27 style control).
@@ -457,6 +476,9 @@ final class SettingsStore: @unchecked Sendable {
         static let glassStyle = "settings.glassStyle"
         static let podcastIndexKey = "settings.podcastIndexKey"
         static let musicQualityMode = "settings.musicQualityMode"
+        static let apoloBetaEnabled = "settings.apoloBetaEnabled"
+        static let apoloPodcastsBetaEnabled = "settings.apoloPodcastsBetaEnabled"
+        static let apoloRadioBetaEnabled = "settings.apoloRadioBetaEnabled"
         static let preferAtmos = "settings.preferAtmos"
         static let preferHiRes = "settings.preferHiRes"
         static let legacyPreferLossless = "settings.preferLossless"
@@ -541,6 +563,12 @@ final class SettingsStore: @unchecked Sendable {
         glassStyle = Self.loadEnum(Keys.glassStyle, default: .regular)
         podcastIndexKey = Self.loadString(Keys.podcastIndexKey, default: "")
         musicQualityMode = Self.loadEnum(Keys.musicQualityMode, default: .auto)
+        apoloBetaEnabled = Self.load(Keys.apoloBetaEnabled, default: false)
+        apoloPodcastsBetaEnabled = Self.load(
+            Keys.apoloPodcastsBetaEnabled,
+            default: Self.load(Keys.apoloBetaEnabled, default: false)
+        )
+        apoloRadioBetaEnabled = Self.load(Keys.apoloRadioBetaEnabled, default: false)
         preferAtmos = Self.load(Keys.preferAtmos, default: false)
         preferHiRes = Self.load(
             Keys.preferHiRes,

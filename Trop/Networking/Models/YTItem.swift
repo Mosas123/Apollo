@@ -267,6 +267,14 @@ enum ContentKind: String, Codable, Hashable, Sendable {
     case episode
 }
 
+/// Selection intent is distinct from what the upstream YouTube ID
+/// represents. A music video mistakenly embedded in a Songs row is still
+/// a request for album audio; an explicit Videos tap is not.
+enum MusicRecordingPreference: String, Codable, Hashable, Sendable {
+    case albumAudio
+    case musicVideo
+}
+
 struct SongItem: Codable, Hashable {
     var videoId: String
     var title: String
@@ -288,12 +296,21 @@ struct SongItem: Codable, Hashable {
     /// before this existed — previously persisted queues keep decoding.
     var musicVideoType: String?
 
+    /// What the listener requested, not what a YouTube source ID happens
+    /// to contain. Optional for older saved queues (music-first default).
+    var recordingPreference: MusicRecordingPreference?
+
     /// Content kind for routing metadata enrichment. Optional so previously
     /// persisted queue snapshots keep decoding; nil means `.music`.
     var contentKind: ContentKind?
 
-    /// True for music-video results (subtitle starts with "Video").
-    var isMusicVideo: Bool { isVideo == true }
+    /// The watch endpoint's music type is authoritative even when the
+    /// localized subtitle omits the word "Video".
+    var isMusicVideo: Bool {
+        MusicRecordingSelectionPolicy.isMusicVideo(
+            isVideo: isVideo, type: musicVideoType
+        )
+    }
 
     static func from(_ renderer: [String: Any]) -> SongItem? {
         guard let videoId = extractVideoId(renderer) else {
@@ -348,11 +365,15 @@ struct SongItem: Codable, Hashable {
         }.map { YTArtist(name: $0.name, id: $0.browseId) }
         let thumbnailUrl = extractResponsiveThumbnail(renderer)
         let stats = extractItemStats(from: segments)
+        let rowType = VideoAvailability.rowMusicVideoType(renderer)
+        let isVideo = MusicRecordingSelectionPolicy.isMusicVideo(
+            isVideo: stats.startsWithVideo ? true : nil, type: rowType
+        )
         return SongItem(
             videoId: videoId, title: title, artists: artists, album: album, albumId: albumId,
             duration: duration, thumbnailUrl: thumbnailUrl, isExplicit: false, playlistId: playlistId,
-            viewCount: stats.viewCount, year: stats.year, isVideo: stats.startsWithVideo ? true : nil,
-            musicVideoType: VideoAvailability.rowMusicVideoType(renderer)
+            viewCount: stats.viewCount, year: stats.year, isVideo: isVideo ? true : nil,
+            musicVideoType: rowType
         )
     }
 
@@ -390,11 +411,15 @@ struct SongItem: Codable, Hashable {
             }
         }
         let stats = extractItemStats(from: subSegments)
+        let rowType = VideoAvailability.rowMusicVideoType(renderer)
+        let isVideo = MusicRecordingSelectionPolicy.isMusicVideo(
+            isVideo: stats.startsWithVideo ? true : nil, type: rowType
+        )
         return SongItem(
             videoId: videoId, title: title, artists: artists, album: album, albumId: albumId,
             duration: duration, thumbnailUrl: thumbnailUrl, isExplicit: false, playlistId: playlistId,
-            viewCount: stats.viewCount, year: stats.year, isVideo: stats.startsWithVideo ? true : nil,
-            musicVideoType: VideoAvailability.rowMusicVideoType(renderer)
+            viewCount: stats.viewCount, year: stats.year, isVideo: isVideo ? true : nil,
+            musicVideoType: rowType
         )
     }
 }
@@ -625,6 +650,10 @@ extension SongItem {
         self.isExplicit = false
         self.playlistId = nil
         self.likeStatus = nil
+        // Preserve a saved music-video identity when restoring the library.
+        // Dropping it could make an intentional video selection look like a
+        // song and trigger an inappropriate album-audio substitution.
+        self.isVideo = entity.isVideo ? true : nil
     }
 
     init(entity: DownloadedTrackEntity) {

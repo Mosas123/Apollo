@@ -20,11 +20,37 @@ struct LiveSongInfo: Equatable {
     var artwork: Data?
 }
 
+/// Last known position while a failed network stream is being re-resolved.
+private struct InterruptedPlaybackPosition {
+    let videoId: String
+    let position: TimeInterval
+    let expiresAt: Date
+}
+
 /// What is currently playing, used to route metadata and label the UI.
 enum PlaybackKind: Sendable {
     case music
     case podcast
     case radio
+}
+
+/// Real-time station state, independent of finite song progress or mpv/Apolo.
+enum RadioPlaybackStatus: Equatable, Sendable {
+    case connecting
+    case live
+    case reconnecting
+    case paused
+    case unavailable
+
+    var label: String {
+        switch self {
+        case .connecting: "Connecting…"
+        case .live: "LIVE"
+        case .reconnecting: "Reconnecting…"
+        case .paused: "Paused"
+        case .unavailable: "Unavailable"
+        }
+    }
 }
 
 /// Display metadata for one playback identity. Original SongItem artist/album
@@ -49,6 +75,8 @@ final class NowPlaying {
     var artist = ""
     /// For internet radio: the song currently playing on the station (ICY title).
     var liveTitle: String?
+    /// Shows an honest connection state instead of a fake 0:00 song progress.
+    var radioPlaybackStatus: RadioPlaybackStatus = .connecting
     /// Enriched live radio song (parsed + album/artwork from a catalogue).
     var liveSongInfo: LiveSongInfo?
     var albumTitle = ""
@@ -58,6 +86,8 @@ final class NowPlaying {
     private var publishedArtwork: (videoId: String, url: String)?
     private var displayedArtworkVideoId: String?
     var isPlaying = false
+    /// Displays the actual engine, including automatic beta fallback.
+    var activePlaybackEngine = "MPVKit"
     /// True while the current stream is lossless (FLAC / Qobuz CD). Drives the
     /// player's "Lossless" badge.
     var isLosslessStream = false
@@ -134,7 +164,7 @@ final class NowPlaying {
     private var progressTick = 0
     /// Bumped whenever the user starts/changes playback, so deferred autoplay
     /// work can abort instead of hijacking the new track.
-    private var playbackGeneration = 0
+    private(set) var playbackGeneration = 0
     var sleepTimerEndsAt: Date?
     @ObservationIgnored private var sleepTimerTask: Task<Void, Never>?
     @ObservationIgnored private var artworkLoadTask: Task<Void, Never>?
@@ -151,6 +181,12 @@ final class NowPlaying {
     private static let positionKey = "nowPlaying.lastPosition"
     private var pendingResumePosition: TimeInterval?
     private var pendingResumeAt: Date?
+    /// Short-lived position from a failed Apolo stream, used only if a fresh
+    /// resolution for the same track is needed after the mpv fallback.
+    @ObservationIgnored private var interruptedPlayback: InterruptedPlaybackPosition?
+    /// An episode resume request is tied to the queue intent, not a fixed
+    /// timer or the player ID (which is assigned before audio is ready).
+    private var requestedPodcastResume: (videoId: String, generation: Int, position: TimeInterval)?
     private static let queueIndexKey = "nowPlaying.queueIndex"
     private static let shuffleKey = "nowPlaying.shuffle"
     private static let repeatKey = "nowPlaying.repeat"
@@ -168,10 +204,45 @@ final class NowPlaying {
 
     // MARK: - Persistent queue
 
-    /// Consumes a saved position for the first play after launch.
+    /// Keep the last audible position across an Apolo -> mpv -> re-resolve
+    /// recovery, without allowing it to resume a different song or a later
+    /// user-initiated play.
+    func rememberInterruptedPlayback(_ position: TimeInterval, for videoId: String?) {
+        guard let videoId, self.videoId == videoId,
+              position.isFinite, position > 1 else { return }
+        interruptedPlayback = InterruptedPlaybackPosition(
+            videoId: videoId,
+            position: position,
+            expiresAt: Date().addingTimeInterval(45)
+        )
+    }
+
+    /// Save a podcast's persisted position while the correct episode is
+    /// selected. It will be consumed only at the next actual source load,
+    /// before either Apolo or MPVKit starts playback.
+    func requestPodcastResumePosition(_ position: TimeInterval, for videoId: String) {
+        guard self.videoId == videoId, playbackKind == .podcast,
+              position.isFinite, position > 10,
+              (duration <= 0 || position < duration - 5) else { return }
+        requestedPodcastResume = (
+            videoId: videoId, generation: playbackGeneration, position: position
+        )
+    }
+
+    /// Consumes a transient recovery position or the saved launch position.
     func takeResumePosition(for videoId: String?) -> TimeInterval? {
-        guard let videoId, videoId == self.videoId,
-              let position = pendingResumePosition,
+        guard let videoId, videoId == self.videoId else { return nil }
+        if let request = requestedPodcastResume,
+           request.videoId == videoId,
+           request.generation == playbackGeneration {
+            requestedPodcastResume = nil
+            return request.position
+        }
+        if let recovery = interruptedPlayback, recovery.videoId == videoId {
+            interruptedPlayback = nil
+            if recovery.expiresAt > Date() { return recovery.position }
+        }
+        guard let position = pendingResumePosition,
               let savedAt = pendingResumeAt,
               Date().timeIntervalSince(savedAt) < 86_400 else { return nil }
         pendingResumePosition = nil
@@ -234,6 +305,9 @@ final class NowPlaying {
 
     func setQueue(_ songs: [SongItem], startIndex: Int) {
         playbackGeneration += 1
+        // A brand-new queue supersedes any in-flight next-track resolution.
+        // Its old task must not leave the new queue permanently locked.
+        isResolvingNext = false
         queueSongs = songs
         queueIndex = min(max(startIndex, 0), max(songs.count - 1, 0))
         originalQueue = nil
@@ -353,6 +427,7 @@ final class NowPlaying {
     ) {
         guard queueSongs.indices.contains(queueIndex) else { return }
         playbackGeneration += 1
+        let intent = playbackGeneration
         if manageResolvingFlag {
             isResolvingNext = true
         }
@@ -360,23 +435,42 @@ final class NowPlaying {
         update(with: song)
         persistQueueState()
         Task {
-            var failed = false
+            var failed: Error?
+            var wasCancelled = false
             do {
-                try await PlaybackManager.shared.resolveAndPlay(videoId: song.videoId)
-                consecutiveFailures = 0
+                try await PlaybackManager.shared.resolveAndPlay(
+                    videoId: song.videoId,
+                    intent: intent
+                )
+            } catch is CancellationError {
+                wasCancelled = true
             } catch {
-                failed = true
-                Log.nowPlaying.error("\(logContext) failed for \(song.videoId): \(error)")
-                if self.videoId == song.videoId {
-                    isPlaying = false
-                }
+                failed = error
+            }
+            // A superseded resolver can finish after a different song starts.
+            // Its result must NEVER clear that song's resolving flag, reset
+            // failure counters or auto-advance the now-current queue.
+            guard PlaybackIntentGuard.owns(
+                expectedGeneration: intent,
+                expectedVideoId: song.videoId,
+                generation: self.playbackGeneration,
+                videoId: self.videoId
+            ) else {
+                Log.nowPlaying.debug(
+                    "PLAY_INTENT stale completion dropped context=\(logContext) videoId=\(song.videoId) gen=\(intent)"
+                )
+                return
             }
             if manageResolvingFlag {
                 isResolvingNext = false
             }
             afterResolve?()
-            if failed {
+            if let failed {
+                Log.nowPlaying.error("\(logContext) failed for \(song.videoId): \(failed)")
+                isPlaying = false
                 handlePlaybackFailure(failedVideoId: song.videoId)
+            } else if !wasCancelled {
+                consecutiveFailures = 0
             }
         }
     }
@@ -416,6 +510,7 @@ final class NowPlaying {
         self.videoId = videoId
         self.liveTitle = nil
         self.liveSongInfo = nil
+        self.radioPlaybackStatus = .connecting
         self.hasVideo = false
         self.isVideoMode = false
         self.isVideoReady = false
@@ -425,6 +520,55 @@ final class NowPlaying {
         if MusicPlaybackIdentity.isYouTube(videoId) {
             CanvasPrefetch.request(videoId: videoId, title: title, artist: self.artist, album: album)
         }
+    }
+
+    /// Clears the previous song's published payload before a new selection is
+    /// initialized. No-op when the queue already initialized this videoId.
+    /// Call it before setting `videoId` so the old title/artwork never leaks
+    /// into the new track.
+    func beginTransition(to videoId: String) {
+        guard self.videoId != videoId else { return }
+        let previous = self.videoId
+        artworkLoadTask?.cancel()
+        enrichTask?.cancel()
+        liveResolveTask?.cancel()
+        artworkLoadTask = nil
+        enrichTask = nil
+        liveResolveTask = nil
+        lastLoadedVideoId = nil
+        resolvedArtworkVideoId = nil
+        confirmedMetadata = nil
+        publishedArtwork = nil
+        thumbnailImage = nil
+        thumbnailUIImage = nil
+        thumbnailVersion += 1
+        dominantColors = [
+            Color(red: 0.15, green: 0.15, blue: 0.2),
+            Color(red: 0.05, green: 0.05, blue: 0.08),
+        ]
+        title = ""
+        artist = ""
+        artists = []
+        albumTitle = ""
+        artistVideoId = nil
+        liveTitle = nil
+        liveSongInfo = nil
+        radioPlaybackStatus = .connecting
+        currentSourceName = nil
+        currentResult = nil
+        currentTime = 0
+        duration = 0
+        isPlaying = false
+        stopTimer()
+        Log.nowPlaying.info(
+            "TRANSITION begin videoId=\(videoId) previous=\(previous ?? "nil")"
+        )
+    }
+
+    func bumpPlaybackIntent() {
+        playbackGeneration += 1
+        // Invalidating the old request also releases its UI-level skip guard.
+        isResolvingNext = false
     }
 
     /// Convenience pushing a `SongItem`'s metadata into the player state.
@@ -522,6 +666,15 @@ final class NowPlaying {
 
     func stopped(videoId: String?, isEof: Bool = true) {
         guard self.videoId == videoId else { return }
+        if playbackKind == .radio {
+            // Radio is an indefinite station, never a completed queue song.
+            // Avoid YouTube re-resolve/queue advance after a station error.
+            radioPlaybackStatus = .unavailable
+            isPlaying = false
+            stopTimer()
+            PlayerController.shared.updateNowPlayingProgress()
+            return
+        }
         if let skipTime = lastManualSkipTime, Date().timeIntervalSince(skipTime) < 2, isResolvingNext {
             return
         }
@@ -579,8 +732,13 @@ final class NowPlaying {
             isShuffleOn = false
             queueDidChange()
             let first = items[0]
+            bumpPlaybackIntent()
+            let intent = playbackGeneration
             update(with: first)
-            try? await PlaybackManager.shared.resolveAndPlay(videoId: first.videoId)
+            try? await PlaybackManager.shared.resolveAndPlay(
+                videoId: first.videoId,
+                intent: intent
+            )
             persistQueueState()
         }
     }
@@ -603,8 +761,13 @@ final class NowPlaying {
                 self.isShuffleOn = false
                 self.queueDidChange()
                 let first = songs[0]
+                bumpPlaybackIntent()
+                let intent = playbackGeneration
                 update(with: first)
-                try await PlaybackManager.shared.resolveAndPlay(videoId: first.videoId)
+                try await PlaybackManager.shared.resolveAndPlay(
+                    videoId: first.videoId,
+                    intent: intent
+                )
                 self.persistQueueState()
             } catch {
                 guard generation == playbackGeneration else { return }
@@ -627,6 +790,12 @@ final class NowPlaying {
     }
 
     private func handlePlaybackFailure(failedVideoId: String) {
+        guard videoId == failedVideoId else {
+            Log.nowPlaying.debug(
+                "PLAY_INTENT ignoring obsolete failure for \(failedVideoId)"
+            )
+            return
+        }
         consecutiveFailures += 1
         let canSkip = hasNext && consecutiveFailures < Self.maxConsecutiveFailures
         Log.nowPlaying.notice(
@@ -658,15 +827,22 @@ final class NowPlaying {
         lastFailureAt[videoId] = Date()
         isPlaying = false
         Log.nowPlaying.notice("Stream failed mid-play, re-resolving \(videoId)")
+        let intent = playbackGeneration
         Task {
             if MusicPlaybackIdentity.isYouTube(videoId) {
                 await PlayerConfigStore.shared.notifyStreamRejection()
             }
             await StreamCache.shared.remove(videoId: videoId)
             do {
-                try await PlaybackManager.shared.resolveAndPlay(videoId: videoId)
-                // Success – allow future retries for this video
-                _ = await MainActor.run { self.lastFailureAt.removeValue(forKey: videoId) }
+                try await PlaybackManager.shared.resolveAndPlay(
+                    videoId: videoId,
+                    intent: intent
+                )
+                // A resolved URL is not proof of audible playback. Keep the
+                // 30-second cooldown so an Apolo -> mpv -> resolve failure
+                // cannot immediately retry the same broken stream forever.
+            } catch is CancellationError {
+                return
             } catch {
                 Log.nowPlaying.error("Mid-play recovery failed: \(error)")
                 if self.videoId == videoId {
@@ -718,16 +894,25 @@ final class NowPlaying {
             }
             guard !Task.isCancelled, lastLoadedVideoId == videoId else { return }
             if isMusic {
-                // Do not enlarge a tiny source thumbnail or a 16px bitmap.
-                // Resolve the catalogue cover first, then use the same full-size
-                // CDN ladder as the rest of the player on a catalogue miss.
-                thumbnailUIImage = nil
-                thumbnailImage = nil
-                thumbnailVersion &+= 1
+                // The artwork selected in Album / Quick Picks is the UI's
+                // trusted source. A cross-catalogue best guess must not
+                // replace it with a video thumbnail or another release.
+                // Resize the SAME CDN image when supported, never switch
+                // to the YouTube video's maxres/hqdefault variants.
+                if let thumb, !thumb.isEmpty {
+                    loadThumbnailFromCDN(
+                        videoId: videoId,
+                        thumbnailUrl: thumb,
+                        preferSourceArtwork: true
+                    )
+                    return
+                }
+                // Only an entry with no selected artwork may use a
+                // verified canonical album image or YouTube fallback.
                 let resolved = await resolveCanonicalArtwork(videoId: videoId)
                 guard !Task.isCancelled, lastLoadedVideoId == videoId else { return }
                 if !resolved {
-                    loadThumbnailFromCDN(videoId: videoId, thumbnailUrl: thumb)
+                    loadThumbnailFromCDN(videoId: videoId, thumbnailUrl: nil)
                 }
             } else {
                 enrichArtwork(videoId: videoId, replaceArtwork: true)
@@ -919,11 +1104,20 @@ final class NowPlaying {
         return min(image.size.width, image.size.height) * image.scale
     }
 
-    private func loadThumbnailFromCDN(videoId: String, thumbnailUrl: String? = nil, fallbackImage: UIImage? = nil) {
+    private func loadThumbnailFromCDN(
+        videoId: String,
+        thumbnailUrl: String? = nil,
+        fallbackImage: UIImage? = nil,
+        preferSourceArtwork: Bool = false
+    ) {
         // Best source first: the track's own artwork upgraded to full
         // resolution, then ytimg step-downs, then the guaranteed hqdefault.
         var candidates: [String] = []
-        if MusicPlaybackIdentity.isExternal(videoId), let thumbnailUrl {
+        if preferSourceArtwork, let thumbnailUrl, !thumbnailUrl.isEmpty {
+            let upgraded = ArtworkURLs.highRes(thumbnailUrl) ?? thumbnailUrl
+            candidates.append(upgraded)
+            if thumbnailUrl != upgraded { candidates.append(thumbnailUrl) }
+        } else if MusicPlaybackIdentity.isExternal(videoId), let thumbnailUrl {
             candidates.append(thumbnailUrl)
         } else if let upgraded = ArtworkURLs.highRes(thumbnailUrl) {
             if let maxRes = ArtworkURLs.maxResVariant(upgraded) {
@@ -934,7 +1128,7 @@ final class NowPlaying {
             }
             candidates.append(upgraded)
         }
-        if !MusicPlaybackIdentity.isExternal(videoId) {
+        if !preferSourceArtwork, !MusicPlaybackIdentity.isExternal(videoId) {
             let fallback = Self.artworkURL(for: videoId)
             // Missing track metadata still deserves the complete resolution
             // ladder, not only the 480px video thumbnail.
@@ -1020,6 +1214,7 @@ final class NowPlaying {
 
     private func startTimer() {
         stopTimer()
+        Log.nowPlaying.debug("TIMER start videoId=\(self.videoId ?? "nil")")
         // Add to `.common` so progress keeps updating while the user scrolls
         // or drags the slider (the default mode pauses the timer).
         let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
@@ -1038,7 +1233,8 @@ final class NowPlaying {
         // `updateNowPlayingProgress`; polling it every tick doubled the
         // synchronous mpv reads on the main actor.
         progressTick += 1
-        if progressTick % 20 == 0, isPlaying, let videoId {
+        if progressTick % 20 == 0, isPlaying,
+           playbackKind != .radio, let videoId {
             let payload: [String: Any] = [
                 "videoId": videoId,
                 "position": currentTime,

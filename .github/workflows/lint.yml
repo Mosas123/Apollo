@@ -21,3 +21,24 @@ jobs:
 
       - name: Run SwiftLint
         run: swiftlint lint --reporter github-actions-logging
+
+      - name: Print actionable SwiftLint error locations
+        if: failure()
+        run: |
+          swiftlint lint --reporter json --quiet > "$RUNNER_TEMP/swiftlint-report.json" || true
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = Path(os.environ["RUNNER_TEMP"]) / "swiftlint-report.json"
+          violations = json.loads(report.read_text())
+          errors = [v for v in violations if str(v.get("severity", "")).lower() == "error"]
+          print(f"SwiftLint: {len(errors)} serious errors (of {len(violations)} violations)")
+          for violation in errors:
+              file = violation.get("file", "?")
+              line = violation.get("line", "?")
+              rule = violation.get("rule_id", "?")
+              reason = violation.get("reason", "")
+              print(f"{file}:{line}: {rule}: {reason}")
+          PY
