@@ -15,7 +15,10 @@ private enum PodcastEpisodeArtwork {
         if let episode, !episode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return episode
         }
-        return show
+        if let show, !show.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return show
+        }
+        return nil
     }
 
     static func song(_ episode: EpisodeItem, show: String?) -> SongItem {
