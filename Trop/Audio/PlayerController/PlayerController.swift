@@ -1636,7 +1636,27 @@ extension PlayerController {
             object: nil, queue: .main
         ) { [weak self] _ in
             Log.player.info("AUDIO_RECOVERY_APP didBecomeActive uptimeMs=\(Int(ProcessInfo.processInfo.systemUptime * 1000))")
-            Task { @MainActor [weak self] in self?.traceRecovery("appActive") }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.traceRecovery("appActive")
+                // Some call/Siri interruptions never deliver .ended while the
+                // app is backgrounded. Recover once the call is really gone,
+                // but never force playback over another audio session.
+                guard self.apoloAudioInterruptionActive,
+                      self.wasPlayingBeforeInterruption else { return }
+                try? await Task.sleep(for: .seconds(1.2))
+                guard self.apoloAudioInterruptionActive,
+                      self.wasPlayingBeforeInterruption,
+                      !AVAudioSession.sharedInstance().isOtherAudioPlaying else { return }
+                self.apoloAudioInterruptionActive = false
+                self.apoloLastInterruptionEndedAt = Date()
+                self.wasPlayingBeforeInterruption = false
+                self.traceRecovery("legacyEndedFallback")
+                self.assertAudioSession(reason: "interruptionEndedFallback")
+                if self.playState.value != .playing {
+                    self.setPaused(false)
+                }
+            }
         }
     }
 }
