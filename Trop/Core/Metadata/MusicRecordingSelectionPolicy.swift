@@ -52,7 +52,7 @@ enum MusicRecordingSelectionPolicy {
         sourceType: String?,
         rowIsVideo: Bool = false
     ) -> Bool {
-        !selectedVideo && (
+        !selectedVideo && !isStudioAudio(sourceType) && (
             rowIsVideo || isVideoRecording(rowType)
                 || isVideoRecording(sourceType)
         )
