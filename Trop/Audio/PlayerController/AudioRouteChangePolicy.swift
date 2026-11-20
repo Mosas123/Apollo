@@ -1,12 +1,12 @@
 /// Pure decision policy for audio-route handoffs. Callers must verify the
 /// output route only after old-device removal has had time to settle.
 enum AudioRouteChangePolicy {
-    enum Event {
+    enum Event: Sendable {
         case newDeviceAvailable
         case oldDeviceUnavailable
     }
 
-    enum Action: Equatable {
+    enum Action: Equatable, Sendable {
         case ignore
         case pause
         case resume
