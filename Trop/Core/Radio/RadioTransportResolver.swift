@@ -52,8 +52,14 @@ actor RadioTransportResolver {
         if codec.contains("OPUS") || codec.contains("OGG") || codec.contains("VORBIS") || codec.contains("FLAC") {
             return Entry(transport: .ffmpeg, hint: station.apoloMIMEHint, at: Date())
         }
+        // Known Radio Browser formats should start immediately. Avoid
+        // delaying the audible start with a duplicate network connection.
+        if let hint = station.apoloMIMEHint, !hint.isEmpty {
+            let legacy = hint == "application/x-icy"
+            return Entry(transport: legacy ? .icy : .direct, hint: hint, at: Date())
+        }
         if let probed = await probe(url: url) {
-            return Entry(transport: probed.transport, hint: probed.hint ?? station.apoloMIMEHint, at: Date())
+            return Entry(transport: probed.transport, hint: probed.hint, at: Date())
         }
         return Entry(transport: .direct, hint: station.apoloMIMEHint, at: Date())
     }
@@ -63,7 +69,7 @@ actor RadioTransportResolver {
     /// never consumed.
     private func probe(url: URL) async -> (transport: RadioTransport, hint: String?)? {
         var request = URLRequest(url: url)
-        request.timeoutInterval = 6
+        request.timeoutInterval = 3
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("1", forHTTPHeaderField: "Icy-MetaData")
         request.setValue("bytes=0-1", forHTTPHeaderField: "Range")
@@ -73,14 +79,44 @@ actor RadioTransportResolver {
               (200...399).contains(http.statusCode) else {
             return nil
         }
-        let contentType = (http.value(forHTTPHeaderField: "Content-Type") ?? "").lowercased()
-        if contentType.contains("mpegurl") || contentType.contains("m3u") {
+        return Self.classifyHeaders(
+            contentType: http.value(forHTTPHeaderField: "Content-Type") ?? "",
+            icyMetaInt: http.value(forHTTPHeaderField: "icy-metaint")
+        )
+    }
+
+    /// "icy-metaint" is an ordinary HTTP metadata header, NOT evidence of a
+    /// legacy non-HTTP `ICY 200 OK` status line. Never emit application/x-icy
+    /// automatically; that MIME explicitly forces Apolo's FFmpeg live route.
+    static func classifyHeaders(
+        contentType: String,
+        icyMetaInt: String?
+    ) -> (transport: RadioTransport, hint: String?) {
+        let mime = contentType
+            .split(separator: ";", maxSplits: 1)
+            .first.map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+        if mime.contains("mpegurl") || mime.contains("m3u8") {
             return (.hls, "application/vnd.apple.mpegurl")
         }
-        let metaint = http.value(forHTTPHeaderField: "icy-metaint") ?? ""
-        if !metaint.isEmpty, metaint != "0" {
-            return (.icy, "application/x-icy")
+        if mime.contains("ogg") || mime.contains("opus") {
+            return (.ffmpeg, "audio/ogg")
         }
-        return (.direct, nil)
+        if mime.contains("flac") {
+            return (.ffmpeg, "audio/flac")
+        }
+        let nativeHint: String?
+        if mime.contains("mpeg") || mime.contains("mp3") {
+            nativeHint = "audio/mpeg"
+        } else if mime.contains("aac") {
+            nativeHint = "audio/aac"
+        } else {
+            nativeHint = nil
+        }
+        if let icyMetaInt, Int(icyMetaInt) ?? 0 > 0 {
+            return (.icy, nativeHint)
+        }
+        return (.direct, nativeHint)
     }
 }

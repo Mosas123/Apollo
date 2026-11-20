@@ -1317,11 +1317,21 @@ final class NowPlaying {
         lastRadioMetadataFetch = Date()
         radioMetadataTask?.cancel()
         let stationName = displayTitle
+        let identity = RadioMetadataIdentity(
+            generation: playbackGeneration,
+            stationID: videoId,
+            streamURL: raw
+        )
         radioMetadataTask = Task { [weak self] in
             let data = await provider.metadata(for: url, stationName: stationName)
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                guard let self else { return }
+                guard let self, self.isPlaying, self.playbackKind == .radio,
+                      identity.matches(
+                          generation: self.playbackGeneration,
+                          stationID: self.videoId,
+                          streamURL: self.currentStreamURL
+                      ) else { return }
                 if let data {
                     self.radioMetadataFailures = 0
                     self.radioMetadataCooldownUntil = nil
@@ -1355,25 +1365,51 @@ final class NowPlaying {
             liveSongInfo?.album = data.album
         }
 
-        // Never use the provider thumbnail: it is low resolution. The app looks
-        // up a proper cover for this exact song and keeps it only while the song
-        // is current (no cover cache to accumulate garbage).
+        // Prefer catalogue high-resolution art, but retain the broadcaster's
+        // real cover as a fallback. Cancel and verify origin across awaits.
         let key = "\(artist.lowercased())|\(title.lowercased())"
         if let liveSongInfo, liveSongInfo.artwork != nil { return }
         if lastRadioArtworkKey == key { return }
         lastRadioArtworkKey = key
         radioArtworkTask?.cancel()
+        let identity = RadioMetadataIdentity(
+            generation: playbackGeneration,
+            stationID: videoId,
+            streamURL: currentStreamURL
+        )
         radioArtworkTask = Task { [weak self] in
-            guard let resolved = await MetadataResolver.enrich(title: title, artist: artist) else { return }
-            let artworkString = ArtworkURLs.highRes(resolved.artworkURL?.absoluteString)
-            guard let artworkString, let artworkURL = URL(string: artworkString),
-                  let image = try? await ArtworkLoader.image(for: artworkURL) else { return }
+            let resolved = artist.isEmpty
+                ? nil : await MetadataResolver.enrich(title: title, artist: artist)
+            guard !Task.isCancelled else { return }
+            let preferred = ArtworkURLs.highRes(resolved?.artworkURL?.absoluteString)
+                .flatMap(URL.init(string:))
+            let providerCover = data.coverURL?.scheme?.lowercased() == "https"
+                ? data.coverURL : nil
+            var image: UIImage?
+            if let preferred {
+                image = try? await ArtworkLoader.image(for: preferred)
+            }
+            if image == nil, let providerCover {
+                image = try? await ArtworkLoader.image(for: providerCover)
+            }
+            guard !Task.isCancelled else { return }
             await MainActor.run {
-                guard let self, self.playbackKind == .radio, self.liveTitle == display else { return }
-                self.publishArtwork(image)
-                self.liveSongInfo?.artwork = image.pngData()
-                if let album = resolved.album, self.liveSongInfo?.album == nil {
-                    self.liveSongInfo?.album = album
+                guard let self, self.isPlaying, self.playbackKind == .radio,
+                      self.liveTitle == display,
+                      identity.matches(
+                          generation: self.playbackGeneration,
+                          stationID: self.videoId,
+                          streamURL: self.currentStreamURL
+                      ) else { return }
+                if let image {
+                    self.publishArtwork(image)
+                    self.liveSongInfo?.artwork = image.pngData()
+                    if let album = resolved?.album, self.liveSongInfo?.album == nil {
+                        self.liveSongInfo?.album = album
+                    }
+                } else if self.lastRadioArtworkKey == key {
+                    // Do not permanently suppress a retry when art was missing.
+                    self.lastRadioArtworkKey = nil
                 }
             }
         }

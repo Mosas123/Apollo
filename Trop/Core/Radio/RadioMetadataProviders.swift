@@ -1,5 +1,19 @@
 import Foundation
 
+/// Identity captured before a network request. Late metadata/artwork from
+/// an old station must never overwrite the user's latest playback selection.
+struct RadioMetadataIdentity: Equatable, Sendable {
+    let generation: Int
+    let stationID: String?
+    let streamURL: String?
+
+    func matches(generation: Int, stationID: String?, streamURL: String?) -> Bool {
+        self.generation == generation
+            && self.stationID == stationID
+            && self.streamURL == streamURL
+    }
+}
+
 struct RadioNowPlaying: Equatable, Sendable {
     let artist: String
     let title: String
