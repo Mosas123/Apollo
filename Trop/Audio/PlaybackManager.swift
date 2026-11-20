@@ -1079,7 +1079,8 @@ actor PlaybackManager {
         let isPlaying = await MainActor.run { NowPlaying.shared.isPlaying }
         if isPlaying, let previous, previous != videoId {
             await PlayerController.shared.fadeVolume(to: 0, duration: 0.12)
-            await MainActor.run { PlayerController.shared.setPaused(true) }
+            // Internal cross-track fade must not impersonate an explicit user Pause.
+            await MainActor.run { PlayerController.shared.setPaused(true, systemRecovery: true) }
             await MainActor.run { PlayerController.shared.setVolumeOverride(nil) }
         }
         // Downloaded files win over every network source, including add-ons:
