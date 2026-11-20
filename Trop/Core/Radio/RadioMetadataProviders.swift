@@ -274,43 +274,96 @@ struct BBCRadioProvider: RadioMetadataProvider {
 /// Musique 4, Culture 5, Mouv 6, FIP 7).
 struct RadioFranceProvider: RadioMetadataProvider {
     static func matches(streamURL: URL, stationName: String) -> Bool {
-        let haystack = (streamURL.absoluteString + " " + stationName).lowercased()
-        return haystack.contains("radiofrance.fr")
+        guard stationID(streamURL: streamURL, stationName: stationName) != nil else {
+            return false
+        }
+        let host = (streamURL.host ?? "").lowercased()
+        let name = stationName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        // FIP's legacy stream URLs often use direct.fipradio.fr, not
+        // radiofrance.fr. Exact station names are useful for CDN hosts too.
+        return host == "radiofrance.fr" || host.hasSuffix(".radiofrance.fr")
+            || host == "fipradio.fr" || host.hasSuffix(".fipradio.fr")
+            || name == "fip" || name.hasPrefix("fip (")
+            || name.hasPrefix("france inter")
+            || name.hasPrefix("france info")
+            || name.hasPrefix("france musique")
+            || name.hasPrefix("france culture")
+            || name.hasPrefix("mouv")
     }
 
     func metadata(for streamURL: URL, stationName: String) async -> RadioNowPlaying? {
-        guard let stationID = Self.stationID(streamURL: streamURL, stationName: stationName) else { return nil }
-        var request = URLRequest(url: URL(string: "https://api.radiofrance.fr/livemeta/pull/\(stationID)")!)
+        guard let stationID = Self.stationID(streamURL: streamURL, stationName: stationName),
+              let endpoint = URL(string: "https://api.radiofrance.fr/livemeta/pull/\(stationID)")
+        else { return nil }
+        var request = URLRequest(url: endpoint)
         request.timeoutInterval = 8
         request.cachePolicy = .reloadIgnoringLocalCacheData
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               let http = response as? HTTPURLResponse,
               http.statusCode == 200,
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let steps = root["steps"] as? [String: Any] else {
-            return nil
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return Self.nowPlaying(from: root)
+    }
+
+    /// Radio France's payload marks the currently selected step through
+    /// levels[0].items[levels[0].position]. Picking arbitrary steps by date
+    /// alone can select an unrelated item or show nothing.
+    static func nowPlaying(
+        from root: [String: Any],
+        at date: Date = Date()
+    ) -> RadioNowPlaying? {
+        guard let steps = root["steps"] as? [String: Any] else { return nil }
+        let current: [String: Any]?
+        if let levels = root["levels"] as? [[String: Any]], let level = levels.first {
+            guard let items = level["items"] as? [Any],
+                  let position = (level["position"] as? NSNumber)?.intValue,
+                  items.indices.contains(position)
+            else { return nil }
+            let uid: String
+            if let string = items[position] as? String {
+                uid = string
+            } else if let number = items[position] as? NSNumber {
+                uid = number.stringValue
+            } else {
+                return nil
+            }
+            current = steps[uid] as? [String: Any]
+        } else {
+            // Older metadata responses without a levels cursor: use only
+            // genuinely time-bounded steps, never arbitrary undated items.
+            let timestamp = date.timeIntervalSince1970
+            let dated = steps.values.compactMap { value -> [String: Any]? in
+                guard let step = value as? [String: Any],
+                      let rawStart = (step["start"] as? NSNumber)?.doubleValue,
+                      let rawEnd = (step["end"] as? NSNumber)?.doubleValue
+                else { return nil }
+                let start = rawStart > 100_000_000_000 ? rawStart / 1_000 : rawStart
+                let end = rawEnd > 100_000_000_000 ? rawEnd / 1_000 : rawEnd
+                return start <= timestamp && timestamp <= end ? step : nil
+            }
+            current = dated.max {
+                (($0["start"] as? NSNumber)?.doubleValue ?? 0)
+                    < (($1["start"] as? NSNumber)?.doubleValue ?? 0)
+            }
         }
-        let now = Date().timeIntervalSince1970
-        var candidates: [[String: Any]] = []
-        for value in steps.values {
-            guard let step = value as? [String: Any] else { continue }
-            let start = (step["start"] as? NSNumber)?.doubleValue ?? 0
-            let end = (step["end"] as? NSNumber)?.doubleValue ?? .greatestFiniteMagnitude
-            guard start <= now, now <= end else { continue }
-            let title = (step["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let authors = ((step["authors"] as? [String]) ?? []).joined(separator: ", ")
-            guard title.count >= 2, !authors.isEmpty else { continue }
-            candidates.append(step)
+        guard let step = current else { return nil }
+        let title = (step["title"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let authors = step["authors"]
+        let artist: String
+        if let names = authors as? [String] {
+            artist = names.joined(separator: ", ")
+        } else {
+            artist = authors as? String ?? ""
         }
-        guard let best = candidates.max(by: {
-            ((($0["start"] as? NSNumber)?.doubleValue) ?? 0) < ((($1["start"] as? NSNumber)?.doubleValue) ?? 0)
-        }) else { return nil }
-        let artist = ((best["authors"] as? [String]) ?? []).joined(separator: ", ")
-        let title = (best["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let album = (best["titreAlbum"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cover = (best["visual"] as? String).flatMap(URL.init(string:))
+        let trimmedArtist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard title.count >= 2, !trimmedArtist.isEmpty else { return nil }
+        let album = (step["titreAlbum"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let cover = (step["visual"] as? String).flatMap(URL.init(string:))
         return RadioNowPlaying(
-            artist: artist,
+            artist: trimmedArtist,
             title: title,
             album: (album?.isEmpty == false) ? album : nil,
             coverURL: cover
@@ -319,9 +372,16 @@ struct RadioFranceProvider: RadioMetadataProvider {
 
     static func stationID(streamURL: URL, stationName: String) -> Int? {
         let path = streamURL.path.lowercased()
-        let name = stationName.lowercased()
+        let name = stationName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let filename = streamURL.lastPathComponent.lowercased()
+        // Do not show the main FIP channel's title on a FIP Jazz/Rock/
+        // Groove/etc. stream. The specialty stations have different IDs.
+        if name == "fip" || name.hasPrefix("fip (")
+            || filename == "fip" || filename.hasPrefix("fip-")
+            || filename.hasPrefix("fip_") || filename.hasPrefix("fip.") {
+            return 7
+        }
         let haystack = path + " " + name
-        if haystack.contains("fip") { return 7 }
         if haystack.contains("franceinter") || haystack.contains("france inter") { return 1 }
         if haystack.contains("franceinfo") || haystack.contains("france info") { return 2 }
         if haystack.contains("francemusique") || haystack.contains("france musique") { return 4 }

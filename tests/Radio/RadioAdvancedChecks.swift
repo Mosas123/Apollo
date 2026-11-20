@@ -96,6 +96,50 @@ struct RadioAdvancedChecks {
             stationName: "FIP"
         ) == 7, "Radio France station identity resolved")
 
+
+        // Real FIP URLs include the legacy fipradio.fr hostname; the provider
+        // must identify them even though they are outside radiofrance.fr.
+        let fipURL = URL(string: "https://direct.fipradio.fr/live/fip-hifi.aac")!
+        expect(RadioFranceProvider.matches(streamURL: fipURL, stationName: "FIP"),
+               "FIP direct host is eligible for Radio France now-playing")
+        expect(RadioFranceProvider.stationID(streamURL: fipURL, stationName: "FIP") == 7,
+               "Main FIP resolves to station 7")
+        let jazzURL = URL(string: "https://icecast.radiofrance.fr/fipjazz-hifi.aac")!
+        expect(RadioFranceProvider.stationID(streamURL: jazzURL, stationName: "FIP Jazz") == nil,
+               "FIP Jazz must never show the main FIP song")
+        expect(!RadioFranceProvider.matches(streamURL: jazzURL, stationName: "FIP Jazz"),
+               "Unknown specialty station does not use main FIP metadata")
+        // levels[0] is authoritative; dates in steps alone are not.
+        let fipPayload: [String: Any] = [
+            "levels": [["position": 1, "items": ["older", "current"]]],
+            "steps": [
+                "older": ["title": "Old Tune", "authors": ["Old Artist"]],
+                "current": [
+                    "title": "Current Tune",
+                    "authors": ["Current Artist"],
+                    "titreAlbum": "Current Album",
+                    "visual": "https://example.org/cover.jpg"
+                ]
+            ]
+        ]
+        let current = RadioFranceProvider.nowPlaying(from: fipPayload)
+        expect(current?.title == "Current Tune" && current?.artist == "Current Artist",
+               "FIP current level position selects actual playing title")
+        expect(current?.album == "Current Album" && current?.coverURL != nil,
+               "FIP uses current album and artwork")
+        let stringAuthor: [String: Any] = [
+            "levels": [["position": 0, "items": ["track"]]],
+            "steps": ["track": ["title": "Track", "authors": "Solo Artist"]]
+        ]
+        expect(RadioFranceProvider.nowPlaying(from: stringAuthor)?.artist == "Solo Artist",
+               "FIP also accepts single-string author fields")
+        let wrongPosition: [String: Any] = [
+            "levels": [["position": 4, "items": ["track"]]],
+            "steps": ["track": ["title": "Track", "authors": ["Artist"]]]
+        ]
+        expect(RadioFranceProvider.nowPlaying(from: wrongPosition) == nil,
+               "Out-of-range FIP level must not publish stale metadata")
+
         print("PASS: \(passed) radio transport / metadata / station race checks")
     }
 }
