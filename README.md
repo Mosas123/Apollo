@@ -15,10 +15,35 @@ A free and open source YouTube Music client for iOS.
 - Stream songs and videos from YouTube Music
 - Synced lyrics (Musixmatch, Netease, Kugou, LRCLIB, Genius)
 - Library sync (playlists, albums, artists, podcasts)
-- Downloads
+- Live radio (opt-in beta): native HLS/HTTP and ICY, reconnect handling and broadcaster metadata
+- Apolo audio engine (opt-in beta): native and FFmpeg routes, EQ, limiter, ReplayGain and Spatial Audio
+- Local library import, downloads and podcast playback
 - Equalizer
 - Custom app icons and themes
 - Queue management and listening history
+
+## Live radio and audio engine
+
+Live radio is behind an explicit beta toggle; default installs keep the existing
+player and MPV fallback. The radio path supports native HLS/HTTP playback, ICY
+metadata, station switching, bounded reconnects and a stall watchdog.
+
+Radio titles and artwork come from ICY or broadcaster APIs.
+
+The Apolo engine is also opt-in. It keeps Apple-native playback for compatible
+formats, uses FFmpeg for exotic codecs, and preserves EQ, limiter, ReplayGain,
+Spatial Audio and Atmos where the route supports them. MPV remains available as
+fallback.
+
+## Recent improvements
+
+- Live radio: HLS/HTTP/ICY routing, reconnect budget, stale-callback fences,
+  duplicate-request suppression, 35/40-second stall watchdog and recovery logs.
+- Audio: Apolo audio-only beta, local sandbox routing, studio-audio matching,
+  interruption recovery and safer playback-start behavior.
+- Library: local import/reconciliation, download visibility and podcast support.
+- Playback: SponsorBlock intent guards, queue/history fixes and artwork lookup.
+- CI: integration checks, SwiftLint cleanup and unsigned iPhone IPA builds.
 
 ## Installation
 
