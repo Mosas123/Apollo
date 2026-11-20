@@ -93,7 +93,6 @@ struct PlayerSettingsView: View {
             } header: {
                 Text("Audio")
             } footer: {
-                Text(LocalizedStringKey(settings.hasMusicAddons
                 Text(LocalizedStringKey(
                     settings.hasMusicAddons
                         ? "Add-on Quality picks which copy to look for in your add-ons: Auto takes the best FLAC available and falls back to JioSaavn/AAC 320 then " +
