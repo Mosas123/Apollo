@@ -1376,8 +1376,12 @@ actor PlaybackManager {
         }
 
         guard let candidateID, await isCurrentIntent(intentGeneration) else {
+            let preference = String(describing: song.recordingPreference)
+            let rowType = song.musicVideoType ?? "unknown"
+            let streamType = result.musicVideoType ?? "unknown"
+            let duration = result.duration ?? 0
             Log.player.info(
-                "MUSIC_MATCH no verified ATV source for selected=\(videoId) preference=\(String(describing: song.recordingPreference)) rowType=\(song.musicVideoType ?? "unknown") streamType=\(result.musicVideoType ?? "unknown") duration=\(result.duration ?? 0)"
+                "MUSIC_MATCH no verified ATV source for selected=\(videoId) preference=\(preference) rowType=\(rowType) streamType=\(streamType) duration=\(duration)"
             )
             return result
         }
