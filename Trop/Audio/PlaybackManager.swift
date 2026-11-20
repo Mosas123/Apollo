@@ -305,6 +305,9 @@ actor PlaybackManager {
     /// on YouTube and only use the others when YouTube has no stream.
     private var prefers320Lossy: Bool {
         guard lossySourcesAllowed else { return false }
+        // The music High tier itself selects 320, regardless of the
+        // separate YouTube-only audioQuality option.
+        if SettingsStore.shared.musicQualityMode == .high { return true }
         let quality = SettingsStore.shared.audioQuality
         return quality == .auto || quality == .high
     }
@@ -370,11 +373,16 @@ actor PlaybackManager {
         preference: AddonQualityPreference
     ) -> Bool {
         let quality = result.audioQuality.lowercased()
+        let mode = SettingsStore.shared.musicQualityMode
+        guard MusicRecordingSelectionPolicy.acceptsPrefetchedQuality(
+            mode: mode.rawValue, quality: quality
+        ) else { return false }
         if quality.contains("addon-aac") || quality.contains("jiosaavn") {
-            let mode = SettingsStore.shared.musicQualityMode
             let allowedMode = mode != .cd && mode != .lossless
             let qualitySetting = SettingsStore.shared.audioQuality
-            return allowedMode && (qualitySetting == .auto || qualitySetting == .high)
+            return allowedMode && (
+                mode == .high || qualitySetting == .auto || qualitySetting == .high
+            )
         }
         if quality.contains("atmos") { return preference.preferAtmos }
         guard isLosslessResult(result) else { return false }
@@ -401,6 +409,19 @@ actor PlaybackManager {
         }
         if let cached, Self.resultMatches(cached, preference: preference) {
             return cached
+        }
+        if SettingsStore.shared.musicQualityMode == .high {
+            let fallback = await resolveLossyBestWithinBudget(
+                videoId: videoId,
+                seconds: budget ?? (interactive ? 6 : 12)
+            )
+            if let fallback {
+                if upgradeResultCache.count >= 100 {
+                    upgradeResultCache.removeAll(keepingCapacity: true)
+                }
+                upgradeResultCache[videoId] = (fallback, Date())
+            }
+            return fallback
         }
         if let lossless = await losslessWithinBudget(
             videoId: videoId,
