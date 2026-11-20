@@ -178,8 +178,8 @@ struct StudioAudioMatchChecks {
         precondition(!sourceVerified(album: nil, candidateAlbum: nil,
                                      candidateDuration: nil),
                      "Without album and duration there is no independent verification")
-        precondition(!sourceVerified(candidateDuration: nil,
-                                     candidateAlbum: nil),
+        precondition(!sourceVerified(candidateAlbum: nil,
+                                     candidateDuration: nil),
                      "An empty candidate release cannot replace a missing duration")
         precondition(sourceVerified(candidateDuration: nil),
                      "An exact shared album can verify a missing duration")
@@ -207,8 +207,7 @@ struct StudioAudioMatchChecks {
         ]
         var negativeCases = 0
         for version in wrongVersions {
-            let variant = version.hasPrefix("-") ? "Moscow Mule " + version
-                                                  : "Moscow Mule " + version
+            let variant = "Moscow Mule " + version
             for candidateArtist in ["Bad Bunny", "Drake", "Bad Bunny Tribute"] {
                 precondition(!sourceVerified(candidateTitle: variant,
                                              candidateArtist: candidateArtist),
