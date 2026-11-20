@@ -27,8 +27,8 @@ struct AudioRouteChangeChecks {
     static func main() {
         check(.newDeviceAvailable, expected: .resume,
               "Connecting AirPods resumes the current radio")
-        check(.newDeviceAvailable, builtIn: true, expected: .resume,
-              "The new-device event is not an unplugged-headphone pause")
+        check(.newDeviceAvailable, builtIn: true, expected: .ignore,
+              "Unsettled new-device route must not play through the speaker")
         check(.oldDeviceUnavailable, builtIn: true, expected: .pause,
               "Unplugging headphones to the built-in speaker pauses for privacy")
         check(.oldDeviceUnavailable, builtIn: false, expected: .resume,
