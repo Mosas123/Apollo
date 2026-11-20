@@ -311,6 +311,22 @@ struct StudioAudioMatchChecks {
         precondition(!MusicRecordingSelectionPolicy.forbidsVideoSoundtrack(
             selectedVideo: false, rowType: nil, sourceType: nil
         ), "Unknown song types must not be rejected without evidence")
+        precondition(MusicRecordingSelectionPolicy.acceptsPrefetchedQuality(
+            mode: "high", quality: "addon-aac-320"
+        ), "High accepts validated addon AAC 320")
+        precondition(MusicRecordingSelectionPolicy.acceptsPrefetchedQuality(
+            mode: "high", quality: "jiosaavn-320"
+        ), "High accepts validated JioSaavn 320")
+        precondition(!MusicRecordingSelectionPolicy.acceptsPrefetchedQuality(
+            mode: "high", quality: "addon-hi-res"
+        ), "High must not silently re-use a cached FLAC from Best FLAC mode")
+        precondition(!MusicRecordingSelectionPolicy.acceptsPrefetchedQuality(
+            mode: "high", quality: "addon-atmos"
+        ), "High must not unexpectedly choose an Atmos stream")
+        precondition(MusicRecordingSelectionPolicy.acceptsPrefetchedQuality(
+            mode: "lossless", quality: "addon-cd"
+        ), "Best FLAC remains eligible for verified lossless")
+        print("PASS: 5 quality-tier cache policies")
         print("PASS: 12 source-first and forbidden-video soundtrack policies")
         print("PASS: 31 studio album-audio vs music-video matching assertions")
     }
