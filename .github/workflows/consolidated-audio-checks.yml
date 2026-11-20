@@ -10,8 +10,11 @@ on:
       - "Trop/Audio/PlayerController/PlayerController.swift"
       - "Trop/Audio/PlayerController/ApoloFiniteAudioWatchdog.swift"
       - "Trop/Audio/PlayerController/ApoloLiveRadioWatchdog.swift"
+      - "Trop/Audio/PlayerController/LiveRadioDuplicateRequestPolicy.swift"
+      - "Trop/Features/Radio/RadioView.swift"
       - "tests/Playback/ConsolidatedAudioChecks.swift"
       - "tests/Playback/ApoloInterruptionWatchdogChecks.swift"
+      - "tests/Playback/LiveRadioDuplicateRequestChecks.swift"
       - ".github/workflows/consolidated-audio-checks.yml"
 
 jobs:
@@ -38,3 +41,12 @@ jobs:
             tests/Playback/ApoloInterruptionWatchdogChecks.swift \
             -o "$RUNNER_TEMP/apolo-interruption-watchdog-checks"
           "$RUNNER_TEMP/apolo-interruption-watchdog-checks"
+
+      - name: Check live radio duplicate station request gate
+        run: |
+          set -euo pipefail
+          swiftc \
+            Trop/Audio/PlayerController/LiveRadioDuplicateRequestPolicy.swift \
+            tests/Playback/LiveRadioDuplicateRequestChecks.swift \
+            -o "$RUNNER_TEMP/live-radio-duplicate-request-checks"
+          "$RUNNER_TEMP/live-radio-duplicate-request-checks"

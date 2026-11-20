@@ -31,6 +31,13 @@ public struct PlaylistPage: @unchecked Sendable {
 }
 
 public actor PlaylistDetailService {
+    private struct ParsedPlaylistRow {
+        let index: Int
+        let videoId: String
+        let setVideoId: String?
+        let raw: [String: Any]
+    }
+
     private let client: InnerTubeClient
     private let store: any LibrarySyncStore
 
@@ -57,7 +64,7 @@ public actor PlaylistDetailService {
         // and mappings in bulk. Previously this did 2 DB round-trips per row.
         try await store.deleteMapsForPlaylist(playlistId: playlistId)
 
-        var parsed: [(index: Int, videoId: String, setVideoId: String?, raw: [String: Any])] = []
+        var parsed: [ParsedPlaylistRow] = []
         parsed.reserveCapacity(snapshot.count)
         var skipped = 0
         for (index, rawItem) in snapshot.enumerated() {
@@ -68,7 +75,12 @@ public actor PlaylistDetailService {
             }
             let nav = renderer["navigationEndpoint"] as? [String: Any]
             let watch = nav?["watchEndpoint"] as? [String: Any]
-            parsed.append((index, videoId, watch?["playlistSetVideoId"] as? String, rawItem))
+            parsed.append(ParsedPlaylistRow(
+                index: index,
+                videoId: videoId,
+                setVideoId: watch?["playlistSetVideoId"] as? String,
+                raw: rawItem
+            ))
         }
 
         let existingSongs = try await store.fetchSongs(ids: parsed.map(\.videoId))

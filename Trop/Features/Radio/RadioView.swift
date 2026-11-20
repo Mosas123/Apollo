@@ -155,6 +155,9 @@ struct RadioView: View {
         NowPlaying.shared.bumpPlaybackIntent()
         let generation = NowPlaying.shared.playbackGeneration
         Task { @MainActor in
+            // This marker distinguishes a second user/UI selection from an
+            // engine-level retry. Never log raw stream URLs or headers.
+            Log.player.info("RADIO_UI selection stationId=\(station.stationuuid)")
             // Apolo needs to know whether the station is HLS, ICY or an
             // exotic container; probing is only worth it on the Apolo beta.
             let hint: String?

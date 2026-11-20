@@ -1317,19 +1317,23 @@ actor PlaybackManager {
                 let valid = candidates.filter { candidate in
                     candidate.videoId != videoId
                         && MusicRecordingSelectionPolicy.verifiedAlbumAudio(
-                            wantedTitle: song.title,
-                            wantedArtist: artist,
-                            wantedAlbum: song.album,
-                            wantedDuration: song.duration,
-                            candidateTitle: candidate.title,
-                            candidateArtists: candidate.artists.map(\.name),
-                            candidateAlbum: candidate.album,
-                            candidateDuration: candidate.duration,
-                            candidateType: candidate.musicVideoType,
-                            originalWasVideo: song.isMusicVideo
-                                || MusicRecordingSelectionPolicy.isVideoRecording(
-                                    result.musicVideoType
-                                )
+                            wanted: .init(
+                                title: song.title,
+                                artist: artist,
+                                album: song.album,
+                                duration: song.duration,
+                                originalWasVideo: song.isMusicVideo
+                                    || MusicRecordingSelectionPolicy.isVideoRecording(
+                                        result.musicVideoType
+                                    )
+                            ),
+                            candidate: .init(
+                                title: candidate.title,
+                                artists: candidate.artists.map(\.name),
+                                album: candidate.album,
+                                duration: candidate.duration,
+                                type: candidate.musicVideoType
+                            )
                         )
                 }
                 // De-duplicate top-card and shelf copies of the same ATV.
@@ -1376,8 +1380,12 @@ actor PlaybackManager {
         }
 
         guard let candidateID, await isCurrentIntent(intentGeneration) else {
+            let preference = String(describing: song.recordingPreference)
+            let rowType = song.musicVideoType ?? "unknown"
+            let streamType = result.musicVideoType ?? "unknown"
+            let duration = result.duration ?? 0
             Log.player.info(
-                "MUSIC_MATCH no verified ATV source for selected=\(videoId) preference=\(String(describing: song.recordingPreference)) rowType=\(song.musicVideoType ?? "unknown") streamType=\(result.musicVideoType ?? "unknown") duration=\(result.duration ?? 0)"
+                "MUSIC_MATCH no verified ATV source for selected=\(videoId) preference=\(preference) rowType=\(rowType) streamType=\(streamType) duration=\(duration)"
             )
             return result
         }

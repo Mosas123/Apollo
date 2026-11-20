@@ -15,12 +15,14 @@ struct StudioAudioMatchChecks {
         originalWasVideo: Bool = false
     ) -> Bool {
         MusicRecordingSelectionPolicy.verifiedAlbumAudio(
-            wantedTitle: title, wantedArtist: artist,
-            wantedAlbum: album, wantedDuration: duration,
-            candidateTitle: candidateTitle, candidateArtists: candidateArtist,
-            candidateAlbum: candidateAlbum, candidateDuration: candidateDuration,
-            candidateType: candidateType,
-            originalWasVideo: originalWasVideo
+            wanted: .init(
+                title: title, artist: artist, album: album, duration: duration,
+                originalWasVideo: originalWasVideo
+            ),
+            candidate: .init(
+                title: candidateTitle, artists: candidateArtist,
+                album: candidateAlbum, duration: candidateDuration, type: candidateType
+            )
         )
     }
 

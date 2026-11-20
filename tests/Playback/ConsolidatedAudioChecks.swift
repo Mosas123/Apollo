@@ -57,27 +57,32 @@ struct ConsolidatedAudioChecks {
         ) != TextMatch.normalize(
             "HEROES & VILLAINS (Instrumentals)"
         ), "Full edition identity can partition addon caches")
+        let niagaraVocal = MusicRecordingSelectionPolicy.WantedRecording(
+            title: "Niagara Falls (Foot or 2)",
+            artist: "Metro Boomin",
+            album: "HEROES & VILLAINS",
+            duration: 208,
+            originalWasVideo: false
+        )
         expect(!MusicRecordingSelectionPolicy.verifiedAlbumAudio(
-            wantedTitle: "Niagara Falls (Foot or 2)",
-            wantedArtist: "Metro Boomin",
-            wantedAlbum: "HEROES & VILLAINS",
-            wantedDuration: 208,
-            candidateTitle: "Niagara Falls (Foot or 2)",
-            candidateArtists: ["Metro Boomin"],
-            candidateAlbum: "HEROES & VILLAINS (Instrumentals)",
-            candidateDuration: 208,
-            candidateType: "MUSIC_VIDEO_TYPE_ATV"
+            wanted: niagaraVocal,
+            candidate: .init(
+                title: "Niagara Falls (Foot or 2)",
+                artists: ["Metro Boomin"],
+                album: "HEROES & VILLAINS (Instrumentals)",
+                duration: 208,
+                type: "MUSIC_VIDEO_TYPE_ATV"
+            )
         ), "ATV type alone cannot override a wrong album edition")
         expect(!MusicRecordingSelectionPolicy.verifiedAlbumAudio(
-            wantedTitle: "Niagara Falls (Foot or 2)",
-            wantedArtist: "Metro Boomin",
-            wantedAlbum: "HEROES & VILLAINS",
-            wantedDuration: 208,
-            candidateTitle: "Niagara Falls (Foot or 2) (Instrumental)",
-            candidateArtists: ["Metro Boomin"],
-            candidateAlbum: "HEROES & VILLAINS",
-            candidateDuration: 208,
-            candidateType: "MUSIC_VIDEO_TYPE_ATV"
+            wanted: niagaraVocal,
+            candidate: .init(
+                title: "Niagara Falls (Foot or 2) (Instrumental)",
+                artists: ["Metro Boomin"],
+                album: "HEROES & VILLAINS",
+                duration: 208,
+                type: "MUSIC_VIDEO_TYPE_ATV"
+            )
         ), "ATV title qualifier cannot override vocal song")
         expect(OfflineAudioFormatPolicy.isVerifiedFLAC(
             qualityTier: "Lossless", mimeType: "audio/flac",

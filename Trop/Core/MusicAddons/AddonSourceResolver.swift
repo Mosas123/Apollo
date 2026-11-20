@@ -21,7 +21,16 @@ enum AddonSourceResolver {
         let bucket = (duration ?? 0) / 5
         // Full labels and album edition go in the key; a cached
         // instrumental copy must NEVER be served to a vocal track.
-        return "\(TextMatch.normalize(title))|\(TextMatch.normalize(artist))|\(TextMatch.normalize(album ?? ""))|\(bucket)|\(requireCD ? "cd" : "any")|\(preferAtmos ? "atmos" : "")|\(preferHiRes ? "hires" : "")"
+        let components = [
+            TextMatch.normalize(title),
+            TextMatch.normalize(artist),
+            TextMatch.normalize(album ?? ""),
+            String(bucket),
+            requireCD ? "cd" : "any",
+            preferAtmos ? "atmos" : "",
+            preferHiRes ? "hires" : ""
+        ]
+        return components.joined(separator: "|")
     }
 
     private struct Criteria: Sendable {

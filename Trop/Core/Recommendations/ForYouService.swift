@@ -9,7 +9,13 @@ enum ForYouService {
     private static var cachedSongs: (date: Date, songs: [SongItem])?
     private static var cachedArtists: (date: Date, artists: [ArtistItem])?
     private static var cachedPodcasts: (date: Date, items: [YTItem])?
-    private static var cachedProfile: (date: Date, artists: [String], liked: [String], genres: [String])?
+    private struct ListenerProfile {
+        let artists: [String]
+        let liked: [String]
+        let genres: [String]
+    }
+
+    private static var cachedProfile: (date: Date, profile: ListenerProfile)?
     private static let profileTTL: TimeInterval = 60
     private static let ttl: TimeInterval = 60 * 60 * 6
 
@@ -221,9 +227,9 @@ enum ForYouService {
         return nil
     }
 
-    private static func loadProfile() async -> (artists: [String], liked: [String], genres: [String]) {
+    private static func loadProfile() async -> ListenerProfile {
         if let cached = cachedProfile, Date().timeIntervalSince(cached.date) < profileTTL {
-            return (cached.artists, cached.liked, cached.genres)
+            return cached.profile
         }
         var artists = (try? await DatabaseService.shared.fetchArtists(limit: 12))?.map(\.name) ?? []
         for artist in TasteProfileStore.shared.topArtists(limit: 8) where !artists.contains(artist) {
@@ -232,8 +238,12 @@ enum ForYouService {
         let liked = (try? await DatabaseService.shared.fetchAllLikedSongs())?
             .prefix(20)
             .map { "\($0.title) — \($0.artistName ?? "")" } ?? []
-        let profile = (artists, liked, TasteProfileStore.shared.topGenres(limit: 5))
-        cachedProfile = (Date(), profile.0, profile.1, profile.2)
+        let profile = ListenerProfile(
+            artists: artists,
+            liked: liked,
+            genres: TasteProfileStore.shared.topGenres(limit: 5)
+        )
+        cachedProfile = (Date(), profile)
         return profile
     }
 
