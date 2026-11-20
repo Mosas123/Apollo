@@ -358,6 +358,17 @@ extension PlayerController {
             NowPlaying.shared.videoId = videoId
         }
         guard NowPlaying.shared.videoId == videoId else { return }
+        if headsetHandoffIntent?.playbackID != videoId {
+            // A new selection supersedes any old Bluetooth handoff.
+            headsetHandoffIntent = nil
+        }
+        if apoloAudioInterruptionActive {
+            // A new song selected during interruption is the latest intent.
+            interruptedPlaybackIdentity = (
+                id: videoId, generation: NowPlaying.shared.playbackGeneration
+            )
+            wasPlayingBeforeInterruption = true
+        }
 
         currentLoudnessDb = loudnessDb
         NowPlaying.shared.losslessFormatLabel = losslessLabel
@@ -458,7 +469,9 @@ extension PlayerController {
                 + "source=\(Self.apoloSource(url))"
         )
         let cmdResult = withMpv { mpv -> Int32 in
-            mpv_set_property_string(mpv, "pause", "no")
+            mpv_set_property_string(
+                mpv, "pause", apoloAudioInterruptionActive ? "yes" : "no"
+            )
             return loadArguments.withUnsafeCArg { mpv_command(mpv, $0) }
         } ?? -1
         if cmdResult != 0 {
@@ -482,8 +495,15 @@ extension PlayerController {
         guard PlaybackIntentGuard.isLatest(
             serial: requestSerial, latestSerial: playRequestSerial
         ) else { return }
-        playState.send(.playing)
-        NowPlaying.shared.isPlaying = true
+        let canStartAudio = !apoloAudioInterruptionActive
+            && sharedState.withLock { $0.desiredPlaying }
+        if apoloAudioInterruptionActive {
+            interruptedPlaybackIdentity = (
+                id: videoId, generation: NowPlaying.shared.playbackGeneration
+            )
+        }
+        playState.send(canStartAudio ? .playing : .paused)
+        NowPlaying.shared.isPlaying = canStartAudio
         NowPlaying.shared.currentTime = playbackStart
         NowPlaying.shared.duration = max(0, duration ?? 0)
         setNowPlayingMetadata()
@@ -1911,9 +1931,22 @@ extension PlayerController {
                 await backend.seek(to: startAt)
             }
             guard apoloIsActive, apoloGeneration == generation else { return }
-            backend.play()
-            playState.send(.playing)
-            NowPlaying.shared.isPlaying = true
+            let canStartAudio = !apoloAudioInterruptionActive
+                && sharedState.withLock { $0.desiredPlaying }
+            if canStartAudio {
+                backend.play()
+            } else {
+                // The new recording may finish loading while iOS is still
+                // interrupted. Keep it paused for the guarded resume event.
+                backend.pause()
+                if apoloAudioInterruptionActive {
+                    interruptedPlaybackIdentity = (
+                        id: videoId, generation: NowPlaying.shared.playbackGeneration
+                    )
+                }
+            }
+            playState.send(canStartAudio ? .playing : .paused)
+            NowPlaying.shared.isPlaying = canStartAudio
             NowPlaying.shared.currentTime = isLiveRadio ? 0 : startAt
             NowPlaying.shared.duration = isLiveRadio ? 0 : max(0, duration ?? 0)
             setNowPlayingMetadata()
