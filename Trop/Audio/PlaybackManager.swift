@@ -301,6 +301,7 @@ actor PlaybackManager {
     private func scheduleGaplessPrepare(after videoId: String) {
         guard SettingsStore.shared.apoloBetaEnabled else { return }
         gaplessPrepareTask?.cancel()
+        Log.player.info("GAPLESS_PREPARE begin id=\(videoId)")
         gaplessPrepareTask = Task { [weak self] in
             guard let self else { return }
             try? await Task.sleep(for: .milliseconds(400))
@@ -314,9 +315,22 @@ actor PlaybackManager {
                 guard song.contentKind == .music else { return nil }
                 return song
             }
-            guard let next, !Task.isCancelled else { return }
-            let result = try? await resolve(videoId: next.videoId, song: next)
+            guard let next, !Task.isCancelled else {
+                Log.player.info("GAPLESS_PREPARE skip id=\(videoId) reason=no-next")
+                return
+            }
+            Log.player.info("GAPLESS_PREPARE next id=\(next.videoId)")
+            let result: PlaybackResult?
+            do {
+                result = try await resolve(videoId: next.videoId, song: next)
+            } catch {
+                Log.player.info(
+                    "GAPLESS_PREPARE failed id=\(next.videoId) reason=\(error)"
+                )
+                return
+            }
             guard let result, !Task.isCancelled else { return }
+            Log.player.info("GAPLESS_PREPARE resolved id=\(next.videoId)")
             let isCurrent = await MainActor.run {
                 NowPlaying.shared.videoId == videoId
                     && NowPlaying.shared.hasNext
@@ -324,7 +338,11 @@ actor PlaybackManager {
                         NowPlaying.shared.queueIndex + 1
                     ].videoId == next.videoId
             }
-            guard isCurrent, let url = URL(string: result.streamUrl) else { return }
+            guard isCurrent, let url = URL(string: result.streamUrl) else {
+                Log.player.info("GAPLESS_PREPARE skip id=\(next.videoId) reason=stale")
+                return
+            }
+            Log.player.info("GAPLESS_PREPARE enqueue id=\(next.videoId)")
             await PlayerController.shared.enqueueApoloNext(
                 url: url,
                 title: self.cleanedTitle(

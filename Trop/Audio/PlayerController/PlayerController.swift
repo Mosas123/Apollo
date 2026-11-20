@@ -1244,7 +1244,10 @@ extension PlayerController {
         sourceMIMEType: String? = nil,
         isAtmos: Bool = false
     ) async {
-        guard apoloIsActive, let backend = apoloBackend else { return }
+        guard apoloIsActive, let backend = apoloBackend else {
+            Log.player.info("GAPLESS_ENQUEUE skipped active=\(apoloIsActive)")
+            return
+        }
         await backend.enqueueNext(
             audioURL: url,
             title: title,
