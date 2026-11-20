@@ -698,7 +698,7 @@ extension PlayerController {
         // Never command a backend or publish an optimistic Play after iOS
         // denied nonmixable audio activation (for example Apple Music !int).
         // Keep the user's desiredPlaying intent for a safe foreground retry.
-        if !paused {
+        if !paused && !explicitUnplugRecovered {
             guard assertAudioSession(reason: "setPaused") else {
                 pendingAudioSessionResume = (
                     id: NowPlaying.shared.videoId,
@@ -1673,20 +1673,20 @@ extension PlayerController {
                 isCurrentRequest: sameRequest,
                 outputIsBuiltIn: builtInOutput
             )
+            // Preserve only user-facing permission (never automatic Play)
+            // even when an interruption began before the route callback:
+            // in that case the route policy may legitimately return .ignore.
+            if case .oldDeviceUnavailable = event,
+               builtInOutput, sameRequest, let selectedID {
+                self.unplugManualPlayPermit = HeadphoneUnplugManualPlayPermit(
+                    playbackID: selectedID,
+                    playbackGeneration: NowPlaying.shared.playbackGeneration,
+                    routeGeneration: routeGeneration
+                )
+            }
             switch action {
             case .pause:
                 // This is a privacy pause, not an explicit user Pause.
-                // Record only a same-selection, built-in route. A subsequent
-                // user Play may recover a missing legacy interruption end,
-                // but route changes themselves must never auto-start sound.
-                if case .oldDeviceUnavailable = event,
-                   builtInOutput, sameRequest, let selectedID {
-                    self.unplugManualPlayPermit = HeadphoneUnplugManualPlayPermit(
-                        playbackID: selectedID,
-                        playbackGeneration: NowPlaying.shared.playbackGeneration,
-                        routeGeneration: routeGeneration
-                    )
-                }
                 self.setPaused(true, systemRecovery: true)
             case .resume:
                 self.unplugManualPlayPermit = nil
