@@ -1628,6 +1628,17 @@ extension PlayerController {
         let commandGeneration = playbackCommandGeneration
         let requestSerial = playRequestSerial
         let selectedID = NowPlaying.shared.videoId
+        if case .oldDeviceUnavailable = event, let selectedID {
+            // Record before the 350ms route-settling delay: iOS can deliver
+            // interruption.began and the user can press Play during that gap.
+            // The permit alone never plays audio. Every use rechecks output,
+            // route generation, track identity and user initiation.
+            unplugManualPlayPermit = HeadphoneUnplugManualPlayPermit(
+                playbackID: selectedID,
+                playbackGeneration: NowPlaying.shared.playbackGeneration,
+                routeGeneration: routeGeneration
+            )
+        }
         Task { @MainActor [weak self] in
             guard let self else { return }
             if case .oldDeviceUnavailable = event {
@@ -1673,17 +1684,6 @@ extension PlayerController {
                 isCurrentRequest: sameRequest,
                 outputIsBuiltIn: builtInOutput
             )
-            // Preserve only user-facing permission (never automatic Play)
-            // even when an interruption began before the route callback:
-            // in that case the route policy may legitimately return .ignore.
-            if case .oldDeviceUnavailable = event,
-               builtInOutput, sameRequest, let selectedID {
-                self.unplugManualPlayPermit = HeadphoneUnplugManualPlayPermit(
-                    playbackID: selectedID,
-                    playbackGeneration: NowPlaying.shared.playbackGeneration,
-                    routeGeneration: routeGeneration
-                )
-            }
             switch action {
             case .pause:
                 // This is a privacy pause, not an explicit user Pause.
