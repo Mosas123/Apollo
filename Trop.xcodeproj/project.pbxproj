@@ -511,7 +511,7 @@
 			repositoryURL = "https://github.com/Mosas123/ApoloEngine.git";
 			requirement = {
 				kind = revision;
-				revision = a3f070cef8b3337f1ef894cea7ef9d7460d16c41;
+				revision = 16b723a5f1930eef78f02a0d09afe0d17a03e049;
 			};
 		};
 		14B578D72FF1AB43006B3990 /* XCRemoteSwiftPackageReference "MPVKit" */ = {
