@@ -123,6 +123,42 @@ struct PlaybackGuardChecks {
         precondition(!PlaybackPausePolicy.watchdogIsSuspended(
             desiredPlaying: true, audioInterruptionActive: false
         ), "Real active loading remains under the watchdog")
+        // Exact background reproduction: Apolo was .loading for 90 seconds
+        // while the user had paused. No mpv swap should be authorized.
+        let at: (Double) -> Date = { Date(timeIntervalSince1970: $0) }
+        var pausedLoading = ApoloFiniteAudioWatchdog()
+        precondition(!pausedLoading.hasTimedOut(
+            now: at(0), isInterrupted: false, interruptionEndedAt: nil
+        ), "Loading begins with an ordinary 20s watchdog")
+        precondition(!pausedLoading.hasTimedOut(
+            now: at(25),
+            isInterrupted: PlaybackPausePolicy.watchdogIsSuspended(
+                desiredPlaying: false, audioInterruptionActive: false
+            ),
+            interruptionEndedAt: nil
+        ), "Pause must suspend watchdog, even after 20s")
+        precondition(!pausedLoading.hasTimedOut(
+            now: at(90),
+            isInterrupted: PlaybackPausePolicy.watchdogIsSuspended(
+                desiredPlaying: false, audioInterruptionActive: false
+            ),
+            interruptionEndedAt: nil
+        ), "90 seconds paused is not a stream stall")
+        precondition(!pausedLoading.hasTimedOut(
+            now: at(100),
+            isInterrupted: PlaybackPausePolicy.watchdogIsSuspended(
+                desiredPlaying: true, audioInterruptionActive: false
+            ),
+            interruptionEndedAt: nil
+        ), "The watchdog resumes with a fresh deadline on explicit Play")
+        precondition(!pausedLoading.hasTimedOut(
+            now: at(119.9), isInterrupted: false, interruptionEndedAt: nil
+        ), "Real loading still has 20 seconds after Play")
+        precondition(pausedLoading.hasTimedOut(
+            now: at(120.1), isInterrupted: false, interruptionEndedAt: nil
+        ), "An actual stall after Play must still reach the mpv fallback")
+        print("PASS: 6 real finite-audio watchdog pause/resume/timeout checks")
+
         print("PASS: 17 pause/EOF/fallback/quality-change intent regression checks")
 
         print("PASS: 15 playback startup/skip/ABA regression checks")
