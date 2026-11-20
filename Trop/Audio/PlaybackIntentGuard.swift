@@ -58,7 +58,7 @@ enum PlaybackPausePolicy {
     }
 }
 
- 
+
 /// Diagnostic classification only: never changes EOF handling or the queue.
 /// Not every reported duration is exact; require both a meaningful absolute
 /// and relative gap before flagging a suspicious early finish in device logs.
