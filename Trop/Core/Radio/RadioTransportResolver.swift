@@ -114,7 +114,7 @@ actor RadioTransportResolver {
         } else {
             nativeHint = nil
         }
-        if let icyMetaInt, Int(icyMetaInt) ?? 0 > 0 {
+        if let icyMetaInt, (Int(icyMetaInt) ?? 0) > 0 {
             return (.icy, nativeHint)
         }
         return (.direct, nativeHint)

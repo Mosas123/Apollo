@@ -1378,8 +1378,12 @@ final class NowPlaying {
             streamURL: currentStreamURL
         )
         radioArtworkTask = Task { [weak self] in
-            let resolved = artist.isEmpty
-                ? nil : await MetadataResolver.enrich(title: title, artist: artist)
+            let resolved: ResolvedMetadata?
+            if artist.isEmpty {
+                resolved = nil
+            } else {
+                resolved = await MetadataResolver.enrich(title: title, artist: artist)
+            }
             guard !Task.isCancelled else { return }
             let preferred = ArtworkURLs.highRes(resolved?.artworkURL?.absoluteString)
                 .flatMap(URL.init(string:))
