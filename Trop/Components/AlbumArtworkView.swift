@@ -27,6 +27,10 @@ struct SongArtworkView: View {
                !sourceCover.isEmpty {
                 // Known release art is stable across the row and full player.
                 AsyncImageView(url: sourceCover)
+            } else if resolvedKey == taskKey, let resolvedURL {
+                // Do not allow a still image already cached by NowPlaying to
+                // shadow the newly verified release artwork in this row.
+                AsyncImageView(url: resolvedURL)
             } else if let image = NowPlaying.shared.artwork(for: song.videoId) {
                 Image(uiImage: image)
                     .resizable()
@@ -35,9 +39,7 @@ struct SongArtworkView: View {
                     .clipped()
             } else {
                 // An unverified ytimg/video still is the LAST fallback.
-                // Use the same strict verified-album decision as NowPlaying.
-                AsyncImageView(url: (resolvedKey == taskKey ? resolvedURL : nil)
-                               ?? NowPlaying.shared.metadataSnapshot(for: song.videoId)?.artworkURL
+                AsyncImageView(url: NowPlaying.shared.metadataSnapshot(for: song.videoId)?.artworkURL
                                ?? song.thumbnailUrl)
             }
         }
