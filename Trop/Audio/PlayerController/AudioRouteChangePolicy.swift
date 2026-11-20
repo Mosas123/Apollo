@@ -49,8 +49,9 @@ enum AudioRouteChangePolicy {
         }
         switch event {
         case .newDeviceAvailable:
-            // A device being connected is not a headphone-disconnect pause.
-            return .resume
+            // A connection notification can precede the route becoming
+            // external. Never force playback through the built-in speaker.
+            return outputIsBuiltIn ? .ignore : .resume
         case .oldDeviceUnavailable:
             // Avoid blasting audio through the phone speaker when headphones
             // are unplugged, but preserve live radio on a new external route.
