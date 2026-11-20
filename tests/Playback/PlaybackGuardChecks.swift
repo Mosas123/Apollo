@@ -65,6 +65,66 @@ struct PlaybackGuardChecks {
             serial: 13, latestSerial: 13
         ), "The active source request may publish")
 
+        // IPA #398: PERFuMITO NUEVO was still .loading after the user
+        // paused, then Apolo timed out and mpv auto-started. Pauses are
+        // selection-scoped and must be preserved across every backend.
+        func wantsAudio(
+            generation: Int = 6,
+            paused: Int? = nil,
+            desired: Bool,
+            fresh: Bool = false,
+            fallback: Bool = false
+        ) -> Bool {
+            PlaybackPausePolicy.shouldPlay(
+                generation: generation,
+                explicitlyPausedGeneration: paused,
+                desiredPlaying: desired,
+                isNewSelection: fresh,
+                isEngineFallback: fallback
+            )
+        }
+        precondition(wantsAudio(desired: false, fresh: true),
+                     "Initial explicit song selection starts from stopped state")
+        precondition(!wantsAudio(paused: 6, desired: false, fresh: true),
+                     "Pause during a new song's resolution cannot be overwritten")
+        precondition(!wantsAudio(paused: 6, desired: false),
+                     "Delayed Apolo load must honor the latest Pause")
+        precondition(!wantsAudio(paused: 6, desired: false, fallback: true),
+                     "Apolo to mpv fallback cannot turn paused into playing")
+        precondition(!wantsAudio(desired: false, fallback: true),
+                     "An internal system pause is also preserved by fallback")
+        precondition(wantsAudio(desired: true, fallback: true),
+                     "Genuine playable fallback still starts when requested")
+        precondition(wantsAudio(generation: 7, paused: 6, desired: false, fresh: true),
+                     "Explicit selection of another track may start after old Pause")
+        precondition(!wantsAudio(generation: 7, paused: 7, desired: false, fresh: true),
+                     "Pause on the new track beats the pending load")
+        precondition(!wantsAudio(paused: 6, desired: false, fresh: false),
+                     "A paused in-place quality upgrade stays paused")
+        precondition(wantsAudio(desired: true, fresh: false),
+                     "An ordinary in-place quality change remains playing")
+        precondition(!wantsAudio(desired: false, fresh: false),
+                     "A backend retry of a system-paused selection remains paused")
+        precondition(!PlaybackPausePolicy.shouldAdvanceAutomatically(
+            generation: 6, explicitlyPausedGeneration: 6, desiredPlaying: true
+        ), "A stale EOF callback must not advance after an explicit Pause")
+        precondition(!PlaybackPausePolicy.shouldAdvanceAutomatically(
+            generation: 6, explicitlyPausedGeneration: nil, desiredPlaying: false
+        ), "Automatic queue transition cannot start on system pause")
+        precondition(PlaybackPausePolicy.shouldAdvanceAutomatically(
+            generation: 6, explicitlyPausedGeneration: 5, desiredPlaying: true
+        ), "Normal EOF advances while music is requested")
+        precondition(PlaybackPausePolicy.watchdogIsSuspended(
+            desiredPlaying: false, audioInterruptionActive: false
+        ), "Paused loading must not burn the finite-audio timeout budget")
+        precondition(PlaybackPausePolicy.watchdogIsSuspended(
+            desiredPlaying: true, audioInterruptionActive: true
+        ), "An iOS interruption must suspend loading timeout")
+        precondition(!PlaybackPausePolicy.watchdogIsSuspended(
+            desiredPlaying: true, audioInterruptionActive: false
+        ), "Real active loading remains under the watchdog")
+        print("PASS: 17 pause/EOF/fallback/quality-change intent regression checks")
+
         print("PASS: 15 playback startup/skip/ABA regression checks")
     }
 }
