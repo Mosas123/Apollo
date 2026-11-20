@@ -13,6 +13,15 @@ final class ApoloAudioBackend {
         managesAudioSession: false
     )
 
+    /// Echoes engine-driven automatic advances back to Thrum's queue.
+    var onTrackChange: ((ApoloTrack) -> Void)?
+
+    init() {
+        engine.onTrackChange = { [weak self] track in
+            self?.onTrackChange?(track)
+        }
+    }
+
     var state: PlaybackState { engine.state }
     var currentTime: TimeInterval { engine.currentTime }
     var duration: TimeInterval { engine.duration }
@@ -69,6 +78,43 @@ final class ApoloAudioBackend {
             sourceMIMEType: sourceMIMEType
         )
     }
+
+    /// Preloads the next finite track on the current native route. A bad or
+    /// unsupported successor simply leaves no prepared item; the app falls
+    /// back to its normal resolve path on skip/end.
+    func enqueueNext(
+        audioURL: URL,
+        httpHeaders: [String: String] = [:],
+        title: String,
+        artist: String,
+        album: String? = nil,
+        artworkData: Data? = nil,
+        videoId: String,
+        sourceMIMEType: String? = nil,
+        isAtmos: Bool = false
+    ) async {
+        await engine.enqueueNext(
+            ApoloTrack(
+                url: audioURL,
+                httpHeaders: httpHeaders,
+                metadata: NowPlayingMetadata(
+                    title: title,
+                    artist: artist,
+                    album: album,
+                    artworkData: artworkData
+                ),
+                sourceMIMEType: sourceMIMEType,
+                isAtmos: isAtmos,
+                externalID: videoId
+            )
+        )
+    }
+
+    var hasPreparedNext: Bool { engine.hasPreparedNext }
+    var preparedNextVideoId: String? { engine.preparedNextExternalID }
+
+    @discardableResult
+    func skipToPreparedNext() -> Bool { engine.skipToPreparedNext() }
 
     func play() { engine.play() }
     func pause() { engine.pause() }

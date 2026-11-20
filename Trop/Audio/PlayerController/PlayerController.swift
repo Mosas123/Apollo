@@ -1233,6 +1233,46 @@ extension PlayerController {
         Log.player.info("AUDIO_RECOVERY id=\(self.recoveryID) event=\(event) uptimeMs=\(uptimeMs) sinceBeginMs=\(elapsed) sinceEndMs=\(postEnd)")
     }
 
+    /// Preloads the next finite track in the Apolo native queue.
+    func enqueueApoloNext(
+        url: URL,
+        title: String,
+        artist: String,
+        videoId: String,
+        album: String? = nil,
+        artworkData: Data? = nil,
+        sourceMIMEType: String? = nil,
+        isAtmos: Bool = false
+    ) async {
+        guard apoloIsActive, let backend = apoloBackend else { return }
+        await backend.enqueueNext(
+            audioURL: url,
+            title: title,
+            artist: artist,
+            album: album,
+            artworkData: artworkData,
+            videoId: videoId,
+            sourceMIMEType: sourceMIMEType,
+            isAtmos: isAtmos
+        )
+    }
+
+    /// Manual skip fast path. False means: resolve and load normally.
+    var preparedApoloNextVideoId: String? {
+        apoloIsActive ? apoloBackend?.preparedNextVideoId : nil
+    }
+
+    func skipPreparedApoloNext(to videoId: String) -> Bool {
+        guard apoloIsActive, let backend = apoloBackend,
+              backend.preparedNextVideoId == videoId,
+              backend.skipToPreparedNext() else { return false }
+        sharedState.withLock {
+            $0.currentVideoId = videoId
+            $0.pendingVideoId = nil
+        }
+        return true
+    }
+
     func assertAudioSession(reason: String = "unspecified") {
         let session = AVAudioSession.sharedInstance()
         let start = ProcessInfo.processInfo.systemUptime
@@ -1728,6 +1768,14 @@ extension PlayerController {
         } else {
             backend = ApoloAudioBackend()
             apoloBackend = backend
+        }
+        backend.onTrackChange = { [weak self] track in
+            guard let self, let videoId = track.externalID else { return }
+            self.sharedState.withLock {
+                $0.currentVideoId = videoId
+                $0.pendingVideoId = nil
+            }
+            NowPlaying.shared.engineAdvanced(to: videoId)
         }
         backend.volume = Float(max(0, min(1, SettingsStore.shared.playerVolume)))
         let apoloBegan = Date()
