@@ -327,7 +327,7 @@ actor PlaybackManager {
             guard isCurrent, let url = URL(string: result.streamUrl) else { return }
             await PlayerController.shared.enqueueApoloNext(
                 url: url,
-                title: Self.cleanedTitle(
+                title: self.cleanedTitle(
                     next.title,
                     artist: next.artistNamesDisplay
                 ),
