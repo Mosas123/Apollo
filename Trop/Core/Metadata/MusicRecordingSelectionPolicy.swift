@@ -70,6 +70,15 @@ enum MusicRecordingSelectionPolicy {
         (hasAddons && mode != "off") || prefers320
     }
 
+    /// The High (320 kbps) tier must not quietly reuse a prior FLAC
+    /// prefetch from a different setting. Auto/FLAC settings keep their own
+    /// acceptance rules in PlaybackManager.
+    static func acceptsPrefetchedQuality(mode: String, quality: String) -> Bool {
+        guard mode == "high" else { return true }
+        let label = quality.lowercased()
+        return label.contains("jiosaavn") || label.contains("addon-aac")
+    }
+
     /// Do not use fuzzy substring title matches for audio substitution.
     /// Exact recording title, real performer credits and close duration or
     /// verified album identity are required. Remixes/live/covers must not
