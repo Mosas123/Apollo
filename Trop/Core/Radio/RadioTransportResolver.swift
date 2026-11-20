@@ -74,7 +74,15 @@ actor RadioTransportResolver {
         request.setValue("1", forHTTPHeaderField: "Icy-MetaData")
         request.setValue("bytes=0-1", forHTTPHeaderField: "Range")
         request.setValue("Thrum/1.0", forHTTPHeaderField: "User-Agent")
-        guard let (_, response) = try? await URLSession.shared.bytes(for: request),
+        // Probe only headers of an indefinite live stream. The dedicated
+        // session must be canceled on every exit; dropping AsyncBytes alone
+        // does not guarantee termination of a still-streaming HTTP request.
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 3
+        config.timeoutIntervalForResource = 5
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        guard let (_, response) = try? await session.bytes(for: request),
               let http = response as? HTTPURLResponse,
               (200...399).contains(http.statusCode) else {
             return nil

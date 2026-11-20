@@ -18,5 +18,11 @@ jobs:
       - name: Compile and run offline radio transport, parser and identity regression tests
         run: |
           set -euo pipefail
-          swiftc             Trop/Core/Radio/RadioBrowser.swift             Trop/Core/Radio/RadioTransportResolver.swift             Trop/Core/Radio/ICYTitleParser.swift             Trop/Core/Radio/RadioMetadataProviders.swift             tests/Radio/RadioAdvancedChecks.swift             -o "$RUNNER_TEMP/radio-advanced-checks"
+          swiftc \
+            Trop/Core/Radio/RadioBrowser.swift \
+            Trop/Core/Radio/RadioTransportResolver.swift \
+            Trop/Core/Radio/ICYTitleParser.swift \
+            Trop/Core/Radio/RadioMetadataProviders.swift \
+            tests/Radio/RadioAdvancedChecks.swift \
+            -o "$RUNNER_TEMP/radio-advanced-checks"
           "$RUNNER_TEMP/radio-advanced-checks"
