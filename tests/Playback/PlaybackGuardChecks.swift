@@ -65,6 +65,26 @@ struct PlaybackGuardChecks {
             serial: 13, latestSerial: 13
         ), "The active source request may publish")
 
+        // IPA #459: repeated Next taps were ignored for ~5s while a
+        // JioSaavn source resolved. Manual navigation supersedes the active
+        // intent; automatic EOF must not start multiple fetches.
+        precondition(QueueAdvancePolicy.allowsNext(
+            automatic: false, isResolvingNext: true
+        ), "Manual Next must remain responsive during pending source resolution")
+        precondition(QueueAdvancePolicy.allowsNext(
+            automatic: false, isResolvingNext: false
+        ), "Normal manual Next must remain enabled")
+        precondition(!QueueAdvancePolicy.allowsNext(
+            automatic: true, isResolvingNext: true
+        ), "Automatic EOF must not start a duplicate pending resolution")
+        precondition(QueueAdvancePolicy.allowsNext(
+            automatic: true, isResolvingNext: false
+        ), "Automatic EOF still advances when no resolution is pending")
+        precondition(!PlaybackIntentGuard.owns(
+            expectedGeneration: 7, expectedVideoId: "ROSE",
+            generation: 8, videoId: "END OF BEGINNING"
+        ), "Superseded resolver must not publish after manual skip")
+
         // IPA #398: PERFuMITO NUEVO was still .loading after the user
         // paused, then Apolo timed out and mpv auto-started. Pauses are
         // selection-scoped and must be preserved across every backend.
@@ -235,6 +255,8 @@ struct PlaybackGuardChecks {
         print("PASS: 6 real finite-audio watchdog pause/resume/timeout checks")
 
         print("PASS: 17 pause/EOF/fallback/quality-change intent regression checks")
+
+        print("PASS: 5 in-flight queue navigation and resolver ownership checks")
 
         print("PASS: 15 playback startup/skip/ABA regression checks")
     }
