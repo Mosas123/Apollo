@@ -35,11 +35,16 @@ enum ListeningTimeChecks {
         clock.observe(position: .infinity, uptime: 284)
         precondition(clock.listenedMilliseconds == 30_000, "Invalid decoder clocks cannot corrupt time")
 
+        // A late sample must not rewind the baseline of an already newer one.
+        clock.observe(position: 19, uptime: 281)
+        clock.observe(position: 21, uptime: 283)
+        precondition(clock.listenedMilliseconds == 31_000, "Out-of-order samples are ignored")
+
         var offset = ListeningTimeAccumulator()
         offset.observe(position: 87, uptime: 100)
         offset.observe(position: 90, uptime: 103)
         precondition(offset.listenedMilliseconds == 3_000, "Resuming from 87s does not credit previous music")
 
-        print("PASS: 11 listening-time, pause, seek, interruption and resume checks")
+        print("PASS: 12 listening-time, pause, seek, interruption and resume checks")
     }
 }
