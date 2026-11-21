@@ -85,6 +85,35 @@ struct PlaybackGuardChecks {
             generation: 8, videoId: "END OF BEGINNING"
         ), "Superseded resolver must not publish after manual skip")
 
+        // IPA #464 stress test: Next then immediate Pause while the next
+        // source is resolving. The displayed button belongs to the NEW
+        // selection, even if the previous backend still reports .paused.
+        precondition(PlaybackPausePolicy.shouldPauseOnToggle(
+            isResolvingSelection: true,
+            selectionWantsPlayback: true,
+            backendReportsPlaying: false
+        ), "Next -> Pause must not become Play when the old backend is paused")
+        precondition(PlaybackPausePolicy.shouldPauseOnToggle(
+            isResolvingSelection: true,
+            selectionWantsPlayback: true,
+            backendReportsPlaying: true
+        ), "Next -> Pause also works when the old backend is still playing")
+        precondition(!PlaybackPausePolicy.shouldPauseOnToggle(
+            isResolvingSelection: true,
+            selectionWantsPlayback: false,
+            backendReportsPlaying: true
+        ), "Another toggle during a paused resolution requests Play")
+        precondition(PlaybackPausePolicy.shouldPauseOnToggle(
+            isResolvingSelection: false,
+            selectionWantsPlayback: false,
+            backendReportsPlaying: true
+        ), "Outside resolution, a playing backend still toggles to Pause")
+        precondition(!PlaybackPausePolicy.shouldPauseOnToggle(
+            isResolvingSelection: false,
+            selectionWantsPlayback: true,
+            backendReportsPlaying: false
+        ), "Outside resolution, a paused backend still toggles to Play")
+
         // IPA #398: PERFuMITO NUEVO was still .loading after the user
         // paused, then Apolo timed out and mpv auto-started. Pauses are
         // selection-scoped and must be preserved across every backend.
@@ -255,6 +284,8 @@ struct PlaybackGuardChecks {
         print("PASS: 8 early-EOF evidence classification regression checks")
 
         print("PASS: 6 real finite-audio watchdog pause/resume/timeout checks")
+
+        print("PASS: 5 Next/Pause toggle-during-resolution regression checks")
 
         print("PASS: 17 pause/EOF/fallback/quality-change intent regression checks")
 
