@@ -1354,6 +1354,14 @@ final class NowPlaying {
         }
     }
 
+    /// Recheck the active station as the app enters/leaves background audio.
+    /// This uses the existing 30-second provider throttle and never starts playback.
+    func refreshRadioMetadataForCurrentStation() {
+        guard playbackKind == .radio, isPlaying else { return }
+        refreshLiveTitle()
+        refreshRadioMetadataIfNeeded()
+    }
+
     /// Reads the stream's ICY title (the live song on a Shoutcast/Icecast
     /// station) and publishes it when it changes.
     private func refreshLiveTitle() {
@@ -1372,12 +1380,18 @@ final class NowPlaying {
     /// Broadcasters without ICY (Radio Paradise AAC/MP3, etc.) get their
     /// now-playing data from a per-station API instead.
     private func refreshRadioMetadataIfNeeded() {
-        guard playbackKind == .radio,
-              isPlaying,
-              UIApplication.shared.applicationState == .active,
-              let raw = currentStreamURL,
-              let url = URL(string: raw),
-              let provider = RadioMetadataProviders.provider(for: url, stationName: displayTitle) else {
+        let appState: RadioAppExecutionState
+        switch UIApplication.shared.applicationState {
+        case .active: appState = .active
+        case .background: appState = .background
+        case .inactive: appState = .inactive
+        @unknown default: appState = .inactive
+        }
+        guard RadioBackgroundMetadataPolicy.shouldRefresh(
+            isRadio: playbackKind == .radio, isPlaying: isPlaying, appState: appState
+        ), let raw = currentStreamURL,
+           let url = URL(string: raw),
+           let provider = RadioMetadataProviders.provider(for: url, stationName: displayTitle) else {
             return
         }
         if let until = radioMetadataCooldownUntil, Date() < until { return }
@@ -1493,7 +1507,9 @@ final class NowPlaying {
         guard playbackKind == .radio else { return }
         thumbnailUIImage = nil
         thumbnailImage = Image(systemName: "dot.radiowaves.left.and.right")
-        PlayerController.shared.updateNowPlayingArtwork()
+        // Update song title/artist/album as well as clearing the old cover.
+        // Never re-activate AVAudioSession just to publish metadata.
+        PlayerController.shared.publishRadioNowPlayingMetadata()
     }
 
     /// Splits a raw ICY stream title into artist and title.
