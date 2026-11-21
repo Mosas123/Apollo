@@ -1805,7 +1805,9 @@ extension PlayerController {
         )
     }
 
-    func setNowPlayingMetadata(activateSession: Bool = true) {
+    func setNowPlayingMetadata(activateSession: Bool = false) {
+        // Metadata publication is not a playback request. Starting a stream
+        // and user Play explicitly activate the session at their own call sites.
         // Pure metadata refreshes (e.g. background transition) must not steal
         // audio focus from another app or undo an explicit user Pause.
         if activateSession { assertAudioSession(reason: "metadata") }
