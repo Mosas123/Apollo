@@ -8,6 +8,7 @@ on:
       - "Trop/Audio/PlayerController/AudioRouteChangePolicy.swift"
       - "Trop/Audio/PlayerController/ApoloFiniteAudioWatchdog.swift"
       - "Trop/Audio/NowPlaying.swift"
+      - "Trop/Audio/PlaybackQueue.swift"
       - "Trop/Playback/PlaybackStateService.swift"
       - "Trop/Playback/ListeningTimeAccumulator.swift"
       - "Trop/SponsorBlock/SponsorBlockSkipPolicy.swift"
@@ -32,6 +33,14 @@ jobs:
             tests/Playback/ListeningTimeChecks.swift \
             -o "$RUNNER_TEMP/playback-guard-checks"
           "$RUNNER_TEMP/playback-guard-checks"
+      - name: Verify list and playlist taps use protected queue start
+        run: |
+          set -euo pipefail
+          grep -Fq 'NowPlaying.shared.playCurrentSong(logContext: context)' Trop/Audio/PlaybackQueue.swift
+          if grep -Fq 'loggedTask(log, "\(context) failed")' Trop/Audio/PlaybackQueue.swift; then
+            echo "PlaybackQueue must not use unhandled fire-and-forget playlist resolution"
+            exit 1
+          fi
       - name: Verify headphone handoff and iOS interruption recovery policies
         run: |
           set -euo pipefail

@@ -149,6 +149,18 @@ final class PlayerController {
             desiredPlaying: wantsPlayback
         )
     }
+    /// Resolve can fail before play() sets desiredPlaying for a new selection.
+    /// Unlike EOF, recovery may use that fresh selection's intent, but not
+    /// while interruption, deferred activation or headset privacy protection
+    /// is withholding playback.
+    var canRecoverAfterSourceFailure: Bool {
+        guard !apoloAudioInterruptionActive,
+              !isAudioSessionResumePendingForCurrentSelection,
+              headsetHandoffIntent == nil,
+              unplugManualPlayPermit == nil,
+              let selected = NowPlaying.shared.videoId else { return false }
+        return wantsPlaybackForSelection(videoId: selected)
+    }
     // Diagnostics only. Never used to decide when to resume or fall back.
     private var recoveryID: UInt64 = 0
     private var recoveryBegin: TimeInterval?

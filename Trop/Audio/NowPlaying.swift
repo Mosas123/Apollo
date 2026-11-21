@@ -317,6 +317,8 @@ final class NowPlaying {
 
     func setQueue(_ songs: [SongItem], startIndex: Int) {
         playbackGeneration += 1
+        // Previous queues must not consume the new queue's failure budget.
+        consecutiveFailures = 0
         // A brand-new queue supersedes any in-flight next-track resolution.
         // Its old task must not leave the new queue permanently locked.
         isResolvingNext = false
@@ -882,7 +884,18 @@ final class NowPlaying {
             return
         }
         consecutiveFailures += 1
-        let canSkip = hasNext && consecutiveFailures < Self.maxConsecutiveFailures
+        let mayRecover = PlayerController.shared.canRecoverAfterSourceFailure
+        let canSkip = QueueAdvancePolicy.allowsSourceFailureSkip(
+            hasNext: hasNext,
+            consecutiveFailures: consecutiveFailures,
+            failureLimit: Self.maxConsecutiveFailures,
+            canRecoverSelection: mayRecover
+        )
+        Log.nowPlaying.info(
+            "QUEUE_RECOVERY unavailable videoId=\(failedVideoId) gen=\(playbackGeneration) "
+                + "index=\(queueIndex) failure=\(consecutiveFailures) "
+                + "canRecover=\(mayRecover) willSkip=\(canSkip)"
+        )
         Log.nowPlaying.notice(
             "Playback failure \(consecutiveFailures)/\(Self.maxConsecutiveFailures) for \(failedVideoId); "
                 + (canSkip ? "skipping to next" : "stopping")

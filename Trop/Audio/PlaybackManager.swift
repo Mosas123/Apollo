@@ -1380,6 +1380,9 @@ actor PlaybackManager {
         if let cached = albumAudioMatchCache[videoId],
            Date().timeIntervalSince(cached.at) < (cached.videoId == nil ? 600 : 3_600) {
             candidateID = cached.videoId
+            if candidateID == nil {
+                Log.player.info("MUSIC_MATCH negativeCacheHit selected=\(videoId)")
+            }
         } else {
             let query = "\(artist) \(song.title)"
             let found: String?
@@ -1415,6 +1418,16 @@ actor PlaybackManager {
                             )
                         )
                 }
+                // Sanitized lookup provenance: explain whether the source
+                // failed to return song rows, ATV typing or identity checks.
+                // Never log the search query, URLs, tokens or album titles.
+                let typedATVCount = candidates.filter {
+                    MusicRecordingSelectionPolicy.isStudioAudio($0.musicVideoType)
+                }.count
+                Log.player.info(
+                    "MUSIC_MATCH candidateAudit selected=\(videoId) parsed=\(candidates.count) "
+                        + "typedATV=\(typedATVCount) verified=\(valid.count)"
+                )
                 // De-duplicate top-card and shelf copies of the same ATV.
                 // If no album metadata survives and distinct ATV releases
                 // match, refuse an arbitrary selection: one might be a
@@ -1449,6 +1462,7 @@ actor PlaybackManager {
                 found = ambiguous ? nil : sorted.first?.videoId
             } catch {
                 // Search is optional. Network errors must not block music.
+                Log.player.info("MUSIC_MATCH lookupUnavailable selected=\(videoId) kind=searchError")
                 return result
             }
             if albumAudioMatchCache.count >= 100 {
