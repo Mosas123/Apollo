@@ -50,6 +50,38 @@ enum RadioBackgroundMetadataPolicy {
         }
     }
 
+    /// The previous mpv/Apolo stream can still expose an ICY title while a
+    /// replacement station is loading. Never label that title as the new station.
+    static func mayReadICY(
+        isRadio: Bool,
+        selectedStationID: String?,
+        activeStationID: String?,
+        pendingStationID: String?
+    ) -> Bool {
+        isRadio && selectedStationID != nil
+            && selectedStationID == activeStationID && pendingStationID == nil
+    }
+
+    /// Prefer the title embedded in the current live audio over an API response
+    /// for a different track (which may be ahead of or behind the live stream).
+    /// Stations without a usable ICY title continue to use their broadcaster API.
+    static func acceptsProvider(
+        _ provider: RadioNowPlaying,
+        currentICYRaw: String?,
+        stationName: String
+    ) -> Bool {
+        guard let currentICYRaw,
+              let icy = ICYTitleParser.parse(currentICYRaw, stationName: stationName) else {
+            return true
+        }
+        let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+        guard icy.title.compare(provider.title, options: options) == .orderedSame else {
+            return false
+        }
+        return icy.artist.isEmpty || provider.artist.isEmpty
+            || icy.artist.compare(provider.artist, options: options) == .orderedSame
+    }
+
     /// Surface the detected song without losing the station identity.
     /// A station-only fallback is used when the broadcast has no valid song.
     static func lockScreenFields(
