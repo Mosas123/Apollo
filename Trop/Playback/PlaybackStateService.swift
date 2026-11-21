@@ -96,8 +96,9 @@ actor PlaybackStateService {
         periodicCheckTask = nil
 
         guard isTracking, let videoId = currentVideoId else {
+            // A previous Stop may still be banking its final seconds. Do not
+            // invalidate its epoch if a second teardown event arrives.
             Log.playbackState.debug("stopTracking called but no active tracking")
-            reset()
             return
         }
         let epoch = trackingEpoch
