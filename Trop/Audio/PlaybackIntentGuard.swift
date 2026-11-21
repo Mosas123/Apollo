@@ -39,6 +39,17 @@ enum QueueAdvancePolicy {
 /// paused. A delayed load, quality switch or Apolo -> mpv fallback for the
 /// SAME selection must never turn an explicit Pause into Play.
 enum PlaybackPausePolicy {
+    /// While Next/Previous resolves, the backend state can still belong to the
+    /// previous track. The button reflects the new selection's play intent,
+    /// so a tap must invert that intent instead of the stale backend state.
+    static func shouldPauseOnToggle(
+        isResolvingSelection: Bool,
+        selectionWantsPlayback: Bool,
+        backendReportsPlaying: Bool
+    ) -> Bool {
+        isResolvingSelection ? selectionWantsPlayback : backendReportsPlaying
+    }
+
     static func shouldPlay(
         generation: Int,
         explicitlyPausedGeneration: Int?,
