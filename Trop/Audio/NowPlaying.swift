@@ -405,8 +405,33 @@ final class NowPlaying {
                 TasteProfileStore.shared.recordSkip(artist: artist)
             }
         }
+        let nextSong = queueSongs[queueIndex + 1]
+        if !automatic,
+           PlayerController.shared.skipPreparedApoloNext(to: nextSong.videoId) {
+            queueIndex += 1
+            update(with: nextSong)
+            currentTime = 0
+            duration = nextSong.duration > 0 ? TimeInterval(nextSong.duration) : 0
+            persistQueueState()
+            isResolvingNext = false
+            return
+        }
         queueIndex += 1
         playCurrentSong(logContext: "playNext")
+    }
+
+    /// Keeps Thrum's queue/UI in sync when Apolo advances to a preloaded track
+    /// on its own. No resolution or second player load is involved.
+    func engineAdvanced(to videoId: String) {
+        guard let index = queueSongs.firstIndex(where: { $0.videoId == videoId })
+        else { return }
+        queueIndex = index
+        update(with: queueSongs[index])
+        currentTime = 0
+        duration = queueSongs[index].duration > 0
+            ? TimeInterval(queueSongs[index].duration) : 0
+        isResolvingNext = false
+        persistQueueState()
     }
 
     func playPrevious() {

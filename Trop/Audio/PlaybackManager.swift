@@ -293,6 +293,81 @@ actor PlaybackManager {
     private var queueObserver: NSObjectProtocol?
     private var queueChangeTask: Task<Void, Never>?
     private var prefetchRefreshTask: Task<Void, Never>?
+    private var gaplessPrepareTask: Task<Void, Never>?
+
+    /// Resolves the next music item and hands it to Apolo while the current
+    /// track is still playing. The actual advance stays sample-gapless on the
+    /// native route; unsupported successors simply fail to prepare.
+    private func scheduleGaplessPrepare(after videoId: String) {
+        guard SettingsStore.shared.apoloBetaEnabled else { return }
+        gaplessPrepareTask?.cancel()
+        Log.player.info("GAPLESS_PREPARE begin id=\(videoId)")
+        gaplessPrepareTask = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            let snapshot = await MainActor.run {
+                (
+                    current: NowPlaying.shared.videoId,
+                    index: NowPlaying.shared.queueIndex,
+                    count: NowPlaying.shared.queueSongs.count,
+                    hasNext: NowPlaying.shared.hasNext,
+                    next: NowPlaying.shared.hasNext
+                        ? NowPlaying.shared.queueSongs[
+                            NowPlaying.shared.queueIndex + 1
+                        ]
+                        : nil
+                )
+            }
+            guard snapshot.current == videoId,
+                  snapshot.hasNext,
+                  let next = snapshot.next,
+                  next.contentKind == .music else {
+                Log.player.info(
+                    "GAPLESS_PREPARE skip id=\(videoId) reason=no-next current=\(snapshot.current ?? "nil") index=\(snapshot.index) count=\(snapshot.count) hasNext=\(snapshot.hasNext)"
+                )
+                return
+            }
+            Log.player.info("GAPLESS_PREPARE next id=\(next.videoId)")
+            let result: PlaybackResult?
+            do {
+                result = try await resolve(videoId: next.videoId, song: next)
+            } catch {
+                Log.player.info(
+                    "GAPLESS_PREPARE failed id=\(next.videoId) reason=\(error)"
+                )
+                return
+            }
+            guard let result, !Task.isCancelled else { return }
+            Log.player.info("GAPLESS_PREPARE resolved id=\(next.videoId)")
+            let isCurrent = await MainActor.run {
+                NowPlaying.shared.videoId == videoId
+                    && NowPlaying.shared.hasNext
+                    && NowPlaying.shared.queueSongs[
+                        NowPlaying.shared.queueIndex + 1
+                    ].videoId == next.videoId
+            }
+            guard isCurrent, let url = URL(string: result.streamUrl) else {
+                Log.player.info("GAPLESS_PREPARE skip id=\(next.videoId) reason=stale")
+                return
+            }
+            Log.player.info("GAPLESS_PREPARE enqueue id=\(next.videoId)")
+            await PlayerController.shared.enqueueApoloNext(
+                url: url,
+                title: self.cleanedTitle(
+                    next.title,
+                    artist: next.artistNamesDisplay
+                ),
+                artist: next.artistNamesDisplay,
+                videoId: next.videoId,
+                sourceMIMEType: result.mimeType,
+                isAtmos: result.audioQuality.lowercased().contains("atmos")
+            )
+            Log.player.info(
+                "GAPLESS_PREPARE videoId=\(next.videoId) prepared=1"
+            )
+        }
+    }
 
     /// Lossy sources (YouTube/JioSaavn/AAC) are allowed unless the user asked
     /// for FLAC explicitly (CD or Best FLAC).
@@ -994,6 +1069,7 @@ actor PlaybackManager {
                 NowPlaying.shared.currentSourceName = "Downloaded"
                 NowPlaying.shared.updateVideoAvailability()
             }
+            scheduleGaplessPrepare(after: videoId)
         }
         let localResult = PlaybackResult(
             streamUrl: localPath.absoluteString,
@@ -1458,6 +1534,7 @@ actor PlaybackManager {
                 NowPlaying.shared.currentSourceName = sourceName
                 NowPlaying.shared.currentResult = audioResult
             }
+            scheduleGaplessPrepare(after: videoId)
         }
         await publishVideoAvailability(
             // Video mode still belongs to the user's original YouTube ID.
