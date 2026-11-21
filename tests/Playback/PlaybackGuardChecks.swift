@@ -80,6 +80,35 @@ struct PlaybackGuardChecks {
         precondition(QueueAdvancePolicy.allowsNext(
             automatic: true, isResolvingNext: false
         ), "Automatic EOF still advances when no resolution is pending")
+
+        // Playlist source-unavailable regression: earlier Play All only
+        // logged a failed first item, leaving queueIndex at an unusable song.
+        // A valid second item may be tried, with a strict failure budget and
+        // no background auto-resume after Pause or an unsafe route handoff.
+        func skipUnavailable(
+            hasNext: Bool = true,
+            failures: Int = 1,
+            recoverable: Bool = true
+        ) -> Bool {
+            QueueAdvancePolicy.allowsSourceFailureSkip(
+                hasNext: hasNext,
+                consecutiveFailures: failures,
+                failureLimit: 3,
+                canRecoverSelection: recoverable
+            )
+        }
+        precondition(skipUnavailable(),
+                     "An unavailable first item may advance to the next song")
+        precondition(skipUnavailable(failures: 2),
+                     "A second failed source gets one final bounded attempt")
+        precondition(!skipUnavailable(failures: 3),
+                     "Three consecutive unavailable tracks must stop safely")
+        precondition(!skipUnavailable(hasNext: false),
+                     "The end of a playlist must never wrap or loop")
+        precondition(!skipUnavailable(recoverable: false),
+                     "Explicit Pause, interruption and unsafe audio route block auto-skip")
+        precondition(!skipUnavailable(failures: 0),
+                     "Only actual source failures can trigger recovery")
         precondition(!PlaybackIntentGuard.owns(
             expectedGeneration: 7, expectedVideoId: "ROSE",
             generation: 8, videoId: "END OF BEGINNING"
