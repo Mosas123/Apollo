@@ -306,17 +306,26 @@ actor PlaybackManager {
             guard let self else { return }
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
-            let next: SongItem? = await MainActor.run {
-                guard NowPlaying.shared.videoId == videoId,
-                      NowPlaying.shared.hasNext else { return nil }
-                let song = NowPlaying.shared.queueSongs[
-                    NowPlaying.shared.queueIndex + 1
-                ]
-                guard song.contentKind == .music else { return nil }
-                return song
+            let snapshot = await MainActor.run {
+                (
+                    current: NowPlaying.shared.videoId,
+                    index: NowPlaying.shared.queueIndex,
+                    count: NowPlaying.shared.queueSongs.count,
+                    hasNext: NowPlaying.shared.hasNext,
+                    next: NowPlaying.shared.hasNext
+                        ? NowPlaying.shared.queueSongs[
+                            NowPlaying.shared.queueIndex + 1
+                        ]
+                        : nil
+                )
             }
-            guard let next, !Task.isCancelled else {
-                Log.player.info("GAPLESS_PREPARE skip id=\(videoId) reason=no-next")
+            guard snapshot.current == videoId,
+                  snapshot.hasNext,
+                  let next = snapshot.next,
+                  next.contentKind == .music else {
+                Log.player.info(
+                    "GAPLESS_PREPARE skip id=\(videoId) reason=no-next current=\(snapshot.current ?? "nil") index=\(snapshot.index) count=\(snapshot.count) hasNext=\(snapshot.hasNext)"
+                )
                 return
             }
             Log.player.info("GAPLESS_PREPARE next id=\(next.videoId)")
