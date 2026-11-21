@@ -14,15 +14,20 @@ struct ListeningTimeAccumulator {
     mutating func observe(position: TimeInterval, uptime: TimeInterval) {
         guard position.isFinite, position >= 0,
               uptime.isFinite, uptime >= 0 else { return }
+        guard let previousPosition = lastPosition, let previousUptime = lastUptime else {
+            lastPosition = position
+            lastUptime = uptime
+            return
+        }
+        // Concurrent sampler callbacks can finish out of order: older samples
+        // must not rewind the baseline or cause duplicate credited audio.
+        guard uptime >= previousUptime else { return }
         defer {
             lastPosition = position
             lastUptime = uptime
         }
-        guard let lastPosition, let lastUptime, uptime >= lastUptime else {
-            return
-        }
-        let elapsed = uptime - lastUptime
-        let advanced = position - lastPosition
+        let elapsed = uptime - previousUptime
+        let advanced = position - previousPosition
         // A forward seek must not credit skipped music. Allow small precision/
         // scheduling drift between CoreMedia/MPV clocks and the system uptime.
         guard advanced > 0, advanced <= elapsed + 0.75 else { return }
