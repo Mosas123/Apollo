@@ -1168,6 +1168,8 @@ final class NowPlaying {
 
     /// Publishes a loaded image as the current artwork (cropped square).
     private func publishArtwork(_ image: UIImage) {
+        let radioArtworkStart = playbackKind == .radio
+            ? ProcessInfo.processInfo.systemUptime : nil
         let cropped = image.centerCroppedSquare()
         thumbnailUIImage = cropped
         displayedArtworkVideoId = videoId
@@ -1175,6 +1177,10 @@ final class NowPlaying {
         thumbnailVersion &+= 1
         updateDominantColors(from: cropped)
         PlayerController.shared.updateNowPlayingArtwork()
+        if let radioArtworkStart {
+            let elapsedMs = Int((ProcessInfo.processInfo.systemUptime - radioArtworkStart) * 1000)
+            Log.nowPlaying.info("RADIO_ARTWORK_UI publishMs=\(elapsedMs)")
+        }
     }
 
     /// YouTube can return HTTP 200 with a tiny placeholder for an unavailable
@@ -1468,6 +1474,7 @@ final class NowPlaying {
             streamURL: currentStreamURL
         )
         radioArtworkTask = Task { [weak self] in
+            let lookupStart = ProcessInfo.processInfo.systemUptime
             let resolved: ResolvedMetadata?
             if artist.isEmpty {
                 resolved = nil
@@ -1480,13 +1487,17 @@ final class NowPlaying {
             let providerCover = data.coverURL?.scheme?.lowercased() == "https"
                 ? data.coverURL : nil
             var image: UIImage?
+            var imageSource = "none"
             if let preferred {
                 image = try? await ArtworkLoader.image(for: preferred)
+                if image != nil { imageSource = "catalogue" }
             }
             if image == nil, let providerCover {
                 image = try? await ArtworkLoader.image(for: providerCover)
+                if image != nil { imageSource = "broadcaster" }
             }
             guard !Task.isCancelled else { return }
+            let lookupMs = Int((ProcessInfo.processInfo.systemUptime - lookupStart) * 1000)
             await MainActor.run {
                 guard let self, self.isPlaying, self.playbackKind == .radio,
                       self.liveTitle == display,
@@ -1494,16 +1505,33 @@ final class NowPlaying {
                           generation: self.playbackGeneration,
                           stationID: self.videoId,
                           streamURL: self.currentStreamURL
-                      ) else { return }
+                      ) else {
+                    Log.nowPlaying.debug("RADIO_ARTWORK_RESULT stale lookupMs=\(lookupMs)")
+                    return
+                }
                 if let image {
+                    let processingStart = ProcessInfo.processInfo.systemUptime
                     self.publishArtwork(image)
-                    self.liveSongInfo?.artwork = image.pngData()
+                    let encoded = image.pngData()
+                    self.liveSongInfo?.artwork = encoded
                     if let album = resolved?.album, self.liveSongInfo?.album == nil {
                         self.liveSongInfo?.album = album
                     }
+                    let processingMs = Int(
+                        (ProcessInfo.processInfo.systemUptime - processingStart) * 1000
+                    )
+                    Log.nowPlaying.info(
+                        "RADIO_ARTWORK_RESULT found source=\(imageSource) " +
+                        "lookupMs=\(lookupMs) processingMs=\(processingMs) " +
+                        "encoded=\(encoded != nil)"
+                    )
                 } else if self.lastRadioArtworkKey == key {
                     // Do not permanently suppress a retry when art was missing.
                     self.lastRadioArtworkKey = nil
+                    Log.nowPlaying.info(
+                        "RADIO_ARTWORK_RESULT missing lookupMs=\(lookupMs) " +
+                        "catalogueURL=\(preferred != nil) providerURL=\(providerCover != nil)"
+                    )
                 }
             }
         }
