@@ -88,26 +88,16 @@ jobs:
           IPA_PATH="build/Trop.ipa"
           test -f "$IPA_PATH"
 
-          # Create the floating nightly prerelease if missing, then replace the IPA asset.
-          if ! gh release view nightly >/dev/null 2>&1; then
-            gh release create nightly \
-              --prerelease \
-              --title "Nightly" \
-              --notes "Floating nightly IPA from the latest successful main build. Replaced on each push to main."
-          fi
-
-          # Remove prior Trop.ipa so upload is a clean overwrite.
-          EXISTING_ASSET_ID="$(gh api "repos/${{ github.repository }}/releases/tags/nightly" \
-            --jq '.assets[] | select(.name == "Trop.ipa") | .id' || true)"
-          if [ -n "${EXISTING_ASSET_ID:-}" ]; then
-            gh api -X DELETE "repos/${{ github.repository }}/releases/assets/${EXISTING_ASSET_ID}"
-          fi
-
-          gh release upload nightly "$IPA_PATH" --clobber
-
+          # GitHub immutable releases forbid deleting/replacing existing assets.
+          # Give each successful run (including reruns) a unique prerelease tag.
+          RELEASE_TAG="nightly-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           NOTES="$(printf '%s' "$COMMIT_SUBJECT" | head -n 1 | tr -d '\r')"
           if [ -z "$NOTES" ]; then
             NOTES="Nightly build #${RUN_NUMBER}"
           fi
-          # Single-line notes avoid breaking the YAML run block indentation.
-          gh release edit nightly --notes "Latest main build (#${RUN_NUMBER}). ${NOTES} (real)"
+
+          gh release create "$RELEASE_TAG" "$IPA_PATH" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Nightly #${RUN_NUMBER} (attempt ${GITHUB_RUN_ATTEMPT})" \
+            --notes "Built from main at ${GITHUB_SHA}. ${NOTES} (real)"
