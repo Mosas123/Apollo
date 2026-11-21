@@ -17,18 +17,14 @@ enum PlaybackQueue {
         guard !songs.isEmpty else { return }
         NowPlaying.shared.isSurpriseSession = false
         let index = min(max(startIndex, 0), songs.count - 1)
-        let first = songs[index]
         NowPlaying.shared.setQueue(songs, startIndex: index)
-        let intent = NowPlaying.shared.playbackGeneration
-        PlayerController.shared.markExplicitSelectionForInterruptionRecovery(
-            videoId: first.videoId, generation: intent
+        log.info(
+            "QUEUE_START context=\(context) index=\(index) count=\(songs.count) videoId=\(songs[index].videoId)"
         )
-        loggedTask(log, "\(context) failed") {
-            try await PlaybackManager.shared.resolveAndPlay(
-                videoId: first.videoId,
-                intent: intent
-            )
-        }
+        // The same generation-fenced start path as Next/Previous owns
+        // the selected metadata and bounded unavailable-source recovery.
+        // Never leave a failed playlist head pointing at the prior song.
+        NowPlaying.shared.playCurrentSong(logContext: context)
     }
 
     /// Shuffled variant of `play(_:startIndex:)`.
