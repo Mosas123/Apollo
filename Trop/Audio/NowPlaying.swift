@@ -164,6 +164,8 @@ final class NowPlaying {
     private var timer: Timer?
     private var icyTick = 0
     private var progressTick = 0
+    @ObservationIgnored private var lastHeartbeatUptime: TimeInterval?
+    @ObservationIgnored private var lastHeartbeatWasActive = false
     /// Bumped whenever the user starts/changes playback, so deferred autoplay
     /// work can abort instead of hijacking the new track.
     private(set) var playbackGeneration = 0
@@ -1342,6 +1344,22 @@ final class NowPlaying {
 
     @MainActor
     private func timerTick() {
+        // Device-only hang diagnostics: an active-scene delay here indicates
+        // main-actor / run-loop starvation, whereas a smoothly ticking timer
+        // during an unresponsive view points toward SwiftUI presentation.
+        let uptime = ProcessInfo.processInfo.systemUptime
+        let isForeground = UIApplication.shared.applicationState == .active
+        if isForeground, lastHeartbeatWasActive, let lastHeartbeatUptime {
+            let delayMs = Int((uptime - lastHeartbeatUptime) * 1000)
+            if delayMs >= 1_500 {
+                Log.nowPlaying.warning(
+                    "UI_HEARTBEAT_DELAY ms=\(delayMs) " +
+                    "radio=\(playbackKind == .radio) playing=\(isPlaying)"
+                )
+            }
+        }
+        lastHeartbeatUptime = uptime
+        lastHeartbeatWasActive = isForeground
         currentTime = PlayerController.shared.currentTime
         // `duration` arrives via mpv property events and
         // `updateNowPlayingProgress`; polling it every tick doubled the
@@ -1590,6 +1608,8 @@ final class NowPlaying {
     private func stopTimer() {
         timer?.invalidate()
         timer = nil
+        lastHeartbeatUptime = nil
+        lastHeartbeatWasActive = false
     }
 
     // MARK: Sleep timer
