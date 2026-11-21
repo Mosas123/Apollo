@@ -236,6 +236,37 @@ struct RadioAdvancedChecks {
             broadcastSong, currentICYRaw: "FIP", stationName: "FIP"
         ), "Station-only ICY remains eligible for broadcaster API fallback")
 
+        // Repeated ICY ticks for a song with no match must not query the
+        // artwork catalogue once per second; a fresh broadcaster URL may.
+        let artworkClock = Date(timeIntervalSince1970: 1_700_000_000)
+        let artworkRetry = artworkClock.addingTimeInterval(60)
+        expect(RadioBackgroundMetadataPolicy.mayAttemptArtwork(
+            key: "sting|desert rose|", failedKey: nil,
+            retryAfter: nil, now: artworkClock
+        ), "First live cover lookup proceeds immediately")
+        expect(!RadioBackgroundMetadataPolicy.mayAttemptArtwork(
+            key: "sting|desert rose|", failedKey: "sting|desert rose|",
+            retryAfter: artworkRetry, now: artworkClock.addingTimeInterval(1)
+        ), "Failed live cover is not retried on the next ICY tick")
+        expect(RadioBackgroundMetadataPolicy.mayAttemptArtwork(
+            key: "sting|desert rose|", failedKey: "sting|desert rose|",
+            retryAfter: artworkRetry, now: artworkRetry
+        ), "Failed cover becomes eligible again when cooldown expires")
+        expect(RadioBackgroundMetadataPolicy.mayAttemptArtwork(
+            key: "sting|desert rose|https://example.org/cover.jpg",
+            failedKey: "sting|desert rose|", retryAfter: artworkRetry,
+            now: artworkClock.addingTimeInterval(1)
+        ), "New broadcaster cover bypasses a failed catalogue-only lookup")
+        expect(RadioBackgroundMetadataPolicy.mayPublishStationArtwork(
+            isRadio: true, liveSongHasArtwork: false
+        ), "Radio station logo may show until song art arrives")
+        expect(!RadioBackgroundMetadataPolicy.mayPublishStationArtwork(
+            isRadio: true, liveSongHasArtwork: true
+        ), "Late radio station logo never replaces identified song artwork")
+        expect(RadioBackgroundMetadataPolicy.mayPublishStationArtwork(
+            isRadio: false, liveSongHasArtwork: true
+        ), "Regular song artwork continues to use its own thumbnail pipeline")
+
         print("PASS: \(passed) radio transport / metadata / station race checks")
     }
 }
