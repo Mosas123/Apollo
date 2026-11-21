@@ -140,6 +140,53 @@ struct RadioAdvancedChecks {
         expect(RadioFranceProvider.nowPlaying(from: wrongPosition) == nil,
                "Out-of-range FIP level must not publish stale metadata")
 
+        // Background audio is allowed to refresh station metadata, but an
+        // inactive transition or paused/unrelated media must not poll.
+        expect(RadioBackgroundMetadataPolicy.shouldRefresh(
+            isRadio: true, isPlaying: true, appState: .active
+        ), "Foreground radio playback polls station metadata")
+        expect(RadioBackgroundMetadataPolicy.shouldRefresh(
+            isRadio: true, isPlaying: true, appState: .background
+        ), "Background audio playback polls station metadata")
+        expect(!RadioBackgroundMetadataPolicy.shouldRefresh(
+            isRadio: true, isPlaying: true, appState: .inactive
+        ), "Transient inactive app does not initiate a network refresh")
+        expect(!RadioBackgroundMetadataPolicy.shouldRefresh(
+            isRadio: true, isPlaying: false, appState: .background
+        ), "Paused background radio never polls")
+        expect(!RadioBackgroundMetadataPolicy.shouldRefresh(
+            isRadio: false, isPlaying: true, appState: .background
+        ), "Music playback never polls a station provider")
+
+        let liveFields = RadioBackgroundMetadataPolicy.lockScreenFields(
+            stationTitle: "Radio Paradise", stationArtist: "",
+            songTitle: "Come Together", songArtist: "The Beatles"
+        )
+        expect(liveFields.title == "Come Together"
+               && liveFields.artist == "The Beatles"
+               && liveFields.album == "Radio Paradise",
+               "Now Playing shows the song and retains the station")
+        let noArtist = RadioBackgroundMetadataPolicy.lockScreenFields(
+            stationTitle: "FIP", stationArtist: "",
+            songTitle: "Unknown Composition", songArtist: ""
+        )
+        expect(noArtist.title == "Unknown Composition"
+               && noArtist.artist == "FIP" && noArtist.album == "FIP",
+               "Missing artist falls back to the station")
+        let noSong = RadioBackgroundMetadataPolicy.lockScreenFields(
+            stationTitle: "BBC Radio 6 Music", stationArtist: "BBC",
+            songTitle: nil, songArtist: nil
+        )
+        expect(noSong.title == "BBC Radio 6 Music"
+               && noSong.artist == "BBC" && noSong.album.isEmpty,
+               "No broadcaster song keeps original station metadata")
+        let stationEcho = RadioBackgroundMetadataPolicy.lockScreenFields(
+            stationTitle: "BBC Radio 6 Music", stationArtist: "BBC",
+            songTitle: "BBC Radio 6 Music", songArtist: "BBC"
+        )
+        expect(stationEcho == noSong,
+               "Station-name-only titles never masquerade as a detected song")
+
         print("PASS: \(passed) radio transport / metadata / station race checks")
     }
 }
