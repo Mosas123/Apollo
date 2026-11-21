@@ -244,8 +244,18 @@ final class PlayerController {
     }
 
     /// Radio titles come from whichever engine actually owns playback.
-    /// Never read a stale mpv ICY property while Apolo plays a station.
+    /// Never read a stale mpv/Apolo ICY title from the preceding station.
     func icyTitle() -> String? {
+        let selectedID = NowPlaying.shared.videoId
+        let (activeID, pendingID) = sharedState.withLock {
+            ($0.currentVideoId, $0.pendingVideoId)
+        }
+        guard RadioBackgroundMetadataPolicy.mayReadICY(
+            isRadio: NowPlaying.shared.playbackKind == .radio,
+            selectedStationID: selectedID,
+            activeStationID: activeID,
+            pendingStationID: pendingID
+        ) else { return nil }
         if apoloIsActive { return apoloBackend?.liveTitle }
         return withMpv { mpv -> String? in
             guard let cstr = mpv_get_property_string(mpv, "icy-title") else { return nil }
@@ -1795,8 +1805,10 @@ extension PlayerController {
         )
     }
 
-    func setNowPlayingMetadata() {
-        assertAudioSession(reason: "metadata")
+    func setNowPlayingMetadata(activateSession: Bool = true) {
+        // Pure metadata refreshes (e.g. background transition) must not steal
+        // audio focus from another app or undo an explicit user Pause.
+        if activateSession { assertAudioSession(reason: "metadata") }
         let np = NowPlaying.shared
         let isLiveRadio = np.playbackKind == .radio
         nowPlayingInfo.removeAll()
@@ -2028,7 +2040,7 @@ extension PlayerController {
                 if self.sharedState.withLock({ $0.desiredPlaying }) {
                     self.assertAudioSession(reason: "didEnterBackground")
                 }
-                self.setNowPlayingMetadata()
+                self.setNowPlayingMetadata(activateSession: false)
                 self.updateNowPlayingProgress()
                 NowPlaying.shared.refreshRadioMetadataForCurrentStation()
             }
@@ -2036,7 +2048,7 @@ extension PlayerController {
                 Task { @MainActor [weak self] in
                     try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
                     guard let self, UIApplication.shared.applicationState != .active else { return }
-                    self.setNowPlayingMetadata()
+                    self.setNowPlayingMetadata(activateSession: false)
                     self.updateNowPlayingProgress()
                 }
             }
