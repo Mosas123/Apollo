@@ -30,6 +30,19 @@ enum QueueAdvancePolicy {
     static func allowsNext(automatic: Bool, isResolvingNext: Bool) -> Bool {
         !automatic || !isResolvingNext
     }
+
+    /// A failed playlist head can be skipped, but only while the same
+    /// selection still intends playback and the audio route is safe.
+    /// Bound consecutive attempts so an unavailable catalogue cannot loop.
+    static func allowsSourceFailureSkip(
+        hasNext: Bool,
+        consecutiveFailures: Int,
+        failureLimit: Int,
+        canRecoverSelection: Bool
+    ) -> Bool {
+        hasNext && consecutiveFailures > 0
+            && consecutiveFailures < failureLimit && canRecoverSelection
+    }
 }
 
 
