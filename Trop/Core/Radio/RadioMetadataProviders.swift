@@ -21,6 +21,59 @@ struct RadioNowPlaying: Equatable, Sendable {
     let coverURL: URL?
 }
 
+/// Keep radio metadata current while iOS permits background audio execution.
+/// This never starts playback or asks iOS for extra background runtime.
+enum RadioAppExecutionState: Sendable {
+    case active
+    case background
+    case inactive
+}
+
+struct RadioLockScreenFields: Equatable, Sendable {
+    let title: String
+    let artist: String
+    let album: String
+}
+
+enum RadioBackgroundMetadataPolicy {
+    static func shouldRefresh(
+        isRadio: Bool,
+        isPlaying: Bool,
+        appState: RadioAppExecutionState
+    ) -> Bool {
+        guard isRadio, isPlaying else { return false }
+        switch appState {
+        case .active, .background:
+            return true
+        case .inactive:
+            return false
+        }
+    }
+
+    /// Surface the detected song without losing the station identity.
+    /// A station-only fallback is used when the broadcast has no valid song.
+    static func lockScreenFields(
+        stationTitle: String,
+        stationArtist: String,
+        songTitle: String?,
+        songArtist: String?
+    ) -> RadioLockScreenFields {
+        let station = stationTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stationCredit = stationArtist.trimmingCharacters(in: .whitespacesAndNewlines)
+        let song = songTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard song.count >= 2,
+              song.caseInsensitiveCompare(station) != .orderedSame else {
+            return RadioLockScreenFields(title: station, artist: stationCredit, album: "")
+        }
+        let credit = songArtist?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return RadioLockScreenFields(
+            title: song,
+            artist: credit.isEmpty ? station : credit,
+            album: station
+        )
+    }
+}
+
 protocol RadioMetadataProvider: Sendable {
     func metadata(for streamURL: URL, stationName: String) async -> RadioNowPlaying?
 }
