@@ -82,6 +82,27 @@ enum RadioBackgroundMetadataPolicy {
             || icy.artist.compare(provider.artist, options: options) == .orderedSame
     }
 
+    /// Failed catalogue image lookups must not restart on every 1-second ICY
+    /// poll. A new song or a newly supplied broadcaster URL bypasses cooldown.
+    static func mayAttemptArtwork(
+        key: String,
+        failedKey: String?,
+        retryAfter: Date?,
+        now: Date
+    ) -> Bool {
+        guard key == failedKey, let retryAfter else { return true }
+        return now >= retryAfter
+    }
+
+    /// The station icon can finish downloading after a current-song cover.
+    /// Once song artwork is published, a late station icon must not replace it.
+    static func mayPublishStationArtwork(
+        isRadio: Bool,
+        liveSongHasArtwork: Bool
+    ) -> Bool {
+        !isRadio || !liveSongHasArtwork
+    }
+
     /// Surface the detected song without losing the station identity.
     /// A station-only fallback is used when the broadcast has no valid song.
     static func lockScreenFields(
