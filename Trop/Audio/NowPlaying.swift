@@ -1507,7 +1507,9 @@ final class NowPlaying {
         // real cover as a fallback. Cancel and verify origin across awaits.
         // Treat a newly supplied broadcaster cover as a fresh opportunity
         // even when a catalogue-only attempt for this song recently failed.
-        let key = "\(artist.lowercased())|\(title.lowercased())|\(data.coverURL?.absoluteString ?? "")"
+        let albumKey = data.album?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        let coverKey = data.coverURL?.absoluteString ?? ""
+        let key = "\(artist.lowercased())|\(title.lowercased())|\(albumKey)|\(coverKey)"
         if let liveSongInfo, liveSongInfo.artwork != nil { return }
         if lastRadioArtworkKey == key { return }
         guard RadioBackgroundMetadataPolicy.mayAttemptArtwork(
