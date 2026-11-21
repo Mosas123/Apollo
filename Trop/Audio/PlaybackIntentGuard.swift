@@ -22,6 +22,17 @@ enum PlaybackIntentGuard {
 }
 
 
+/// Manual queue navigation is a fresh playback intent, even while a previous
+/// song's source is still resolving. Generation + track ownership fences
+/// prevent the stale resolver from publishing after a skip. Only an automatic
+/// EOF advance must wait for the active resolution to settle.
+enum QueueAdvancePolicy {
+    static func allowsNext(automatic: Bool, isResolvingNext: Bool) -> Bool {
+        !automatic || !isResolvingNext
+    }
+}
+
+
 /// A pause belongs to a playback selection, not to an audio backend.
 ///
 /// A new *user selection* may begin playing after an older selection was
