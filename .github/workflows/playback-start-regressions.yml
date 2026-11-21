@@ -8,6 +8,8 @@ on:
       - "Trop/Audio/PlayerController/AudioRouteChangePolicy.swift"
       - "Trop/Audio/PlayerController/ApoloFiniteAudioWatchdog.swift"
       - "Trop/Audio/NowPlaying.swift"
+      - "Trop/Playback/PlaybackStateService.swift"
+      - "Trop/Playback/ListeningTimeAccumulator.swift"
       - "Trop/SponsorBlock/SponsorBlockSkipPolicy.swift"
       - "Trop/SponsorBlock/SponsorBlockIntegration.swift"
       - "tests/Playback/**"
@@ -23,9 +25,11 @@ jobs:
           set -euo pipefail
           swiftc \
             Trop/Audio/PlaybackIntentGuard.swift \
+            Trop/Playback/ListeningTimeAccumulator.swift \
             Trop/Audio/PlayerController/ApoloFiniteAudioWatchdog.swift \
             Trop/SponsorBlock/SponsorBlockSkipPolicy.swift \
             tests/Playback/PlaybackGuardChecks.swift \
+            tests/Playback/ListeningTimeChecks.swift \
             -o "$RUNNER_TEMP/playback-guard-checks"
           "$RUNNER_TEMP/playback-guard-checks"
       - name: Verify headphone handoff and iOS interruption recovery policies

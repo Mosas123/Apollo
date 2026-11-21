@@ -602,7 +602,11 @@ extension PlayerController {
         guard PlaybackIntentGuard.isLatest(
             serial: requestSerial, latestSerial: playRequestSerial
         ) else { return }
-        if let videoId { await PlaybackStateService.shared.startTracking(videoId: videoId) }
+        if let videoId {
+            await PlaybackStateService.shared.startTracking(
+                videoId: videoId, initialPosition: playbackStart
+            )
+        }
         guard PlaybackIntentGuard.isLatest(
             serial: requestSerial, latestSerial: playRequestSerial
         ) else { return }
@@ -2320,7 +2324,10 @@ extension PlayerController {
             }
             guard self.apoloGeneration == generation else { return }
             if let videoId {
-                await PlaybackStateService.shared.startTracking(videoId: videoId)
+                await PlaybackStateService.shared.startTracking(
+                    videoId: videoId,
+                    initialPosition: NowPlaying.shared.currentTime
+                )
             }
         }
     }
