@@ -187,6 +187,55 @@ struct RadioAdvancedChecks {
         expect(stationEcho == noSong,
                "Station-name-only titles never masquerade as a detected song")
 
+        // Do not expose cached ICY metadata from station A while station B
+        // is being selected or while mpv has not committed the new stream.
+        expect(RadioBackgroundMetadataPolicy.mayReadICY(
+            isRadio: true, selectedStationID: "radio:B",
+            activeStationID: "radio:B", pendingStationID: nil
+        ), "Current fully loaded radio can publish ICY metadata")
+        expect(!RadioBackgroundMetadataPolicy.mayReadICY(
+            isRadio: true, selectedStationID: "radio:B",
+            activeStationID: "radio:A", pendingStationID: "radio:B"
+        ), "Old station ICY blocked during replacement")
+        expect(!RadioBackgroundMetadataPolicy.mayReadICY(
+            isRadio: true, selectedStationID: "radio:B",
+            activeStationID: "radio:B", pendingStationID: "radio:B"
+        ), "Pending new mpv load blocks premature ICY metadata")
+        expect(!RadioBackgroundMetadataPolicy.mayReadICY(
+            isRadio: false, selectedStationID: "video:one",
+            activeStationID: "video:one", pendingStationID: nil
+        ), "Music never inherits stale radio title")
+
+        let broadcastSong = RadioNowPlaying(
+            artist: "Sting", title: "Desert Rose",
+            album: "Brand New Day", coverURL: nil
+        )
+        let previousSong = RadioNowPlaying(
+            artist: "Sting", title: "Fields of Gold",
+            album: nil, coverURL: nil
+        )
+        expect(RadioBackgroundMetadataPolicy.acceptsProvider(
+            broadcastSong, currentICYRaw: nil, stationName: "FIP"
+        ), "Non-ICY stations may use provider current song")
+        expect(RadioBackgroundMetadataPolicy.acceptsProvider(
+            broadcastSong,
+            currentICYRaw: "Sting - Desert Rose", stationName: "FIP"
+        ), "Aligned ICY and broadcaster API can enrich artwork")
+        expect(!RadioBackgroundMetadataPolicy.acceptsProvider(
+            previousSong,
+            currentICYRaw: "Sting - Desert Rose", stationName: "FIP"
+        ), "Late provider response cannot overwrite newer in-stream title")
+        expect(!RadioBackgroundMetadataPolicy.acceptsProvider(
+            RadioNowPlaying(
+                artist: "Another Artist", title: "Desert Rose",
+                album: nil, coverURL: nil
+            ),
+            currentICYRaw: "Sting - Desert Rose", stationName: "FIP"
+        ), "Conflicting artist cannot replace actual in-stream recording")
+        expect(RadioBackgroundMetadataPolicy.acceptsProvider(
+            broadcastSong, currentICYRaw: "FIP", stationName: "FIP"
+        ), "Station-only ICY remains eligible for broadcaster API fallback")
+
         print("PASS: \(passed) radio transport / metadata / station race checks")
     }
 }
