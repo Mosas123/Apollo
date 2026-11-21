@@ -1860,8 +1860,12 @@ extension PlayerController {
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
         MPNowPlayingInfoCenter.default().playbackState = np.isPlaying ? .playing : .paused
+        // Log the *actual* Control Center fields. For radio, displayTitle
+        // remains the station name even when a live song is published.
+        let publishedTitle = nowPlayingInfo[MPMediaItemPropertyTitle] as? String ?? ""
+        let publishedArtist = nowPlayingInfo[MPMediaItemPropertyArtist] as? String ?? ""
         Log.player.info(
-            "NOW_PLAYING_PUBLISH title='\(np.displayTitle)' artist='\(np.displayArtist)' " +
+            "NOW_PLAYING_PUBLISH title='\(publishedTitle)' artist='\(publishedArtist)' " +
             "duration=\(duration) rate=\(nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] ?? 0) " +
             "artwork=\(np.thumbnailUIImage != nil) keys=\(nowPlayingInfo.keys.count)"
         )
@@ -1904,6 +1908,12 @@ extension PlayerController {
             nowPlayingInfo.removeValue(forKey: MPMediaItemPropertyArtwork)
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+        if np.playbackKind == .radio {
+            Log.player.info(
+                "RADIO_ARTWORK_SYSTEM image=\(np.thumbnailUIImage != nil) " +
+                "songArtwork=\(np.liveSongInfo?.artwork != nil)"
+            )
+        }
     }
 
     func updateNowPlayingProgress() {
