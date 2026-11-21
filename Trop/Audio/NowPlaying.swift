@@ -1365,7 +1365,8 @@ final class NowPlaying {
     /// Reads the stream's ICY title (the live song on a Shoutcast/Icecast
     /// station) and publishes it when it changes.
     private func refreshLiveTitle() {
-        guard let icy = PlayerController.shared.icyTitle(), !icy.isEmpty else { return }
+        guard isPlaying,
+              let icy = PlayerController.shared.icyTitle(), !icy.isEmpty else { return }
         guard let parsed = ICYTitleParser.parse(icy, stationName: displayTitle) else { return }
         let display = parsed.display
         guard liveTitle != display else { return }
@@ -1415,6 +1416,13 @@ final class NowPlaying {
                           streamURL: self.currentStreamURL
                       ) else { return }
                 if let data {
+                    // A broadcaster API can lag behind the actual ICY stream.
+                    // Never overwrite a more recent in-stream song title.
+                    guard RadioBackgroundMetadataPolicy.acceptsProvider(
+                        data,
+                        currentICYRaw: PlayerController.shared.icyTitle(),
+                        stationName: self.displayTitle
+                    ) else { return }
                     self.radioMetadataFailures = 0
                     self.radioMetadataCooldownUntil = nil
                     self.applyRadioNowPlaying(data)
