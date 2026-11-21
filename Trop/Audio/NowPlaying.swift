@@ -1208,12 +1208,22 @@ final class NowPlaying {
         return min(image.size.width, image.size.height) * image.scale
     }
 
+    private func mayPublishLoadedThumbnail(for videoId: String) -> Bool {
+        lastLoadedVideoId == videoId
+            && resolvedArtworkVideoId != videoId
+            && RadioBackgroundMetadataPolicy.mayPublishStationArtwork(
+                isRadio: playbackKind == .radio,
+                liveSongHasArtwork: liveSongInfo?.artwork != nil
+            )
+    }
+
     private func loadThumbnailFromCDN(
         videoId: String,
         thumbnailUrl: String? = nil,
         fallbackImage: UIImage? = nil,
         preferSourceArtwork: Bool = false
     ) {
+        guard mayPublishLoadedThumbnail(for: videoId) else { return }
         // Best source first: the track's own artwork upgraded to full
         // resolution, then ytimg step-downs, then the guaranteed hqdefault.
         var candidates: [String] = []
@@ -1274,13 +1284,13 @@ final class NowPlaying {
         }
         Task {
             for url in urls.prefix(fetchCount) {
-                guard lastLoadedVideoId == videoId, resolvedArtworkVideoId != videoId else { return }
+                guard mayPublishLoadedThumbnail(for: videoId) else { return }
                 do {
                     let platformImage = try await ArtworkLoader.image(for: url)
                     guard Self.isUsableArtwork(platformImage, for: url),
                           fallbackImage.map({ Self.artworkSide(platformImage) > Self.artworkSide($0) }) ?? true else { continue }
                     await MainActor.run {
-                        guard self.lastLoadedVideoId == videoId, self.resolvedArtworkVideoId != videoId else { return }
+                        guard self.mayPublishLoadedThumbnail(for: videoId) else { return }
                         self.publishArtwork(platformImage)
                         self.publishedArtwork = (videoId, url.absoluteString)
                     }
@@ -1291,7 +1301,7 @@ final class NowPlaying {
             }
             if paintedIndex == nil {
                 await MainActor.run {
-                    guard self.lastLoadedVideoId == videoId, self.resolvedArtworkVideoId != videoId else { return }
+                    guard self.mayPublishLoadedThumbnail(for: videoId) else { return }
                     if let fallbackImage {
                         publishArtwork(fallbackImage)
                     } else {
