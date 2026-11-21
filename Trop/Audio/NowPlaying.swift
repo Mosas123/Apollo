@@ -417,7 +417,12 @@ final class NowPlaying {
                 + "hasNext=\(hasNext) resolving=\(isResolvingNext)"
         )
         guard hasNext else { return }
-        guard !isResolvingNext else { return }
+        // The UI may navigate past a pending slow resolver. The new
+        // playbackGeneration owns the latest selection and invalidates the
+        // previous asynchronous result. Automatic EOF advances stay guarded.
+        guard QueueAdvancePolicy.allowsNext(
+            automatic: automatic, isResolvingNext: isResolvingNext
+        ) else { return }
         if !automatic {
             lastManualSkipTime = Date()
             let progress = duration > 0 ? currentTime / duration : 0
@@ -431,7 +436,8 @@ final class NowPlaying {
 
     func playPrevious() {
         guard hasPrevious else { return }
-        guard !isResolvingNext else { return }
+        // Previous is a manual selection too; never swallow it while a
+        // newer track is loading. Stale completions are identity-fenced.
         lastManualSkipTime = Date()
         queueIndex -= 1
         playCurrentSong(logContext: "playPrevious")
