@@ -1524,7 +1524,10 @@ final class NowPlaying {
             if artist.isEmpty {
                 resolved = nil
             } else {
-                resolved = await MetadataResolver.enrich(title: title, artist: artist)
+                // A broadcaster-supplied album disambiguates same-name recordings.
+                resolved = await MetadataResolver.enrich(
+                    title: title, artist: artist, album: data.album
+                )
             }
             guard !Task.isCancelled else { return }
             let preferred = ArtworkURLs.highRes(resolved?.artworkURL?.absoluteString)
