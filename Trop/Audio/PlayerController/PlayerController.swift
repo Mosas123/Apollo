@@ -708,6 +708,11 @@ extension PlayerController {
         }
         guard currentlyPaused != paused || forceBackendCommand
                 || apoloNeedsResume || explicitInterruptionRecovered else {
+            // During a new selection's pending resolution the previous backend
+            // may already be .paused while the new song's button says Pause.
+            // Keep the displayed intent in sync even when no backend command
+            // is needed; the selection-scoped Pause still fences the load.
+            if paused { NowPlaying.shared.isPlaying = false }
             updateNowPlayingProgress()
             return
         }
@@ -759,7 +764,19 @@ extension PlayerController {
     }
 
     func togglePlayPause() {
-        setPaused(playState.value == .playing)
+        let np = NowPlaying.shared
+        let selectionWantsPlayback = np.videoId.map {
+            wantsPlaybackForSelection(videoId: $0)
+        } ?? wantsPlayback
+        let shouldPause = PlaybackPausePolicy.shouldPauseOnToggle(
+            isResolvingSelection: np.isResolvingNext,
+            selectionWantsPlayback: selectionWantsPlayback,
+            backendReportsPlaying: playState.value == .playing
+        )
+        // Pause the previous backend too when a new source is still resolving.
+        // The new selection's generation fence prevents its delayed load or
+        // Apolo -> mpv fallback from starting after this explicit Pause.
+        setPaused(shouldPause, forceBackendCommand: np.isResolvingNext && shouldPause)
     }
 
     func setVolumeOverride(_ value: Double?) {
