@@ -773,6 +773,13 @@ extension PlayerController {
             selectionWantsPlayback: selectionWantsPlayback,
             backendReportsPlaying: playState.value == .playing
         )
+        Log.player.info(
+            "PLAYBACK_INTENT toggle gen=\(np.playbackGeneration) "
+                + "resolving=\(np.isResolvingNext) "
+                + "selectionDesired=\(selectionWantsPlayback) "
+                + "backendPlaying=\(playState.value == .playing) "
+                + "command=\(shouldPause ? "pause" : "play")"
+        )
         // Pause the previous backend too when a new source is still resolving.
         // The new selection's generation fence prevents its delayed load or
         // Apolo -> mpv fallback from starting after this explicit Pause.
