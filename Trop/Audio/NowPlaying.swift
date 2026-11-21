@@ -1333,7 +1333,10 @@ final class NowPlaying {
         Log.nowPlaying.debug("TIMER start videoId=\(self.videoId ?? "nil")")
         // Add to `.common` so progress keeps updating while the user scrolls
         // or drags the slider (the default mode pauses the timer).
-        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+        // Live radio has no seekable progress. Poll it once per second rather
+        // than rebuilding observable player state four times per second.
+        let interval: TimeInterval = playbackKind == .radio ? 1.0 : 0.25
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.timerTick()
             }
@@ -1351,7 +1354,7 @@ final class NowPlaying {
         let isForeground = UIApplication.shared.applicationState == .active
         if isForeground, lastHeartbeatWasActive, let lastHeartbeatUptime {
             let delayMs = Int((uptime - lastHeartbeatUptime) * 1000)
-            if delayMs >= 1_500 {
+            if delayMs >= (playbackKind == .radio ? 2_500 : 1_500) {
                 Log.nowPlaying.warning(
                     "UI_HEARTBEAT_DELAY ms=\(delayMs) " +
                     "radio=\(playbackKind == .radio) playing=\(isPlaying)"
@@ -1360,7 +1363,9 @@ final class NowPlaying {
         }
         lastHeartbeatUptime = uptime
         lastHeartbeatWasActive = isForeground
-        currentTime = PlayerController.shared.currentTime
+        if playbackKind != .radio {
+            currentTime = PlayerController.shared.currentTime
+        }
         // `duration` arrives via mpv property events and
         // `updateNowPlayingProgress`; polling it every tick doubled the
         // synchronous mpv reads on the main actor.
@@ -1374,14 +1379,14 @@ final class NowPlaying {
             ]
             UserDefaults.standard.set(payload, forKey: Self.positionKey)
         }
-        if progressTick % 4 == 0 {
+        if playbackKind == .radio || progressTick % 4 == 0 {
             PlayerController.shared.updateNowPlayingProgress()
         }
         if MusicPlaybackIdentity.isYouTube(videoId) {
             SponsorBlockIntegration.shared.tick()
         }
         icyTick += 1
-        if icyTick % 4 == 0, playbackKind == .radio {
+        if playbackKind == .radio {
             refreshLiveTitle()
             refreshRadioMetadataIfNeeded()
         }
