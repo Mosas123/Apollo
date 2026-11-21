@@ -257,6 +257,11 @@ struct RadioAdvancedChecks {
             failedKey: "sting|desert rose|", retryAfter: artworkRetry,
             now: artworkClock.addingTimeInterval(1)
         ), "New broadcaster cover bypasses a failed catalogue-only lookup")
+        expect(RadioBackgroundMetadataPolicy.mayAttemptArtwork(
+            key: "sting|desert rose|brand new day|",
+            failedKey: "sting|desert rose||", retryAfter: artworkRetry,
+            now: artworkClock.addingTimeInterval(1)
+        ), "New album credits bypass a failed no-album lookup")
         expect(RadioBackgroundMetadataPolicy.mayPublishStationArtwork(
             isRadio: true, liveSongHasArtwork: false
         ), "Radio station logo may show until song art arrives")
