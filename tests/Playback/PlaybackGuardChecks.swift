@@ -248,6 +248,8 @@ struct PlaybackGuardChecks {
                      "Podcast/radio selections may have nil identity")
         precondition(!canRetrySession(pendingID: "KETU", currentID: nil),
                      "Pending ID must match current source identity")
+        ListeningTimeChecks.run()
+
         print("PASS: 8 audio-session activation and deferred-resume checks")
 
         print("PASS: 8 early-EOF evidence classification regression checks")
