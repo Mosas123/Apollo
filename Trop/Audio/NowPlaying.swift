@@ -18,7 +18,8 @@ struct LiveSongInfo: Equatable {
     var title: String
     var artist: String
     var album: String?
-    var artwork: Data?
+    /// Direct UIKit image reference; never PNG-encode each radio song on the UI actor.
+    var artwork: UIImage?
 }
 
 /// Last known position while a failed network stream is being re-resolved.
@@ -177,6 +178,8 @@ final class NowPlaying {
     @ObservationIgnored private var radioMetadataFailures = 0
     @ObservationIgnored private var radioMetadataCooldownUntil: Date?
     @ObservationIgnored private var lastRadioArtworkKey: String?
+    @ObservationIgnored private var radioArtworkRetryKey: String?
+    @ObservationIgnored private var radioArtworkRetryAfter: Date?
     var lastManualSkipTime: Date?
     private var isResolvingNext = false
     private var consecutiveFailures = 0
@@ -549,6 +552,8 @@ final class NowPlaying {
         radioMetadataFailures = 0
         radioMetadataCooldownUntil = nil
         lastRadioArtworkKey = nil
+        radioArtworkRetryKey = nil
+        radioArtworkRetryAfter = nil
         self.radioPlaybackStatus = .connecting
         self.hasVideo = false
         self.isVideoMode = false
@@ -600,6 +605,8 @@ final class NowPlaying {
         radioMetadataFailures = 0
         radioMetadataCooldownUntil = nil
         lastRadioArtworkKey = nil
+        radioArtworkRetryKey = nil
+        radioArtworkRetryAfter = nil
         radioPlaybackStatus = .connecting
         currentSourceName = nil
         currentResult = nil
@@ -1456,6 +1463,8 @@ final class NowPlaying {
             liveTitle = display
             liveSongInfo = LiveSongInfo(title: title, artist: artist, album: data.album, artwork: nil)
             lastRadioArtworkKey = nil
+            radioArtworkRetryKey = nil
+            radioArtworkRetryAfter = nil
             showRadioPlaceholderArtwork()
         } else if liveSongInfo?.album == nil {
             liveSongInfo?.album = data.album
@@ -1463,9 +1472,17 @@ final class NowPlaying {
 
         // Prefer catalogue high-resolution art, but retain the broadcaster's
         // real cover as a fallback. Cancel and verify origin across awaits.
-        let key = "\(artist.lowercased())|\(title.lowercased())"
+        // Treat a newly supplied broadcaster cover as a fresh opportunity
+        // even when a catalogue-only attempt for this song recently failed.
+        let key = "\(artist.lowercased())|\(title.lowercased())|\(data.coverURL?.absoluteString ?? "")"
         if let liveSongInfo, liveSongInfo.artwork != nil { return }
         if lastRadioArtworkKey == key { return }
+        guard RadioBackgroundMetadataPolicy.mayAttemptArtwork(
+            key: key,
+            failedKey: radioArtworkRetryKey,
+            retryAfter: radioArtworkRetryAfter,
+            now: Date()
+        ) else { return }
         lastRadioArtworkKey = key
         radioArtworkTask?.cancel()
         let identity = RadioMetadataIdentity(
@@ -1512,8 +1529,10 @@ final class NowPlaying {
                 if let image {
                     let processingStart = ProcessInfo.processInfo.systemUptime
                     self.publishArtwork(image)
-                    let encoded = image.pngData()
-                    self.liveSongInfo?.artwork = encoded
+                    // Reuse the cropped UIImage directly. Encoding a potentially
+                    // multi-megabyte PNG here, then decoding it on every SwiftUI
+                    // player redraw, can cause foreground hitches.
+                    self.liveSongInfo?.artwork = self.thumbnailUIImage
                     if let album = resolved?.album, self.liveSongInfo?.album == nil {
                         self.liveSongInfo?.album = album
                     }
@@ -1523,11 +1542,13 @@ final class NowPlaying {
                     Log.nowPlaying.info(
                         "RADIO_ARTWORK_RESULT found source=\(imageSource) " +
                         "lookupMs=\(lookupMs) processingMs=\(processingMs) " +
-                        "encoded=\(encoded != nil)"
+                        "artworkReady=\(self.liveSongInfo?.artwork != nil)"
                     )
                 } else if self.lastRadioArtworkKey == key {
                     // Do not permanently suppress a retry when art was missing.
                     self.lastRadioArtworkKey = nil
+                    self.radioArtworkRetryKey = key
+                    self.radioArtworkRetryAfter = Date().addingTimeInterval(60)
                     Log.nowPlaying.info(
                         "RADIO_ARTWORK_RESULT missing lookupMs=\(lookupMs) " +
                         "catalogueURL=\(preferred != nil) providerURL=\(providerCover != nil)"
