@@ -183,7 +183,7 @@ final class NowPlaying {
     @ObservationIgnored private var radioArtworkRetryKey: String?
     @ObservationIgnored private var radioArtworkRetryAfter: Date?
     var lastManualSkipTime: Date?
-    private var isResolvingNext = false
+    private(set) var isResolvingNext = false
     private var consecutiveFailures = 0
     private static let maxConsecutiveFailures = 3
     /// Timestamps of the last mid-play failure per videoId, to bound retries.
