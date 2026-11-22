@@ -634,9 +634,9 @@ enum RecoveryFixture {
             }
         }
 
-        // Synthetic safe fixture: every source import row has a corresponding
-        // live source membership. This is NOT permission to delete user
-        // tombstones; production archives with orphans remain rejected.
+        // Synthetic fixture: an archive with only live import membership IDs,
+        // used for a late V2 SQL failure test. Orphans remain preserved
+        // separately in the original combined archive.
         let sourceV2 = combined.library.libraryV2
         let safeSource = TropLibraryCombinedBackupSnapshot(
             legacy: combined.library.legacy,
@@ -650,7 +650,9 @@ enum RecoveryFixture {
                 legacyRelations: sourceV2.legacyRelations,
                 omittedPrivateAliases: sourceV2.omittedPrivateAliases
             ),
-            legacyMemberships: combined.library.legacyMemberships
+            legacyMemberships: combined.library.legacyMemberships,
+            originScope: combined.library.originScope,
+            foreignTombstones: combined.library.foreignTombstones
         )
         let safeArchive = try TropLibraryCombinedBackupArchive.encode(safeSource)
 
