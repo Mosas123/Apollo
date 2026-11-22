@@ -21,7 +21,7 @@ cp Trop/Core/LibrarySync/TropLibraryV2RecoveryStore.swift \
 # Compile the exact same legacy+V2 combined-store code as the application.
 for name in TropLibraryBackupArchive TropLibraryBackupService \
             TropLibraryCombinedBackupArchive TropLibraryCombinedBackupService \
-            TropLibraryCombinedRestorePlanner; do
+            TropLibraryCombinedRestorePlanner TropLibraryCombinedRestorePreflight; do
     cp "Trop/Core/LibrarySync/$name.swift" \
         "$package/Sources/V2RecoveryGRDBFixture/$name.swift"
 done
