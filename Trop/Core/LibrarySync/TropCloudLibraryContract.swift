@@ -82,6 +82,23 @@ struct TropCloudLibraryRecord: Codable, Equatable, Sendable {
     }
 }
 
+/// Playlist ordering is user-owned data. Each membership has its own stable
+/// ID so duplicate appearances of the same recording are preserved.
+/// Concurrent reorder conflicts must be resolved by a later CloudKit adapter.
+struct TropCloudPlaylistEntry: Codable, Hashable, Sendable {
+    let entryID: UUID
+    let playlistID: TropCloudItemID
+    let recordingID: TropCloudItemID
+    var position: Int
+    var modifiedAt: Date
+    var deletedAt: Date?
+
+    var isValidForCloud: Bool {
+        playlistID.kind == .playlist && recordingID.kind == .recording
+            && position >= 0
+    }
+}
+
 enum TropCloudSyncOrigin: String, Sendable {
     case localUserAction
     case youtubeRefresh
