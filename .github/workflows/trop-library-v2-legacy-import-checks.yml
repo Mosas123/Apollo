@@ -1,0 +1,19 @@
+name: Trop Library V2 Legacy Import Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Core/LibrarySync/TropLibraryV2LegacyImporter.swift"
+      - "Trop/Database/DatabaseMigrations.swift"
+      - "Trop/Database/DatabaseService.swift"
+      - "scripts/test-trop-library-v2-legacy-import.sh"
+      - ".github/workflows/trop-library-v2-legacy-import-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  migration-guards:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate atomic legacy import schema and replay safety
+        run: bash scripts/test-trop-library-v2-legacy-import.sh
