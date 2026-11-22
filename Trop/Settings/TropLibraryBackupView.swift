@@ -45,7 +45,10 @@ struct TropLibraryBackupView: View {
             Section {
                 Label("Your library, in a portable file", systemImage: "externaldrive")
                     .font(.headline)
-                Text("Export saved music metadata and playlist order without needing a YouTube login or iCloud Drive. Choose a destination in Files, including supported third-party storage providers.")
+                Text(
+                    "Export music metadata and playlist order without a YouTube login or iCloud Drive. "
+                        + "Choose a destination in Files, including supported third-party providers."
+                )
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -61,7 +64,10 @@ struct TropLibraryBackupView: View {
                     }
                 }
                 .disabled(isPreparing)
-                Text("Includes saved songs, playlists and their entries, saved albums, followed artists and podcasts, and saved episodes. No downloaded audio, local paths, streaming links, passwords, cookies or YouTube mutation tokens.")
+                Text(
+                    "Includes saved songs, playlist entries, albums, artists, podcasts and saved episodes. "
+                        + "Excludes audio, device paths, streaming links, credentials and YouTube mutation tokens."
+                )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 Text("This file is NOT encrypted. Store it in a private, trusted location.")
