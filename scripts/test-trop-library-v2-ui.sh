@@ -44,6 +44,24 @@ if grep -vE '^[[:space:]]*//' Trop/Library/TropLibraryV2Screen.swift \
   exit 1
 fi
 
+# V2 playback is explicitly source-scoped. The UI must not turn its UUID
+# into an InnerTube video ID or guess a matching YouTube recording.
+grep -Fq 'TropLibraryV2PlaybackRouter.playSaved(recording)' \
+  Trop/Library/TropLibraryV2Screen.swift
+grep -Fq 'TropLibraryV2PlaybackRouter.playPlaylist(tracks, startingAt: index)' \
+  Trop/Library/TropLibraryV2Screen.swift
+grep -Fq 'TropLibraryV2PlaybackSourcePolicy.playbackKey(for: aliases)' \
+  Trop/Core/LibrarySync/TropLibraryV2PlaybackRouter.swift
+grep -Fq 'sourceAliases(forRecordingID' \
+  Trop/Core/LibrarySync/TropLibraryV2Store.swift
+grep -Fq 'PlaybackQueue.play(' \
+  Trop/Core/LibrarySync/TropLibraryV2PlaybackRouter.swift
+if grep -E 'InnerTubeClient|SearchService.shared.search|SyncBridge' \
+  Trop/Core/LibrarySync/TropLibraryV2PlaybackRouter.swift; then
+  echo 'V2 playback router unexpectedly relies on YouTube catalogue or legacy sync'
+  exit 1
+fi
+
 # Keep pure schema invariants from the foundation in every UI PR.
 bash scripts/test-trop-library-v2-foundation.sh
 echo 'Trop Library V2 UI wiring checks passed'
