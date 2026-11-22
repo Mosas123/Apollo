@@ -11,7 +11,6 @@ import GRDB
 actor PlaybackStateService {
     nonisolated static let shared = PlaybackStateService()
     private let db = DatabaseService.shared
-    private let innerTube = InnerTubeClient.tropShared
 
     private let historyDurationThreshold: TimeInterval = 30
     /// Live radio uses synthetic "radio:<uuid>" ids; they are streams, not
@@ -220,30 +219,9 @@ actor PlaybackStateService {
                 Log.playbackState.debug("Total play time incremented (+\(banked)ms)")
             }
 
-            let trackingUrl = await getCachedTrackingUrl(videoId: videoId)
-            if let trackingUrl {
-                Log.playbackState.debug("Sending playback to YTM for tracking")
-                Task {
-                    do {
-                        try await InnerTubeClient.tropShared.registerPlayback(trackingUrl: trackingUrl)
-                    } catch {
-                        Log.playbackState.error("YTM playback registration failed: \(error)")
-                    }
-                }
-            } else {
-                Log.playbackState.debug("No cached tracking URL for videoId=\(videoId) — skipping YTM registration")
-            }
         } catch {
             Log.playbackState.error("Failed to record playback: \(error)")
         }
-    }
-
-    private func getCachedTrackingUrl(videoId: String) async -> String? {
-        if let format = try? await db.fetchOne(FormatEntity.self, key: videoId),
-           let url = format.playbackUrl {
-            return url
-        }
-        return nil
     }
 
     private func reset() {
