@@ -1,0 +1,23 @@
+name: Trop Library V2 Account Isolation Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Core/LibrarySync/TropLibraryV2AccountIsolation.swift"
+      - "Trop/Services/SyncBridge.swift"
+      - "Trop/Home/HomeViewModel.swift"
+      - "Trop/Home/HomeScreenView.swift"
+      - "Trop/Components/AccountSheetHost.swift"
+      - "Trop/Playback/PlaybackStateService.swift"
+      - "tests/LibrarySync/TropLibraryV2AccountIsolationChecks.swift"
+      - "scripts/test-trop-v2-account-isolation.sh"
+      - ".github/workflows/trop-v2-account-isolation-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check local history and suppressed YTM account sync in V2
+        run: bash scripts/test-trop-v2-account-isolation.sh
