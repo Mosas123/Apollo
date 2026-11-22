@@ -27,7 +27,7 @@ for name in TropLibraryBackupArchive TropLibraryBackupService \
         "$package/Sources/V2RecoveryGRDBFixture/$name.swift"
 done
 
-# Extract the real v10, v11 and v12 SQL statements rather than retyping or
+# Extract the real v10-v13 SQL statements rather than retyping or
 # approximating the migration schema in a hand-maintained test fixture.
 python3 - "$package/v2.sql" <<'PY'
 import re
@@ -36,14 +36,15 @@ from pathlib import Path
 
 text = Path("Trop/Database/DatabaseMigrations.swift").read_text()
 statements = []
-for current, following in [("v10", "v11"), ("v11", "v12"), ("v12", "\n}")]:
+for current, following in [("v10", "v11"), ("v11", "v12"),
+                           ("v12", "v13"), ("v13", "\n}")]:
     section = text.split("static let " + current + ":", 1)[1]
     if following == "\n}":
         section = section.split("\n}", 1)[0]
     else:
         section = section.split("static let " + following + ":", 1)[0]
     statements += re.findall(r'try db\.execute\(sql: """(.*?)"""\)', section, re.S)
-assert len(statements) == 10, "Unexpected Library V2 migration DDL"
+assert len(statements) == 12, "Unexpected Library V2 migration DDL"
 Path(sys.argv[1]).write_text("\n--V2DDL--\n".join(statements))
 PY
 

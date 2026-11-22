@@ -64,7 +64,8 @@ enum TropLibraryCombinedBackupArchiveChecks {
                     sourceRowID: 11, playlistID: "legacy-playlist-1",
                     songID: "legacy-video-1", position: 0
                 )
-            ]
+            ],
+            originScope: "a0000000-0000-4000-8000-000000000099", foreignTombstones: []
         )
     }
 
@@ -114,7 +115,8 @@ enum TropLibraryCombinedBackupArchiveChecks {
                 radioFavorites: [], importLedger: [], legacyRelations: [],
                 omittedPrivateAliases: 0
             ),
-            legacyMemberships: original.legacyMemberships
+            legacyMemberships: original.legacyMemberships,
+            originScope: original.originScope, foreignTombstones: original.foreignTombstones
         )
         do {
             _ = try TropLibraryCombinedBackupArchive.encode(unsafe)
@@ -132,7 +134,8 @@ enum TropLibraryCombinedBackupArchiveChecks {
         // Reject duplicate legacy origin row IDs even if song metadata agrees.
         let duplicated = TropLibraryCombinedBackupSnapshot(
             legacy: original.legacy, libraryV2: original.libraryV2,
-            legacyMemberships: [original.legacyMemberships[0], original.legacyMemberships[0]]
+            legacyMemberships: [original.legacyMemberships[0], original.legacyMemberships[0]],
+            originScope: original.originScope, foreignTombstones: original.foreignTombstones
         )
         do {
             _ = try TropLibraryCombinedBackupArchive.encode(duplicated)
@@ -147,7 +150,8 @@ enum TropLibraryCombinedBackupArchiveChecks {
                     sourceRowID: 11, playlistID: "legacy-playlist-1",
                     songID: "different-song", position: 0
                 )
-            ]
+            ],
+            originScope: original.originScope, foreignTombstones: original.foreignTombstones
         )
         do {
             _ = try TropLibraryCombinedBackupArchive.encode(mismatched)
@@ -158,7 +162,8 @@ enum TropLibraryCombinedBackupArchiveChecks {
         // inferred from playlist position.
         let missing = TropLibraryCombinedBackupSnapshot(
             legacy: original.legacy, libraryV2: original.libraryV2,
-            legacyMemberships: []
+            legacyMemberships: [],
+            originScope: original.originScope, foreignTombstones: original.foreignTombstones
         )
         do {
             _ = try TropLibraryCombinedBackupArchive.encode(missing)
@@ -179,7 +184,8 @@ enum TropLibraryCombinedBackupArchiveChecks {
                 legacyRelations: original.libraryV2.legacyRelations,
                 omittedPrivateAliases: original.libraryV2.omittedPrivateAliases
             ),
-            legacyMemberships: original.legacyMemberships
+            legacyMemberships: original.legacyMemberships,
+            originScope: original.originScope, foreignTombstones: original.foreignTombstones
         )
         let remapArchive = try TropLibraryCombinedBackupArchive.encode(ledgerSource)
         let good = TropLibraryCombinedRestorePlanner.DestinationMembership(
@@ -243,15 +249,17 @@ enum TropLibraryCombinedBackupArchiveChecks {
                 legacyRelations: original.libraryV2.legacyRelations,
                 omittedPrivateAliases: original.libraryV2.omittedPrivateAliases
             ),
-            legacyMemberships: original.legacyMemberships
+            legacyMemberships: original.legacyMemberships,
+            originScope: original.originScope, foreignTombstones: original.foreignTombstones
         )
         let orphanArchive = try TropLibraryCombinedBackupArchive.encode(tombstoneSource)
-        do {
-            _ = try TropLibraryCombinedRestorePlanner.prepare(
-                archive: orphanArchive, insertedMemberships: [good]
-            )
-            preconditionFailure("Must reject an orphaned import tombstone")
-        } catch TropLibraryCombinedRestorePlanner.Blocker.orphanedImportTombstone {}
+        let quarantine = try TropLibraryCombinedRestorePlanner.prepare(
+            archive: orphanArchive, insertedMemberships: [good]
+        )
+        precondition(quarantine.foreignTombstones.count == 1)
+        precondition(quarantine.foreignTombstones[0].originScope == original.originScope)
+        precondition(quarantine.foreignTombstones[0].sourceMembershipID == 99)
+        precondition(quarantine.remappedImportLedger.isEmpty)
 
         // A corrupt envelope is never accepted by the remap planner.
         do {
@@ -286,7 +294,8 @@ enum TropLibraryCombinedBackupArchiveChecks {
                     sourceRowID: 12, playlistID: "legacy-playlist-1",
                     songID: "legacy-video-2", position: 1
                 )
-            ]
+            ],
+            originScope: original.originScope, foreignTombstones: original.foreignTombstones
         )
         let twoArchive = try TropLibraryCombinedBackupArchive.encode(twoSource)
         let colliding = TropLibraryCombinedRestorePlanner.DestinationMembership(
@@ -301,6 +310,19 @@ enum TropLibraryCombinedBackupArchiveChecks {
             preconditionFailure("Must reject duplicate destination row IDs")
         } catch TropLibraryCombinedRestorePlanner.Blocker.duplicateDestinationID {}
 
-        print("Combined legacy+V2 metadata archive and safe ID remap checks passed")
+        let foreign = TropLibraryCombinedBackupSnapshot.ForeignTombstone(
+            originScope: original.originScope,
+            sourceMembershipID: 99, entryID: nil, importedAt: date
+        )
+        let duplicate = TropLibraryCombinedBackupSnapshot(
+            legacy: original.legacy, libraryV2: original.libraryV2,
+            legacyMemberships: original.legacyMemberships,
+            originScope: original.originScope, foreignTombstones: [foreign, foreign]
+        )
+        do {
+            _ = try TropLibraryCombinedBackupArchive.encode(duplicate)
+            preconditionFailure("Duplicated scoped tombstones must fail")
+        } catch TropLibraryCombinedBackupError.invalidPayload {}
+        print("Combined legacy+V2 archive, scoped tombstones and remap checks passed")
     }
 }

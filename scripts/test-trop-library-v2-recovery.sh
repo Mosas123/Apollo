@@ -87,7 +87,7 @@ def ddl(section, next_section):
     return re.findall(r'try db\.execute\(sql: """(.*?)"""\)', chunk, re.S)
 
 queries = ddl("v10", "v11") + ddl("v11", "v12")
-part12 = migrations.split("static let v12:", 1)[1].split("\n}", 1)[0]
+part12 = migrations.split("static let v12:", 1)[1].split("static let v13:", 1)[0]
 queries += re.findall(r'try db\.execute\(sql: """(.*?)"""\)', part12, re.S)
 assert len(queries) == 10
 assert 'guard DatabaseService.shared.usesPersistentStore' in store
