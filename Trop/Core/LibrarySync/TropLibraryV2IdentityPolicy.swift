@@ -95,3 +95,45 @@ enum TropLibraryV2IdentityPolicy {
         return value
     }
 }
+
+
+/// The first V2 playback slice accepts only an explicitly saved, unambiguous
+/// provider-scoped audio ID. This intentionally does not infer one from title,
+/// artist, Trop UUID, a MusicBrainz metadata ID or a legacy YouTube video ID.
+/// YouTube audio can be added later behind an explicit opt-in and music-only
+/// provenance gate; it must never become an implicit fallback.
+enum TropLibraryV2PlaybackSourceError: Error, Equatable, LocalizedError {
+    case unavailable
+    case ambiguous
+
+    var errorDescription: String? {
+        switch self {
+        case .unavailable:
+            return "This song has no verified independent audio source yet. It stays saved in your library."
+        case .ambiguous:
+            return "More than one audio source is linked to this song. Choose a source before playing."
+        }
+    }
+}
+
+enum TropLibraryV2PlaybackSourcePolicy {
+    /// Only full-track sources with a dedicated non-YouTube playback route.
+    private static let supportedProviders: Set<String> = [
+        "audius", "qobuz", "jiosaavn", "addon"
+    ]
+
+    static func playbackKey(for aliases: [TropLibraryV2SourceAlias]) throws -> String {
+        let candidates = Set(aliases.compactMap { alias -> String? in
+            guard alias.scope == "global",
+                  supportedProviders.contains(alias.provider) else { return nil }
+            return "\(alias.provider):\(alias.externalID)"
+        })
+        guard !candidates.isEmpty else {
+            throw TropLibraryV2PlaybackSourceError.unavailable
+        }
+        guard candidates.count == 1, let key = candidates.first else {
+            throw TropLibraryV2PlaybackSourceError.ambiguous
+        }
+        return key
+    }
+}
