@@ -170,52 +170,62 @@ struct TropLibraryV2RecoveryView: View {
                 errorMessage = "Unable to export the snapshot. No data was changed."
             }
         }
-        .fileImporter(
-            isPresented: $showImporter,
-            // Files/iCloud providers may label a valid .json as public.data.
-            // Permit generic files and validate the actual JSON envelope.
-            allowedContentTypes: [.item]
-        ) { result in
-            Log.libraryView.info("V2_FILE_IMPORTER completion delivered")
-            do {
-                let url = try result.get()
-                let access = url.startAccessingSecurityScopedResource()
-                defer {
-                    if access { url.stopAccessingSecurityScopedResource() }
+        .sheet(isPresented: $showImporter) {
+            TropLibraryV2DocumentPicker(
+                onPick: { url in
+                    inspectExternalSnapshot(url)
+                    showImporter = false
+                },
+                onCancel: {
+                    showImporter = false
                 }
-                let byteCount = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize
-                if let byteCount, byteCount > TropLibraryV2RecoveryArchive.maximumBytes {
-                    throw TropLibraryV2RecoveryError.oversized
-                }
+            )
+        }
+    }
 
-                // Read at most the archive limit + 1 bytes, even when an
-                // external file provider supplies no reliable file size.
-                let handle = try FileHandle(forReadingFrom: url)
-                defer { try? handle.close() }
-                let data = try handle.read(
-                    upToCount: TropLibraryV2RecoveryArchive.maximumBytes + 1
-                ) ?? Data()
-                guard data.count <= TropLibraryV2RecoveryArchive.maximumBytes else {
-                    throw TropLibraryV2RecoveryError.oversized
-                }
-
-                preview = try TropLibraryV2RecoveryStore.preview(data)
-                Log.libraryView.info("V2_FILE_IMPORTER integrity verified")
-                feedback = "Archive integrity verified; nothing was restored."
-                errorMessage = nil
-            } catch TropLibraryV2RecoveryError.oversized {
-                Log.libraryView.warning("V2_FILE_IMPORTER oversized document")
-                preview = nil
-                errorMessage = "This file is too large for a V2 snapshot. Nothing was changed."
-            } catch TropLibraryV2RecoveryError.checksumMismatch {
-                Log.libraryView.warning("V2_FILE_IMPORTER checksum mismatch")
-                preview = nil
-                errorMessage = "Snapshot checksum mismatch. Nothing was changed."
-            } catch {
-                Log.libraryView.warning("V2_FILE_IMPORTER validation or picker failed")
-                preview = nil
-                errorMessage = "This file is not a valid Trop V2 snapshot. Nothing was changed."
+    @MainActor
+    private func inspectExternalSnapshot(_ url: URL) {
+        Log.libraryView.info("V2_FILE_IMPORTER UIKit selection handoff")
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer {
+            if scoped { url.stopAccessingSecurityScopedResource() }
+        }
+        do {
+            let byteCount = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize
+            if let byteCount, byteCount > TropLibraryV2RecoveryArchive.maximumBytes {
+                throw TropLibraryV2RecoveryError.oversized
             }
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            let data = try handle.read(
+                upToCount: TropLibraryV2RecoveryArchive.maximumBytes + 1
+            ) ?? Data()
+            guard data.count <= TropLibraryV2RecoveryArchive.maximumBytes else {
+                throw TropLibraryV2RecoveryError.oversized
+            }
+            preview = try TropLibraryV2RecoveryStore.preview(data)
+            Log.libraryView.info("V2_FILE_IMPORTER UIKit archive verified")
+            feedback = "Archive integrity verified; nothing was restored."
+            errorMessage = nil
+            localVerificationMessage = "Archive integrity verified. " +
+                "The file was read, not restored."
+            localVerificationAlert = true
+        } catch TropLibraryV2RecoveryError.oversized {
+            preview = nil
+            errorMessage = "This file is too large for a V2 snapshot. Nothing was changed."
+            localVerificationMessage = errorMessage ?? "Verification failed"
+            localVerificationAlert = true
+        } catch TropLibraryV2RecoveryError.checksumMismatch {
+            preview = nil
+            errorMessage = "Snapshot checksum mismatch. Nothing was changed."
+            localVerificationMessage = errorMessage ?? "Verification failed"
+            localVerificationAlert = true
+        } catch {
+            preview = nil
+            errorMessage = "This file is not a valid Trop V2 snapshot. Nothing was changed."
+            localVerificationMessage = errorMessage ?? "Verification failed"
+            localVerificationAlert = true
+            Log.libraryView.warning("V2_FILE_IMPORTER validation or file access failed")
         }
     }
 
@@ -229,7 +239,7 @@ struct TropLibraryV2RecoveryView: View {
                 try TropLibraryV2LocalSnapshotFinder.latest()
             }.value
             preview = try TropLibraryV2RecoveryStore.preview(found.bytes)
-            let message = "Archive integrity verified from Thrum. " 
+            let message = "Archive integrity verified from Thrum. "
                 + "\(preview?.recordings ?? 0) recordings, "
                 + "\(preview?.playlists ?? 0) playlists, "
                 + "\(preview?.entries ?? 0) playlist entries, "
