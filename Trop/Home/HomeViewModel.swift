@@ -115,6 +115,10 @@ final class HomeViewModel {
     }
 
     func restoreSession() async {
+        guard !TropLibraryV2AccountIsolation.isEnabled else {
+            isLoggedIn = false
+            return
+        }
         let loggedIn = await cookieStore.isLoggedIn()
         isLoggedIn = loggedIn
         guard loggedIn else { return }
@@ -122,6 +126,12 @@ final class HomeViewModel {
     }
 
     func handleSessionChange(loggedIn: Bool) {
+        guard !TropLibraryV2AccountIsolation.isEnabled else {
+            isLoggedIn = false
+            cachedPhase2Sections = []
+            mergeSections()
+            return
+        }
         isLoggedIn = loggedIn
         if loggedIn {
             Task {
@@ -235,7 +245,7 @@ final class HomeViewModel {
     }
 
     private func loadPhase2Sections() async {
-        guard isLoggedIn else { return }
+        guard !TropLibraryV2AccountIsolation.isEnabled, isLoggedIn else { return }
 
         async let ap: HomeSection = personalization.buildAccountPlaylists()
         async let dd: HomeSection = personalization.buildDailyDiscover()
