@@ -445,7 +445,8 @@ enum AddonSourceResolver {
                       id: track.id,
                       preferAtmos: policy.allowAtmos,
                       quality: policy.requestedQuality,
-                      allowHiRes: policy.allowHiRes
+                      allowHiRes: policy.allowHiRes,
+                      requireLossless: true
                   ),
                   !stream.isEncrypted, policy.accepts(stream) else { continue }
             let rank = policy.rank(stream)
