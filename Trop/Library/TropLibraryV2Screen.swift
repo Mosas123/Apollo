@@ -102,6 +102,11 @@ struct TropLibraryV2Screen: View {
             }
             .task { await refresh() }
             .refreshable { await refresh() }
+            .onReceive(
+                NotificationCenter.default.publisher(for: Notification.Name("trop.likeChanged"))
+            ) { _ in
+                Task { await refresh() }
+            }
             .alert("Create playlist", isPresented: $showCreatePlaylist) {
                 TextField("Playlist name", text: $newPlaylistName)
                 Button("Create") {
@@ -189,6 +194,10 @@ struct TropLibraryV2Screen: View {
     ) async {
         do {
             try await TropLibraryV2Store.setLiked(recordingID: recording.id, liked: liked)
+            await LikeStore.shared.refresh()
+            NotificationCenter.default.post(
+                name: Notification.Name("trop.likeChanged"), object: nil
+            )
             await refresh()
         } catch {
             feedback = "Could not update this favorite locally."
