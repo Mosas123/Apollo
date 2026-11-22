@@ -21,6 +21,18 @@ swiftc -swift-version 6 -strict-concurrency=complete \
   -o "$tmp_dir/v2-local-snapshot-checks"
 "$tmp_dir/v2-local-snapshot-checks"
 
+# The new envelope carries legacy and V2 without weakening their validators.
+swiftc -swift-version 6 -strict-concurrency=complete \
+  Trop/Core/LibrarySync/TropLibraryV2IdentityPolicy.swift \
+  Trop/Core/LibrarySync/TropLibraryBackupArchive.swift \
+  Trop/Core/LibrarySync/TropLibraryV2RecoveryArchive.swift \
+  Trop/Core/LibrarySync/TropLibraryCombinedBackupArchive.swift \
+  tests/LibrarySync/TropLibraryCombinedBackupArchiveChecks.swift \
+  -o "$tmp_dir/v2-combined-archive-checks"
+"$tmp_dir/v2-combined-archive-checks"
+swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryBackupService.swift
+swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryCombinedBackupService.swift
+
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2RecoveryStore.swift
 swiftc -frontend -parse Trop/Settings/TropLibraryV2RecoveryView.swift
 swiftc -frontend -parse Trop/Settings/TropLibraryV2DocumentPicker.swift
