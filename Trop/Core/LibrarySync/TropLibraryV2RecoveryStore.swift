@@ -144,7 +144,8 @@ enum TropLibraryV2RecoveryStore {
     }
 
     static func export() async throws -> Data {
-        try TropLibraryV2RecoveryArchive.encode(await snapshot())
+        let library = try await snapshot()
+        return try TropLibraryV2RecoveryArchive.encode(library)
     }
 
     /// Internal staging entry point. Not reachable from user settings yet.
