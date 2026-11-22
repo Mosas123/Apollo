@@ -57,7 +57,15 @@ enum TropLibraryCombinedBackupArchiveChecks {
             radioFavorites: [], importLedger: [], legacyRelations: [],
             omittedPrivateAliases: 2
         )
-        return .init(legacy: legacy, libraryV2: modern)
+        return .init(
+            legacy: legacy, libraryV2: modern,
+            legacyMemberships: [
+                .init(
+                    sourceRowID: 11, playlistID: "legacy-playlist-1",
+                    songID: "legacy-video-1", position: 0
+                )
+            ]
+        )
     }
 
     static func main() throws {
@@ -105,7 +113,8 @@ enum TropLibraryCombinedBackupArchiveChecks {
                 playlistEntries: original.libraryV2.playlistEntries,
                 radioFavorites: [], importLedger: [], legacyRelations: [],
                 omittedPrivateAliases: 0
-            )
+            ),
+            legacyMemberships: original.legacyMemberships
         )
         do {
             _ = try TropLibraryCombinedBackupArchive.encode(unsafe)
@@ -118,6 +127,43 @@ enum TropLibraryCombinedBackupArchiveChecks {
         precondition(recovered.library.libraryV2.items.count == 2)
         precondition(recovered.library.legacy.playlistEntries.count == 1)
         precondition(recovered.library.libraryV2.playlistEntries.count == 1)
+        precondition(recovered.library.legacyMemberships[0].sourceRowID == 11)
+
+        // Reject duplicate legacy origin row IDs even if song metadata agrees.
+        let duplicated = TropLibraryCombinedBackupSnapshot(
+            legacy: original.legacy, libraryV2: original.libraryV2,
+            legacyMemberships: [original.legacyMemberships[0], original.legacyMemberships[0]]
+        )
+        do {
+            _ = try TropLibraryCombinedBackupArchive.encode(duplicated)
+            preconditionFailure("Duplicated origin membership must be rejected")
+        } catch TropLibraryCombinedBackupError.invalidPayload {}
+
+        // A correct ID attached to the wrong song or playlist is corruption.
+        let mismatched = TropLibraryCombinedBackupSnapshot(
+            legacy: original.legacy, libraryV2: original.libraryV2,
+            legacyMemberships: [
+                .init(
+                    sourceRowID: 11, playlistID: "legacy-playlist-1",
+                    songID: "different-song", position: 0
+                )
+            ]
+        )
+        do {
+            _ = try TropLibraryCombinedBackupArchive.encode(mismatched)
+            preconditionFailure("Mismatched source identity must be rejected")
+        } catch TropLibraryCombinedBackupError.invalidPayload {}
+
+        // Missing the original membership mapping must never be silently
+        // inferred from playlist position.
+        let missing = TropLibraryCombinedBackupSnapshot(
+            legacy: original.legacy, libraryV2: original.libraryV2,
+            legacyMemberships: []
+        )
+        do {
+            _ = try TropLibraryCombinedBackupArchive.encode(missing)
+            preconditionFailure("Missing membership map must be rejected")
+        } catch TropLibraryCombinedBackupError.invalidPayload {}
         print("Combined legacy+V2 metadata archive, integrity and privacy checks passed")
     }
 }
