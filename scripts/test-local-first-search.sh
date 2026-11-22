@@ -29,6 +29,10 @@ grep -Fq "if viewModel.displaysV2LibraryResults {" Trop/Search/SearchView.swift
 grep -Fq "TropLibraryV2PlaylistScreen(playlist: playlist)" Trop/Search/SearchView.swift
 grep -Fq "RadioPlaybackCoordinator.playSaved(" Trop/Search/SearchView.swift
 
+# Saved songs in Search must route through explicit source aliases, never
+# through the legacy YouTube YTItem router.
+grep -Fq 'TropLibraryV2PlaybackRouter.playSaved(recording)' Trop/Search/SearchView.swift
+grep -Fq 'TropLibraryV2PlaybackSourceError' Trop/Search/SearchView.swift
 # Production Home and Explore must not bootstrap InnerTube feeds when V2
 # owns the library. These source checks catch accidental gate removal.
 grep -Fq "if libraryV2PreviewEnabled {" Trop/Home/HomeScreenView.swift
