@@ -106,6 +106,7 @@ enum TropLibraryBackupService {
     /// Only creates bytes in memory. The user explicitly chooses a Files
     /// destination; nothing is uploaded by this service.
     static func export() async throws -> Data {
-        try TropLibraryBackupArchive.encode(library: await snapshot())
+        let library = try await snapshot()
+        return try TropLibraryBackupArchive.encode(library: library)
     }
 }
