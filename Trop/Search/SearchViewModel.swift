@@ -340,7 +340,14 @@ final class SearchViewModel {
 
     private func fetchResults(for query: String, includeProviders: Bool) async {
         isFetching = true
-        defer { isFetching = false }
+        defer {
+            // A stale request cannot change the spinner or result phase for
+            // a newer query after cancellation.
+            if !Task.isCancelled && query == submittedQuery {
+                isFetching = false
+                updateResultPhase()
+            }
+        }
         // Do not await YouTube before publishing an already saved song,
         // artist, album or playlist. This task has its own cancellation guard.
         localFetchTask?.cancel()
@@ -456,7 +463,15 @@ final class SearchViewModel {
                 || !qobuzTracks.isEmpty || !jiosaavnTracks.isEmpty
                 || !addonTracks.isEmpty
         )
-        phase = hasContent ? .results : (error == nil ? .noResults : .failed)
+        if hasContent {
+            phase = .results
+        } else if isFetching {
+            // A fast local miss does not mean the slower external lookup
+            // has completed; keep the searching state until it settles.
+            phase = .loading
+        } else {
+            phase = error == nil ? .noResults : .failed
+        }
     }
 
     /// Artist-first layout: when the top result is an artist, lift it (plus
