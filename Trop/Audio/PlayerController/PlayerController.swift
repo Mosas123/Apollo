@@ -12,6 +12,7 @@ import Libmpv
 import MediaPlayer
 import Combine
 import AVFoundation
+import Network
 import UIKit
 import Metal
 
@@ -220,6 +221,19 @@ final class PlayerController {
     private var playRequestSerial: UInt64 = 0
     private var apoloMonitorTask: Task<Void, Never>?
     private var apoloTrackingTask: Task<Void, Never>?
+    /// NWPathMonitor distinguishes an unavailable network from an unsupported
+    /// audio codec. It never grants permission to start a paused track.
+    private let apoloNetworkMonitor = NWPathMonitor()
+    private var apoloNetworkUnavailable = false
+    private struct ApoloOfflinePlayback {
+        let videoId: String
+        let selectionGeneration: Int
+        let engineGeneration: UInt64
+        let position: TimeInterval
+    }
+    private var apoloOfflinePlayback: ApoloOfflinePlayback?
+    private var apoloOfflineAttemptID: UInt64 = 0
+    private var apoloOfflineRetryInFlight: UInt64?
     var isApoloActive: Bool { apoloIsActive }
 
     var currentTime: TimeInterval {
@@ -247,6 +261,7 @@ final class PlayerController {
         setupRemoteCommands()
         observeInterruptions()
         observeAudioSessionReset()
+        observeApoloNetworkPath()
         startMpv()
     }
 
@@ -703,6 +718,18 @@ extension PlayerController {
         if !paused && apoloAudioInterruptionActive {
             wasPlayingBeforeInterruption = true
             traceRecovery("playDeferredUntilInterruptionEnds")
+            return
+        }
+        // A user Play after an offline transport failure must re-resolve the
+        // source through Apolo, never "play" a failed decoder or wake MPVKit.
+        if !paused, let offline = apoloOfflinePlayback,
+           offline.videoId == NowPlaying.shared.videoId,
+           offline.selectionGeneration == NowPlaying.shared.playbackGeneration,
+           offline.engineGeneration == apoloGeneration {
+            retryOfflineApoloIfNeeded(reason: "manualPlay")
+            playState.send(.paused)
+            NowPlaying.shared.isPlaying = false
+            updateNowPlayingProgress()
             return
         }
         let currentlyPaused = playState.value != .playing
@@ -2155,6 +2182,10 @@ extension PlayerController {
     /// outstanding FFmpeg probe results and monitor ticks obsolete.
     private func deactivateApoloPlayback() {
         apoloGeneration &+= 1
+        // An old offline reconnect must never replace a new selection.
+        apoloOfflinePlayback = nil
+        apoloOfflineAttemptID &+= 1
+        apoloOfflineRetryInFlight = nil
         apoloMonitorTask?.cancel()
         apoloMonitorTask = nil
         apoloTrackingTask?.cancel()
@@ -2343,6 +2374,13 @@ extension PlayerController {
         } catch {
             guard apoloIsActive, apoloGeneration == generation else { return }
             Log.player.error("APOLO_BETA load failed: \(error)")
+            if ApoloOfflineRecoveryPolicy.shouldHold(
+                isFiniteAudio: !isLiveRadio,
+                isHTTPSource: ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+                networkUnavailable: apoloNetworkUnavailable
+            ), holdApoloOfflineFailure(videoId: videoId, generation: generation, position: backend.currentTime) {
+                return
+            }
             fallbackFromApolo(url: url, videoId: videoId, generation: generation)
         }
     }
@@ -2367,6 +2405,127 @@ extension PlayerController {
                     videoId: videoId,
                     initialPosition: NowPlaying.shared.currentTime
                 )
+            }
+        }
+    }
+
+    /// Observe Apple's system network route without using a private
+    /// entitlement, sending credentials, or assuming that 'satisfied' means
+    /// a specific streaming host is reachable.
+    private func observeApoloNetworkPath() {
+        apoloNetworkMonitor.pathUpdateHandler = { [weak self] path in
+            let unavailable = path.status != .satisfied
+            Task { @MainActor [weak self] in
+                self?.apoloNetworkDidChange(unavailable: unavailable)
+            }
+        }
+        apoloNetworkMonitor.start(
+            queue: DispatchQueue(label: "com.trop.apolo.network-path")
+        )
+    }
+
+    private func apoloNetworkDidChange(unavailable: Bool) {
+        guard unavailable != apoloNetworkUnavailable else { return }
+        apoloNetworkUnavailable = unavailable
+        Log.player.info("APOLO_NETWORK route=\(unavailable ? "unavailable" : "satisfied")")
+        if !unavailable {
+            retryOfflineApoloIfNeeded(reason: "networkRestored")
+        }
+    }
+
+    /// Called only for finite HTTP audio when the route is unavailable.
+    /// A transport failure is not proof that Apolo cannot decode this track.
+    @discardableResult
+    private func holdApoloOfflineFailure(
+        videoId: String?,
+        generation: UInt64,
+        position: TimeInterval
+    ) -> Bool {
+        guard let videoId, apoloIsActive,
+              apoloGeneration == generation,
+              NowPlaying.shared.videoId == videoId else { return false }
+        let safePosition = position.isFinite ? max(0, position) : 0
+        apoloOfflinePlayback = ApoloOfflinePlayback(
+            videoId: videoId,
+            selectionGeneration: NowPlaying.shared.playbackGeneration,
+            engineGeneration: generation,
+            position: safePosition
+        )
+        playState.send(.paused)
+        NowPlaying.shared.isPlaying = false
+        setNowPlayingMetadata()
+        Log.player.warning(
+            "APOLO_BETA offlineHold engine=apolo position=\(String(format: "%.3f", safePosition))"
+        )
+        // The network might have recovered between the HTTP failure and the
+        // renderer state notification. Do not strand the track in that race.
+        if !apoloNetworkUnavailable {
+            retryOfflineApoloIfNeeded(reason: "raceAfterNetworkRecovery")
+        }
+        return true
+    }
+
+    /// One auto-attempt on route restoration. If resolving still fails, keep
+    /// the same selection and allow an explicit Play to retry; never switch to
+    /// MPVKit solely because the network disappeared.
+    private func retryOfflineApoloIfNeeded(reason: String) {
+        guard let offline = apoloOfflinePlayback else { return }
+        let sameSelection = offline.videoId == NowPlaying.shared.videoId
+            && offline.selectionGeneration == NowPlaying.shared.playbackGeneration
+        let sameEngine = apoloIsActive && apoloGeneration == offline.engineGeneration
+        guard sameSelection, sameEngine else {
+            apoloOfflinePlayback = nil
+            return
+        }
+        guard apoloOfflineRetryInFlight == nil,
+              ApoloOfflineRecoveryPolicy.mayResume(
+                sameSelection: sameSelection,
+                sameEngineGeneration: sameEngine,
+                networkAvailable: !apoloNetworkUnavailable,
+                desiredPlaying: wantsPlayback,
+                explicitlyPaused: isExplicitlyPausedForCurrentSelection,
+                audioInterrupted: apoloAudioInterruptionActive,
+                audioActivationPending: isAudioSessionResumePendingForCurrentSelection
+              ) else { return }
+        apoloOfflineAttemptID &+= 1
+        let attempt = apoloOfflineAttemptID
+        apoloOfflineRetryInFlight = attempt
+        Log.player.info("APOLO_BETA offlineRetry reason=\(reason) engine=apolo")
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                if self.apoloOfflineRetryInFlight == attempt {
+                    self.apoloOfflineRetryInFlight = nil
+                }
+            }
+            guard self.apoloOfflinePlayback?.engineGeneration == offline.engineGeneration,
+                  self.apoloGeneration == offline.engineGeneration,
+                  !self.apoloNetworkUnavailable else { return }
+            await StreamCache.shared.remove(videoId: offline.videoId)
+            guard self.apoloGeneration == offline.engineGeneration,
+                  NowPlaying.shared.videoId == offline.videoId,
+                  NowPlaying.shared.playbackGeneration == offline.selectionGeneration,
+                  !self.apoloNetworkUnavailable else { return }
+            // The ordinary short-lived resume token must be refreshed here,
+            // not when offline began (the user may have been offline for hours).
+            NowPlaying.shared.rememberInterruptedPlayback(
+                offline.position, for: offline.videoId
+            )
+            do {
+                try await PlaybackManager.shared.resolveAndPlay(
+                    videoId: offline.videoId,
+                    intent: offline.selectionGeneration
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                guard self.apoloGeneration == offline.engineGeneration,
+                      NowPlaying.shared.videoId == offline.videoId,
+                      NowPlaying.shared.playbackGeneration == offline.selectionGeneration
+                else { return }
+                self.playState.send(.paused)
+                NowPlaying.shared.isPlaying = false
+                Log.player.warning("APOLO_BETA offlineRetry unresolved; manual Play may retry")
             }
         }
     }
@@ -2446,6 +2605,15 @@ extension PlayerController {
                     }
                     return
                 case .failed(let message):
+                    if ApoloOfflineRecoveryPolicy.shouldHold(
+                        isFiniteAudio: !isLiveRadio,
+                        isHTTPSource: ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+                        networkUnavailable: self.apoloNetworkUnavailable
+                    ), self.holdApoloOfflineFailure(
+                        videoId: videoId, generation: generation, position: backend.currentTime
+                    ) {
+                        return
+                    }
                     if isLiveRadio {
                         NowPlaying.shared.radioPlaybackStatus = .reconnecting
                         // Apolo itself owns three bounded reconnect attempts.
@@ -2466,6 +2634,14 @@ extension PlayerController {
                     self.fallbackFromApolo(url: url, videoId: videoId, generation: generation)
                     return
                 case .loading:
+                    if ApoloOfflineRecoveryPolicy.shouldHold(
+                        isFiniteAudio: !isLiveRadio,
+                        isHTTPSource: ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+                        networkUnavailable: self.apoloNetworkUnavailable
+                    ) {
+                        finiteAudioWatchdog.reset()
+                        continue
+                    }
                     if isLiveRadio {
                         NowPlaying.shared.radioPlaybackStatus =
                             loggedPlaying ? .reconnecting : .connecting
@@ -2530,6 +2706,14 @@ extension PlayerController {
                         NowPlaying.shared.isPlaying = false
                     }
                 case .idle:
+                    if ApoloOfflineRecoveryPolicy.shouldHold(
+                        isFiniteAudio: !isLiveRadio,
+                        isHTTPSource: ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+                        networkUnavailable: self.apoloNetworkUnavailable
+                    ) {
+                        finiteAudioWatchdog.reset()
+                        continue
+                    }
                     if isLiveRadio {
                         NowPlaying.shared.radioPlaybackStatus =
                             loggedPlaying ? .reconnecting : .connecting
