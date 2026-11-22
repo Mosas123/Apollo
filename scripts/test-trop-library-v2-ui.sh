@@ -5,9 +5,31 @@ cd "$(dirname "$0")/.."
 # V2 requires explicit user opt-in; existing data keeps using the old UI
 # until the new save routes are completely validated on an iPhone.
 grep -Fq 'libraryV2PreviewEnabled = false' Trop/ContentView.swift
-grep -Fq 'TropLibraryV2Screen()' Trop/ContentView.swift
+grep -Fq 'TropLibraryV2MainStyleView()' Trop/ContentView.swift
 grep -Fq 'Toggle("Use Trop Library V2"' Trop/Settings/SettingsView.swift
 grep -Fq 'guard !libraryV2PreviewEnabled else { return }' Trop/Settings/SettingsView.swift
+
+# Restore the original main-branch Library navigation and header without
+# reintroducing any legacy YouTube-keyed library reads, login or sync calls.
+swiftc -frontend -parse Trop/Library/TropLibraryV2MainStyleView.swift
+swiftc -frontend -parse Trop/Library/TropLibraryV2Screen.swift
+for category in Playlists Artists Albums Songs Podcasts Downloaded; do
+  grep -Fq 'title: "'"${category}"'"' \
+    Trop/Library/TropLibraryV2MainStyleView.swift
+done
+grep -Fq 'TabHeaderView(' Trop/Library/TropLibraryV2MainStyleView.swift
+grep -Fq '.floatingTabHeader(' Trop/Library/TropLibraryV2MainStyleView.swift
+grep -Fq 'TropLibraryV2Store.recordings()' \
+  Trop/Library/TropLibraryV2MainStyleView.swift
+grep -Fq 'TropLibraryV2Store.playlists()' \
+  Trop/Library/TropLibraryV2MainStyleView.swift
+grep -Fq 'TropLibraryV2Store.savedCatalogItems(kind: kind)' \
+  Trop/Library/TropLibraryV2MainStyleView.swift
+if grep -Ev '^[[:space:]]*//' Trop/Library/TropLibraryV2MainStyleView.swift \
+  | grep -E 'SyncBridge|InnerTube|CookieStore|AccountSheetState|youtubeMusic'; then
+  echo 'Main-style V2 UI unexpectedly uses legacy YouTube library/session'
+  exit 1
+fi
 
 # There must be only user-initiated writes, no hidden YouTube sync or
 # source API calls inside the new screen.
