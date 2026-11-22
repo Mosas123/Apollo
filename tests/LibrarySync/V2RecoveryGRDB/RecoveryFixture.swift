@@ -969,5 +969,9 @@ enum RecoveryFixture {
         // Mirrors the observed fresh-install V2 counts using SYNTHETIC rows.
         // All recovery/reset operations are confined to this isolated fixture.
         try await checkFreshV2ProfileCombinedRoundTrip()
+
+        // Simulate a new installation backed by real, separate SQLite files:
+        // persistent reopen, occupied race rejection, atomic rollback.
+        try checkFreshPersistentCombinedRestore()
     }
 }
