@@ -1,0 +1,20 @@
+name: Trop Library V2 Recovery Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Core/LibrarySync/TropLibraryV2RecoveryArchive.swift"
+      - "Trop/Core/LibrarySync/TropLibraryV2RecoveryStore.swift"
+      - "Trop/Core/LibrarySync/TropLibraryV2IdentityPolicy.swift"
+      - "tests/LibrarySync/TropLibraryV2RecoveryArchiveChecks.swift"
+      - "scripts/test-trop-library-v2-recovery.sh"
+      - ".github/workflows/trop-library-v2-recovery-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  recovery:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run V2 archive integrity and SQLite recovery fixtures
+        run: bash scripts/test-trop-library-v2-recovery.sh
