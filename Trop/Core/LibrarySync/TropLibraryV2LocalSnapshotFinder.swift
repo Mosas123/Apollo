@@ -11,7 +11,7 @@ enum TropLibraryV2LocalSnapshotFinder {
 
     static let filenamePrefix = "Trop-V2-Experimental-Snapshot"
 
-    struct LocatedSnapshot {
+    struct LocatedSnapshot: Sendable {
         let filename: String
         let bytes: Data
     }
