@@ -216,7 +216,9 @@ struct PortableLibraryCSVImporter: Sendable {
     /// BOM, CRLF, comma, semicolon, and tab delimiters. Avoids String.split,
     /// which loses quoted separators and empty trailing fields.
     private static func readRecords(_ text: String, delimiter: Character) throws -> [[String]] {
-        let chars = Array(text)
+        // Swift Character treats CRLF as a single grapheme cluster. Normalize
+        // before scanning so Windows exports do not collapse into one row.
+        let chars = Array(text.replacingOccurrences(of: "\r\n", with: "\n"))
         var records: [[String]] = []
         var row: [String] = []
         var field = ""
@@ -274,7 +276,8 @@ struct PortableLibraryCSVImporter: Sendable {
     }
 
     private static func detectDelimiter(_ text: String) -> Character {
-        let header = String(text.prefix(4_096).split(separator: "\n", maxSplits: 1).first ?? "")
+        let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
+        let header = String(normalized.prefix(4_096).split(separator: "\n", maxSplits: 1).first ?? "")
         let candidates: [Character] = [",", ";", "\t"]
         let counts = candidates.map { delimiter in
             var quoted = false
