@@ -8,7 +8,7 @@ extension RecoveryFixture {
     static func checkFreshV2ProfileCombinedRoundTrip() async throws {
         let playlistID = "c0000000-0000-4000-8000-00000000ffff"
 
-        func stableID(_ sequence: Int) -> String {
+        @Sendable func stableID(_ sequence: Int) -> String {
             "c0000000-0000-4000-8000-" + String(format: "%012x", sequence)
         }
 
