@@ -16,9 +16,14 @@ extension RecoveryFixture {
         }
         precondition(originalV2 == "Una Canción")
 
+        // Prior recovery tests deliberately restored synthetic lineage
+        // unrelated to this imported legacy playlist. Clear ONLY that test
+        // ledger, not the existing Trop-owned items/playlist/radios.
+        // Production migration never resets lineage or deletes user data.
         // The legacy map stores occurrences, not unique song identities.
         // Duplicate an entry on purpose, with a distinct source row ID.
         try await DatabaseService.shared.write { db in
+            try db.execute(sql: "DELETE FROM trop_v2_legacy_import_entry")
             try db.execute(sql: """
                 INSERT INTO playlist_song_map
                     (id, playlist_id, song_id, position)
