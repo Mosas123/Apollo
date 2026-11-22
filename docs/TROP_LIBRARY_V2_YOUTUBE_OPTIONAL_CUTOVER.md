@@ -62,9 +62,9 @@ Cancellation and current-query guards prevent old provider results
 from contaminating a newer search. The legacy search behavior stays
 available behind the old-library mode solely for a safe migration period.
 
-This is **not** the final provider-neutral catalogue. Local search still
-uses legacy song/album/artist rows, Home/Explore are still sourced from
-InnerTube, and playback/queue routes still contain YouTube assumptions.
+This was **not** the final provider-neutral catalogue at that stage.
+The later Home/Explore and V2-local-search slices below supersede those
+particular dependencies; playback/queue still contain YouTube assumptions.
 No new YouTube audio-discovery API or persistent music metadata index was
 implemented in this slice. Test the provider-only mode and incremental
 arrival on an iPhone **after** CI and a consolidated QA candidate, not
@@ -94,6 +94,31 @@ a stronger policy: V2 metadata may be displayed locally but must NEVER be
 played using an unresolved YouTube ID; only the separate DownloadsView
 may play verified file URLs. The UI still needs on-device QA after Xcode
 CI succeeds.
+
+## Third implementation slice — search the actual V2 saved library (22 Nov 2026)
+
+Search under experimental Library V2 now loads **Trop-owned recordings,
+playlists and saved radio favorites**, rather than calling
+`SearchService.localSearch` against legacy YouTube-keyed song/playlist rows.
+Title, artist and radio subtitle matches use locale-aware case/accent
+insensitive text containment. The Library filter and unfiltered results show
+those local items even when no remote provider succeeds; stale search tasks
+cannot publish into a different query. The non-V2 legacy search stays intact.
+
+**Recording rows are intentionally metadata-only:** saved V2 UUIDs are not
+passed to `YTItem` or the YouTube-first playback router. Playlist matches
+navigate to the Trop-owned V2 playlist screen; radio matches use the dedicated
+saved-station resolver and show a truthful offline failure rather than
+persisting a stream URL. External provider search stays independently
+playable as before.
+
+Current implementation reads V2 lists and limits displayed matches to 80
+recordings, 40 playlists and 40 radios. A properly indexed, scalable
+music-catalogue search (including artists/albums/podcasts and verified aliases),
+recording playback from V2, and refresh after mutations remain follow-ups.
+This is not the final catalogue and does **not** authorize migration, restore
+UI or removing YouTube legacy data. Swift 6 search-policy checks, view wiring
+checks and the integrated iOS Nightly must pass before any physical QA claim.
 
 ## Coupled implementation order — no extra user-facing IPA churn
 
