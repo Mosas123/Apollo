@@ -4,11 +4,11 @@ import Foundation
 struct PortableLibraryCSVChecks {
     static func main() throws {
         let parser = PortableLibraryCSVImporter()
-        let soundiiz = #"""
+        let soundiiz = """
         title,artist,album,isrc,platform,trackId,duration,addedDate
         "Hello, World","Artist ""A""","Album, One",US-AAA-23-00001,Spotify,track-1,201,2025-01-01
         Second Song,Another Artist,Other Album,US-AAA-23-00002,Qobuz,1099,180,2025-01-02
-        """#
+        """
         let first = try parser.parse(
             data: Data(soundiiz.utf8), fileName: "My Mix.csv",
             destinationAccountID: "profile-A"
