@@ -84,16 +84,33 @@ struct RadioStation: Identifiable, Hashable, Decodable, Sendable {
 
 enum RadioBrowserError: LocalizedError {
     case http(Int)
+    case stationUnavailable
 
     var errorDescription: String? {
         switch self {
         case .http(let code): return "Radio Browser returned HTTP \(code)."
+        case .stationUnavailable: return "This station is no longer available in the directory."
         }
     }
 }
 
 enum RadioBrowser {
     private static let host = "https://de1.api.radio-browser.info"
+
+    /// Always resolve a saved station's *current* stream before playback.
+    /// Store its UUID, never a URL that may expire or change ownership.
+    static func station(uuid rawUUID: String) async throws -> RadioStation {
+        let uuid = try TropLibraryV2RadioStore.canonicalStationUUID(rawUUID)
+        guard let url = URL(string: "\(host)/json/stations/byuuid/\(uuid)") else {
+            throw RadioBrowserError.stationUnavailable
+        }
+        guard let station = try await fetch(url).first(where: {
+            $0.stationuuid.lowercased() == uuid
+        }) else {
+            throw RadioBrowserError.stationUnavailable
+        }
+        return station
+    }
 
     /// Most-clicked stations across the directory.
     static func topStations(limit: Int = 80) async throws -> [RadioStation] {
