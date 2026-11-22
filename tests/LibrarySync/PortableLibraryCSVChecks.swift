@@ -9,10 +9,12 @@ struct PortableLibraryCSVChecks {
         "Hello, World","Artist ""A""","Album, One",US-AAA-23-00001,Spotify,track-1,201,2025-01-01
         Second Song,Another Artist,Other Album,US-AAA-23-00002,Qobuz,1099,180,2025-01-02
         """#
+        FileHandle.standardError.write(Data("CSV_CASE soundiiz\n".utf8))
         let first = try parser.parse(
             data: Data(soundiiz.utf8), fileName: "My Mix.csv",
             destinationAccountID: "profile-A"
         )
+        FileHandle.standardError.write(Data("CSV_CASE soundiiz-reimport\n".utf8))
         let again = try parser.parse(
             data: Data(soundiiz.utf8), fileName: "My Mix.csv",
             destinationAccountID: "profile-A"
@@ -38,6 +40,7 @@ struct PortableLibraryCSVChecks {
         spotify:track:\(spotifyID);Blinding Lights;The Weeknd;After Hours;USUG11904206
         spotify:track:\(spotifyID);Blinding Lights;The Weeknd;After Hours;USUG11904206
         """
+        FileHandle.standardError.write(Data("CSV_CASE exportify\n".utf8))
         let second = try parser.parse(
             data: Data(exportify.utf8), fileName: "Exportify.csv",
             destinationAccountID: "profile-A"
@@ -61,6 +64,7 @@ struct PortableLibraryCSVChecks {
         Una Canción\tCantante\tDisco
         Una Canción\tCantante\tDisco
         """
+        FileHandle.standardError.write(Data("CSV_CASE fallback\n".utf8))
         let third = try parser.parse(
             data: Data(fallback.utf8), fileName: "Favorites.csv",
             destinationAccountID: "profile-A", importAsPlaylist: false
@@ -69,6 +73,7 @@ struct PortableLibraryCSVChecks {
         precondition(third.libraryItems.count == 2)
         precondition(third.rows[0].item.source.provider == "portableFile")
         precondition(third.rows[0].item.source.remoteID != third.rows[1].item.source.remoteID)
+        FileHandle.standardError.write(Data("CSV_CASE fallback-reimport\n".utf8))
         let reimport = try parser.parse(
             data: Data(fallback.utf8), fileName: "Favorites.csv",
             destinationAccountID: "profile-A", importAsPlaylist: false
@@ -78,6 +83,7 @@ struct PortableLibraryCSVChecks {
         let bom = "\u{FEFF}title,artist\r\n" +
             "Café,Beyoncé\r\n" +
             "Héroes,David Bowie\r\n"
+        FileHandle.standardError.write(Data("CSV_CASE bom\n".utf8))
         let fourth = try parser.parse(
             data: Data(bom.utf8), fileName: "BOM.csv",
             destinationAccountID: "profile-A"
