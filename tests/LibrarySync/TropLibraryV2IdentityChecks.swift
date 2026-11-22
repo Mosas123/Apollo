@@ -59,6 +59,54 @@ enum TropLibraryV2IdentityChecks {
             fatalError("Scope must not be a URL")
         } catch TropLibraryV2ValidationError.invalidSourceScope {}
 
+        // Saving a V2 recording never implies that an arbitrary metadata
+        // alias is playable or that YouTube can be a hidden fallback.
+        let audius = try TropLibraryV2SourceAlias(
+            provider: "audius", externalID: "D7KyD"
+        )
+        let qobuz = try TropLibraryV2SourceAlias(
+            provider: "qobuz", externalID: "123"
+        )
+        let addon = try TropLibraryV2SourceAlias(
+            provider: "addon", externalID: "install:movie:id"
+        )
+        let youtube = try TropLibraryV2SourceAlias(
+            provider: "youtube", externalID: "legacy-video"
+        )
+        let mb = try TropLibraryV2SourceAlias(
+            provider: "musicbrainz", externalID: "metadata-only"
+        )
+        let accountScoped = try TropLibraryV2SourceAlias(
+            provider: "qobuz", scope: "account_1", externalID: "123"
+        )
+        assert(try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+            for: [youtube, mb, audius]
+        ) == "audius:D7KyD")
+        assert(try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+            for: [audius, audius]
+        ) == "audius:D7KyD")
+        assert(try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+            for: [addon]
+        ) == "addon:install:movie:id")
+
+        for unavailable in [
+            [TropLibraryV2SourceAlias](), [youtube], [mb],
+            [accountScoped], [youtube, mb]
+        ] {
+            do {
+                _ = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+                    for: unavailable
+                )
+                fatalError("Unverified source accepted")
+            } catch TropLibraryV2PlaybackSourceError.unavailable {}
+        }
+        do {
+            _ = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+                for: [audius, qobuz]
+            )
+            fatalError("Ambiguous sources auto-selected")
+        } catch TropLibraryV2PlaybackSourceError.ambiguous {}
+
         assert(Set(TropLibraryV2Kind.allCases.map(\.rawValue)).count == 6)
         print("Trop Library V2 identity checks passed")
     }
