@@ -145,6 +145,45 @@ archive never contains "youtube", private addon manifests or a stream URL.
 This is a test of metadata independence; it does NOT validate playback,
 source resolution without YouTube, radio connectivity, or real iPhone restore.
 
+## Legacy field audit — preservation versus provider state (22 Nov 2026)
+
+This classification is grounded in the shipped legacy schema
+(`Trop/Database/DatabaseMigrations.swift`), GRDB entity models
+(`Trop/Database/Entities/*.swift`), the actual snapshot allowlist and the
+additive sync mappings in `Trop/Services/TropLibraryStore.swift`.
+It is a **review/policy proposal**, not a change in the archive payload.
+Do not bump the combined envelope or enable restore until tests prove each
+selected field's round trip under real migrations.
+
+| Field(s) | Observed meaning | Recovery decision |
+| --- | --- | --- |
+| `song.liked`, `song.in_library`, `song.create_date` | Local favorite/library membership and original creation date | Already covered by legacy V1 metadata; keep |
+| `song.total_play_time` | Locally accumulated listening time, preserved by `SongEntity.merging` | Valuable user state; **currently missing** from archive. Decide whether listening history belongs in a separate opt-in backup before exporting |
+| `song.is_uploaded` | Legacy upload-origin flag, preserved on merges | Preserve as historical provenance only; do not claim uploaded media remains playable |
+| `song.is_video` | Audio/video media-type hint, preserved on merges | Candidate for optional portable metadata; no playback entitlement implied |
+| `song.modify_date` | Legacy modification date | Candidate to preserve for sorting/conflict semantics; currently synthesized as `createdAt` during combined restore |
+| `artist.is_podcast_channel` | Distinguishes a podcast channel; sync deliberately retains existing value | **High-priority safe field** for a future combined format; do not turn it into a required remote channel login |
+| `album.is_uploaded` | Legacy upload provenance retained by album sync | Preserve optional origin semantics, not file bytes |
+| `album.song_count`, `album.duration` | Cached album summary derived from remote catalogue | Optional historical display fallback; treat as nonauthoritative and revalidate rather than forcing it to be correct |
+| `playlist.is_auto_sync` | Explicit automatic sync behavior; provider sync may set it to true | **Never re-enable automatically after restore**. If intent is preserved, require a separate user opt-in before any remote synchronization |
+| `playlist.remote_song_count` | Provider-reported playlist count | Optional stale display hint, not an authoritative membership count |
+| `episode.podcast_name` | Optional display fallback when podcast entity is unavailable | Candidate for safe metadata allowlist, with validation and no mandatory provider |
+| `playlist_song_map.set_video_id` | Legacy remote edit/mutation identifier | **Exclude** from portable archive; do not replay a remote playlist mutation |
+| `song.library_add_token`, `song.library_remove_token` | YouTube-side library mutation credentials | **Strictly exclude**; never restore or log |
+| `thumbnail_url`, `format.playback_url`, downloaded paths | Provider artwork / ephemeral media URLs / local device paths | **Exclude**; regenerate artwork and resolve playback via active provider; audio downloads require a separate design |
+| `event`, `play_count` | Playback history | Not part of this metadata-only archive; assess separate optional privacy and retention policy |
+
+The combined v5 already captures bookmarked album `playlist_id` and artist
+`channel_id` as public optional provider hints. It also includes live
+playlist memberships, podcast/episode links, foreign tombstones and radio
+favorites. **Nothing above changes the standalone legacy V1 or V2-only V2
+archives.** The next implementation slice should be the clearly local and
+privacy-safe fields (`artist.is_podcast_channel`, `episode.podcast_name`,
+upload/video provenance, original modification dates) with strict validation
+and GRDB regression fixtures. A no-YouTube recovery must preserve local
+playlists, ordered podcast episodes and radio favorites without starting
+sync, silently discarding metadata or inserting remote credentials.
+
 Before any public Restore action:
 
 1. Validate V13 origin identity and foreign-ID mapping on fresh/upgraded
