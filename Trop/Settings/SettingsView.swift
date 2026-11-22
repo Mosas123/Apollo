@@ -28,6 +28,9 @@ struct SettingsView: View {
                 SettingsNavigationRow("Storage", icon: "internaldrive.fill") {
                     StorageSettingsView()
                 }
+                SettingsNavigationRow("Library Migration", icon: "arrow.triangle.2.circlepath") {
+                    TropLibraryMigrationPreviewView()
+                }
                 SettingsNavigationRow("Downloads", icon: "arrow.down.circle.fill") {
                     DownloadSettingsView()
                 }
