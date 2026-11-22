@@ -7,12 +7,19 @@ import Foundation
 enum TropLibraryV2PlaybackRouter {
     private static var requestGeneration = 0
 
+    private static var requiresLossless: Bool {
+        let mode = SettingsStore.shared.musicQualityMode
+        return mode == .cd || mode == .lossless
+    }
+
     static func playSaved(_ recording: TropLibraryV2Store.RecordingSummary) async throws {
         requestGeneration += 1
         let request = requestGeneration
         let playerGeneration = NowPlaying.shared.playbackGeneration
         let aliases = try await TropLibraryV2Store.sourceAliases(forRecordingID: recording.id)
-        let key = try TropLibraryV2PlaybackSourcePolicy.playbackKey(for: aliases)
+        let key = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+            for: aliases, requiresLossless: requiresLossless
+        )
         guard !Task.isCancelled, request == requestGeneration,
               playerGeneration == NowPlaying.shared.playbackGeneration else {
             throw CancellationError()
@@ -45,7 +52,9 @@ enum TropLibraryV2PlaybackRouter {
             let aliases = try await TropLibraryV2Store.sourceAliases(
                 forRecordingID: track.recordingID
             )
-            let key = try TropLibraryV2PlaybackSourcePolicy.playbackKey(for: aliases)
+            let key = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+            for: aliases, requiresLossless: requiresLossless
+        )
             queue.append(makeSong(
                 playbackKey: key, title: track.title,
                 artist: track.artist, duration: track.durationSeconds
