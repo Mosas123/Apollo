@@ -1,0 +1,22 @@
+name: Trop Library V2 UI Wiring Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Library/TropLibraryV2Screen.swift"
+      - "Trop/Core/LibrarySync/TropLibraryV2PlaybackCandidate.swift"
+      - "Trop/Core/LibrarySync/TropLibraryV2Store.swift"
+      - "Trop/ContentView.swift"
+      - "Trop/Settings/SettingsView.swift"
+      - "Trop/Database/DatabaseService.swift"
+      - "scripts/test-trop-library-v2-ui.sh"
+      - ".github/workflows/trop-library-v2-ui-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify V2 local-only UI and legacy isolation
+        run: bash scripts/test-trop-library-v2-ui.sh
