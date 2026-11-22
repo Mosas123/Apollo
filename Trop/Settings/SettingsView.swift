@@ -42,14 +42,16 @@ struct SettingsView: View {
 
             Section("Experimental library") {
                 Toggle("Use Trop Library V2", isOn: $libraryV2PreviewEnabled)
+                // The combined copy is needed BEFORE migration, including
+                // when the user has never enabled the V2 preview.
+                SettingsNavigationRow(
+                    "Combined Metadata Snapshot", icon: "externaldrive.badge.plus"
+                ) {
+                    TropLibraryCombinedBackupView()
+                }
                 if libraryV2PreviewEnabled {
                     SettingsNavigationRow("Experimental V2 Snapshot", icon: "externaldrive") {
                         TropLibraryV2RecoveryView()
-                    }
-                    SettingsNavigationRow(
-                        "Combined Metadata Snapshot", icon: "externaldrive.badge.plus"
-                    ) {
-                        TropLibraryCombinedBackupView()
                     }
                 }
                 Text(
