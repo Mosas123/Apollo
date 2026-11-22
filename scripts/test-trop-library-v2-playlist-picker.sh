@@ -17,6 +17,8 @@ grep -Fq 'else if TropLibraryV2AccountIsolation.isEnabled' Trop/Audio/PlayerMenu
 grep -Fq 'if TropLibraryV2AccountIsolation.isEnabled' Trop/Components/SongMenuSheet.swift
 grep -Fq 'AddSongToPlaylistSheet(song: song)' Trop/Audio/PlayerMenuSheet.swift
 grep -Fq 'AddSongToPlaylistSheet(song: song)' Trop/Components/SongMenuSheet.swift
+grep -Fq 'playlistPickerSelection = PlaylistPickerSelection(song: song)' Trop/Search/SearchView.swift
+grep -Fq '.sheet(item: $playlistPickerSelection)' Trop/Search/SearchView.swift
 
 # The shared sheet must list local playlists and call the new transaction, while
 # retaining legacy SyncBridge calls behind the V2 mode switch.
