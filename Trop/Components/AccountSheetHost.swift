@@ -33,12 +33,14 @@ final class AccountSheetState {
     private init() {}
 
     func restoreSession() async {
+        guard !TropLibraryV2AccountIsolation.isEnabled else { return }
         hasAttemptedTokenRefresh = false
         await loginModel.restoreSessionIfPresent()
     }
 
     func fetchAccountInfo() async {
-        guard loginModel.isLoggedIn, !isFetchingAccountInfo else { return }
+        guard !TropLibraryV2AccountIsolation.isEnabled,
+              loginModel.isLoggedIn, !isFetchingAccountInfo else { return }
         let generation = accountInfoGeneration
         let fetchID = UUID()
         isFetchingAccountInfo = true
@@ -96,6 +98,7 @@ final class AccountSheetState {
     }
 
     func handleLoginChange(_ loggedIn: Bool) {
+        guard !TropLibraryV2AccountIsolation.isEnabled else { return }
         if loggedIn {
             isLoginSheetPresented = false
             hasAttemptedTokenRefresh = false
@@ -114,6 +117,7 @@ final class AccountSheetState {
         hasAttemptedTokenRefresh = false
     }
     func refreshRotatedSession() async {
+        guard !TropLibraryV2AccountIsolation.isEnabled else { return }
         let base = await cookieStore.cookies()
         let sapisid = await cookieStore.sapisid()
         guard sapisid != nil else { return }
