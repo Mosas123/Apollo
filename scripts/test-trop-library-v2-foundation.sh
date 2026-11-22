@@ -94,8 +94,8 @@ print("Trop Library V2 additive SQLite schema checks passed")
 PY
 
 # The new store must never invoke remote YouTube mutations or read legacy tables.
-if grep -E 'InnerTube|SyncBridge|CookieStore|DELETE FROM|DROP TABLE|MutationService' \
-  Trop/Core/LibrarySync/TropLibraryV2Store.swift; then
+if grep -vE '^[[:space:]]*//' Trop/Core/LibrarySync/TropLibraryV2Store.swift \
+  | grep -E 'InnerTube|SyncBridge|CookieStore|DELETE FROM|DROP TABLE|MutationService'; then
   echo "V2 store unexpectedly depends on legacy sync or destructive SQL"
   exit 1
 fi
