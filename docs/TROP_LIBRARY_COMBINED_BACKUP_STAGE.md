@@ -19,14 +19,14 @@ It does not silently change the previous formats or move existing data.
 
 ## Transport contract
 
-- Format: `trop-library-combined-metadata`, version `2` (distinct from
-  the earlier standalone version numbers). This new internal version adds
-  provenance; version 1 was never released to users.
+- Format: `trop-library-combined-metadata`, version `3` (internal, not
+  released to users). Earlier combined v1/v2 prototypes were not shipped.
+  The standalone legacy v1 and standalone Library V2 v2 formats are unchanged.
 - JSON with sorted keys, dates in milliseconds and SHA-256 over the canonical
   payload. This is **corruption detection, not encryption/authentication**.
-- Payload consists of full `legacy` and `libraryV2` snapshot objects **plus**
-  `legacyMemberships` containing each original positive `playlist_song_map.id`,
-  playlist ID, song ID and position. Both library sections pass their existing
+- Payload consists of `legacy` and `libraryV2` snapshot objects, the original
+  `legacyMemberships`, a stable installation-local UUID `originScope`, and
+  `foreignTombstones` scoped to their original installation. Both library sections pass their existing
   allowlist/record/reference/privacy validators; the new membership map must
   correspond **exactly** to every legacy playlist entry, with no missing,
   duplicated or forged source row IDs. The independent legacy `.tropbackup` v1
@@ -43,14 +43,22 @@ It does not silently change the previous formats or move existing data.
 ## Restore is deliberately not available
 
 The V2 legacy-import ledger stores integer `playlist_song_map.id` values
-specific to **one database**. The combined v2 envelope now captures the
-original row-ID-to-playlist/song/position mapping in the **same** GRDB read,
-while PR #67 standalone legacy backup v1 still lacks those IDs.
+specific to **one database**. The combined v3 envelope captures the
+original row-ID-to-playlist/song/position map in the **same** GRDB read;
+PR #67 standalone legacy backup v1 does not include these IDs.
 
-**This fixes the missing-source-membership metadata, NOT the safety of
-cross-device restoration.** Imported-entry ledger tombstones may reference
-memberships already deleted from legacy. They are retained and counted as
-`ledgerEntriesWithMissingMembership` by the preview. Never replay them blindly.
+**V13 add-only migration:** `trop_v2_library_origin` stores a random
+installation UUID, not a device hardware ID. The separate
+`trop_v2_foreign_import_tombstone` table stores imported-at metadata
+with `origin_scope + source_membership_id` as its primary key. This
+separate namespace prevents old deleted-membership IDs from colliding
+with SQLite IDs on a different installation. No old rows are dropped.
+
+Orphaned legacy ledger rows can now be **retained as scoped foreign
+tombstones** rather than being discarded or assigned fictional local IDs.
+Their source UUID and optional V2 entry reference survive a combined
+backup/re-export. This is still internal, without a user restore button,
+and it does not guarantee playable audio or all production migrations.
 
 ### Read-only destination remapping prototype
 
@@ -60,11 +68,12 @@ the exact playlist/song/position identity, checks completeness, positive
 destination IDs, unique sources and unique destination IDs, then builds a
 **new V2 import ledger in memory** using only mapped destination IDs.
 
-It **fails closed** when a deleted source membership is still mentioned by
-the import ledger (orphan tombstone), because there is no safe destination
-identity for it yet. It also refuses missing, foreign and mismatched rows.
-The planner does **not** read/write the production DB, allocate IDs,
-create a new source origin, delete a tombstone or enable restore UI.
+The planner maps only *live* source memberships to local SQLite IDs.
+An orphan from the V2 import ledger becomes a scoped tombstone under
+`source.originScope`; existing foreign tombstones are carried forward.
+Duplicate origin+ID keys fail validation. Missing/foreign/mismatched live
+rows still fail closed. The planner performs no database writes and does
+not enable restore UI.
 
 `TropLibraryCombinedRestorePreflight.requireEmpty(db)` adds a separate,
 read-only GRDB safety check intended to run **inside the eventual single
@@ -76,35 +85,34 @@ migration, importing or restore; a valid empty schema is required.
 
 The GRDB fixture separately tests fresh SQLite `AUTOINCREMENT`-assigned IDs
 that differ from the original source ID, verifies the remapped ledger and
-proves an orphan rejection rolls back a sandbox transaction. This test is
-not a complete legacy+V2 restore and is not on-device QA.
+proves an injected failure after a valid remap rolls back a sandbox
+transaction. This is not on-device QA.
 
-Remaining design: an origin-scoped, stable identity for deleted membership
-tombstones, source/destination provenance and idempotent/repeat restore.
-Until that is solved, a combined backup with orphan imports is explicitly
-**blocked from full restoration**; dropping these tombstones silently is
-not acceptable.
+Remaining design: compatibility with earlier experimental archive
+versions, proof against production migrations and schemas, complete
+roundtrip of all metadata, idempotence guarantees and on-device QA.
+There is no user-facing restoration pathway.
 
 ### Internal sandbox restore implementation
 
 The experimental TropLibraryCombinedRestoreStore now composes the existing
 empty-destination preflight, legacy metadata insertion, SQLite-assigned
-membership IDs, fail-closed ledger remapping, and all six V2 metadata tables
-in ONE GRDB write transaction. This entry point is **not connected to UI**;
-it never deletes or overwrites a nonempty installation. The GRDB fixture
-exercises orphan-ledger rejection, injected late SQL failure with both sets
-of rows rolled back, a safe fixture round trip, and repeat-restore refusal.
+membership IDs, origin-scoped foreign tombstones and all six V2 metadata
+tables in ONE GRDB write transaction. It is **not connected to UI** and
+does not overwrite an existing library. The GRDB fixture now covers
+failure during foreign-tombstone insertion, late SQL failure with legacy
+and V2 rollback, scoped metadata re-export and repeat-restore refusal.
+These are test claims to verify in the latest CI.
 
-**Limits:** it cannot restore an archive with orphan import tombstones, user
-audio, history, downloaded file paths, tokens, or private addon aliases.
+**Limits:** it cannot restore audio, history, downloaded file paths, tokens
+or private addon aliases, even when tombstone metadata survives.
 Legacy episode/artist/album relations beyond the existing allowlisted metadata
 and migrations still need deeper restore audits before user release.
 
 Before any public Restore action:
 
-1. Design a stable origin identity plus *destination remapping* and tombstone
-   strategy with explicit foreign-device behavior. Refuse ambiguous mappings, rather than
-   silently treating foreign IDs as local rows.
+1. Validate V13 origin identity and foreign-ID mapping on fresh/upgraded
+   production schemas, refusing all ambiguities or duplicate origin keys.
 2. Preserve legitimate duplicate playlist positions (V2) while respecting
    legacy uniqueness rules; never de-duplicate across independent namespaces.
 3. Validate the internal all-or-nothing **legacy+V2** GRDB restore against
@@ -130,7 +138,7 @@ and refuses addon-private aliases. `test-trop-library-v2-grdb-integration.sh`
 builds the *actual production store files* against pinned GRDB 7.12.0,
 asserting a combined export uses exactly one database read, preserves
 both legacy and V2 rows, captures actual SQLite-assigned membership IDs,
-rejects orphan-ledger remapping within a rolled-back sandbox transaction,
+checks scoped orphan preservation and rollback after failed tombstone insertion,
 and verifies destination-preflight guards on missing schemas, legacy rows
 and downloaded-track data.
 CI is not an on-device restore test; check the HEAD workflow result before
