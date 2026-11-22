@@ -6,6 +6,30 @@ also passed, rebuilding **24 V2 recordings, 4 playlists, 10 playlist entries**
 without writing to the active library. This validates metadata restoration
 logic, **not** production device recovery or downloaded media.
 
+## On-device Documents copy and later export — staging
+
+The Combined Metadata Snapshot screen now supports two independent steps:
+
+- **Save a copy on this iPhone** captures and validates current combined
+  metadata, writes a uniquely named JSON file into the app's Documents
+  directory with atomic replacement-free file creation, and revalidates the
+  stored bytes. It neither edits the music database nor overwrites older files.
+- **Export latest local copy to Files** reads and validates the newest existing
+  snapshot in Documents. It opens the normal system file exporter for a
+  user-selected destination such as iCloud Drive. This **does not** capture a
+  fresh library snapshot; to include newer likes/playlists first, save again.
+- Both actions work internally even if the app's local Documents folder is
+  hidden by iOS Files. The Info.plist already declares
+  `UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace`; the
+  installed IPA and iOS File Provider still require on-device visibility QA.
+- **Local-only is not independent backup.** Removing the app or losing the
+  device can also lose its Documents directory. Export another copy somewhere
+  outside Trop before uninstalling or attempting migration. The snapshot
+  contains metadata but no downloaded audio, credentials or history.
+- New strict Swift 6 fixture verifies unique files, actual disk contents and
+  invalid/oversized rejection. Exact-commit CI and in-app iPhone QA remain
+  required before this is considered verified.
+
 ## Files backup and verified rehearsal
 
 - **Combined Metadata Snapshot** under Settings → Experimental library exports
