@@ -38,7 +38,7 @@ struct TropLibraryCombinedBackupView: View {
                         systemImage: "square.and.arrow.up"
                     )
                 }
-                .disabled(isPreparing || isVerifying)
+                .disabled(isPreparing || isVerifying || isRehearsing)
                 Text(
                     "You choose the destination in Files. Keep Trop installed and "
                         + "do not rely on this experimental file as your only backup: "
@@ -57,14 +57,14 @@ struct TropLibraryCombinedBackupView: View {
                         systemImage: "checkmark.shield"
                     )
                 }
-                .disabled(isPreparing || isVerifying)
+                .disabled(isPreparing || isVerifying || isRehearsing)
 
                 Button {
                     showPicker = true
                 } label: {
                     Label("Verify another file from Files", systemImage: "doc.text.magnifyingglass")
                 }
-                .disabled(isPreparing || isVerifying)
+                .disabled(isPreparing || isVerifying || isRehearsing)
 
                 Text(
                     "Local verification reads On My iPhone → Thrum, without opening "
