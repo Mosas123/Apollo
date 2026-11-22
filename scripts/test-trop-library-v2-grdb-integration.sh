@@ -15,6 +15,14 @@ cp tests/LibrarySync/V2RecoveryGRDB/LegacyImporterFixture.swift \
     "$package/Sources/V2RecoveryGRDBFixture/LegacyImporterFixture.swift"
 cp tests/LibrarySync/V2RecoveryGRDB/FreshV2ProfileFixture.swift \
     "$package/Sources/V2RecoveryGRDBFixture/FreshV2ProfileFixture.swift"
+cp tests/LibrarySync/V2RecoveryGRDB/SilentLog.swift \
+    "$package/Sources/V2RecoveryGRDBFixture/SilentLog.swift"
+cp Trop/Database/DatabaseMigrations.swift \
+    "$package/Sources/V2RecoveryGRDBFixture/DatabaseMigrations.swift"
+cp Trop/Database/TropDatabaseMigrationSequence.swift \
+    "$package/Sources/V2RecoveryGRDBFixture/TropDatabaseMigrationSequence.swift"
+cp Trop/Core/LibrarySync/TropLibraryCombinedRestoreRehearsal.swift \
+    "$package/Sources/V2RecoveryGRDBFixture/TropLibraryCombinedRestoreRehearsal.swift"
 cp Trop/Core/LibrarySync/TropLibraryV2LegacyImporter.swift \
     "$package/Sources/V2RecoveryGRDBFixture/TropLibraryV2LegacyImporter.swift"
 cp Trop/Core/LibrarySync/TropLibraryV2MigrationDryRun.swift \
