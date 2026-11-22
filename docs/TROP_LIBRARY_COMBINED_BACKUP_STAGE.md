@@ -66,6 +66,14 @@ identity for it yet. It also refuses missing, foreign and mismatched rows.
 The planner does **not** read/write the production DB, allocate IDs,
 create a new source origin, delete a tombstone or enable restore UI.
 
+`TropLibraryCombinedRestorePreflight.requireEmpty(db)` adds a separate,
+read-only GRDB safety check intended to run **inside the eventual single
+restore write transaction** (never as a racy earlier read). It refuses a
+partially migrated destination and refuses any existing rows in protected
+legacy music, playlist, artist, album, podcast, history, speed dial,
+downloaded-track and all six V2 tables. It performs no deletion, resetting,
+migration, importing or restore; a valid empty schema is required.
+
 The GRDB fixture separately tests fresh SQLite `AUTOINCREMENT`-assigned IDs
 that differ from the original source ID, verifies the remapped ledger and
 proves an orphan rejection rolls back a sandbox transaction. This test is
@@ -106,7 +114,9 @@ formats with Swift 6 strict concurrency, checks tampering/version rejection,
 and refuses addon-private aliases. `test-trop-library-v2-grdb-integration.sh`
 builds the *actual production store files* against pinned GRDB 7.12.0,
 asserting a combined export uses exactly one database read, preserves
-both legacy and V2 rows, captures actual SQLite-assigned membership IDs and
-rejects orphan-ledger remapping within a rolled-back sandbox transaction.
+both legacy and V2 rows, captures actual SQLite-assigned membership IDs,
+rejects orphan-ledger remapping within a rolled-back sandbox transaction,
+and verifies destination-preflight guards on missing schemas, legacy rows
+and downloaded-track data.
 CI is not an on-device restore test; check the HEAD workflow result before
 calling the new fixture passed.
