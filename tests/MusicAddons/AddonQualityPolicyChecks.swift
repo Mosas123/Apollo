@@ -1,5 +1,9 @@
 import Foundation
 
+// The real SettingsStore owns this protocol, but only its marker conformance
+// is needed when compiling MusicQualityMode independently in the test runner.
+protocol SettingsOption {}
+
 // Protocol-only fixtures: compile the production policy without a private
 // addon, real URL or iOS framework. The iOS Nightly compiles actual sources.
 enum AddonStreamQuality: String, Sendable {
