@@ -11,7 +11,10 @@ actor DatabaseService {
     private init() {
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent("trop-v2-grdb-fixture-\(UUID().uuidString).sqlite")
-        dbPool = try! DatabasePool(path: file.path)
+        guard let pool = try? DatabasePool(path: file.path) else {
+            fatalError("Unable to set up isolated GRDB recovery fixture")
+        }
+        dbPool = pool
     }
 
     func read<T: Sendable>(
