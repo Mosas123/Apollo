@@ -69,7 +69,9 @@ actor DatabaseService {
         return memoryPool
     }
 
-    private static func registerMigrations(_ migrator: inout DatabaseMigrator) {
+    /// Share the exact production migration sequence with the isolated,
+    /// in-memory combined archive rehearsal. This does not open the live DB.
+    static func registerMigrations(_ migrator: inout DatabaseMigrator) {
         migrator.registerMigration("v1", migrate: DatabaseMigrations.v1)
         migrator.registerMigration("v2", migrate: DatabaseMigrations.v2)
         migrator.registerMigration("v3", migrate: DatabaseMigrations.v3)
