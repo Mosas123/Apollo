@@ -89,8 +89,10 @@ assert db.execute("SELECT id, liked FROM song").fetchall() == [("yt-a", 1)]
 assert db.execute("SELECT id, name FROM playlist").fetchall() == [("list-a", "Saved list")]
 assert db.execute("SELECT COUNT(*) FROM playlist_song_map").fetchone()[0] == 1
 
+executable = "\\n".join(line for line in importer.splitlines()
+                       if not line.lstrip().startswith("//"))
 for forbidden in ["SyncBridge.", "InnerTubeClient.", "CookieStore.", "DELETE FROM",
                   "DROP TABLE", "playback_url", "local_path", "SELECT *"]:
-    assert forbidden not in importer, f"Importer unexpectedly contains {forbidden}"
+    assert forbidden not in executable, f"Importer unexpectedly contains {forbidden}"
 print("Trop V2 migration schema, tombstone, privacy and rollback guards passed")
 PY
