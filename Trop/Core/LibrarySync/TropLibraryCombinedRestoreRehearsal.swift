@@ -31,7 +31,7 @@ enum TropLibraryCombinedRestoreRehearsal {
         // This is an entirely separate, empty, memory-only database.
         let scratch = try DatabaseQueue()
         var migrations = DatabaseMigrator()
-        DatabaseService.registerMigrations(&migrations)
+        TropDatabaseMigrationSequence.register(&migrations)
         try migrations.migrate(scratch)
 
         // Reuse *exactly* the production restoration SQL. Both preflight and
