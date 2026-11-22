@@ -148,7 +148,7 @@ struct TropLibraryV2MainStyleView: View {
 
     private func libraryRow<Destination: View>(
         icon: String, title: String,
-        @ViewBuilder destination: () -> Destination
+        @ViewBuilder destination: @escaping () -> Destination
     ) -> some View {
         NavigationLink(destination: destination) {
             HStack(spacing: 14) {
