@@ -151,8 +151,7 @@ actor MusicAddonClient {
         // NullBeat (and other Eclipse addons) also publish browse catalogs with
         // no search extra; the `search` resource is what tells them apart from
         // Stremio addons, which always search through a catalog.
-        self.eclipseMode = descriptor.resources.contains { $0.name == "search" }
-            && searchable.isEmpty
+        self.eclipseMode = descriptor.usesEclipseRouting
     }
 
     var installationKey: String { installation.key }
@@ -180,6 +179,10 @@ actor MusicAddonClient {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return [] }
         if eclipseMode {
+            // A resolver-only Eclipse addon may have no /search route.
+            guard installation.manifest.stremio?.offers("search") == true else {
+                return []
+            }
             return try await eclipseSearch(term, limit: limit)
         }
         guard !searchCatalogs.isEmpty else { return [] }
@@ -287,9 +290,67 @@ actor MusicAddonClient {
         }
     }
 
+    /// Resolve a recording through the explicit Eclipse identity API before
+    /// launching multiple fuzzy text searches. An addon that declares only
+    /// "resolve" can still provide audio to Trop's normal playback queue.
+    /// Caller must independently verify title, artist and duration before
+    /// trusting the returned track ID; no URL is stored or executed here.
+    func resolveIdentity(
+        title: String,
+        artist: String,
+        durationSeconds: Int?
+    ) async -> AddonTrack? {
+        guard eclipseMode,
+              installation.manifest.stremio?.offers("resolve") == true,
+              !title.isEmpty, !artist.isEmpty else { return nil }
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("resolve"),
+            resolvingAgainstBaseURL: false
+        )
+        var query = [
+            URLQueryItem(name: "title", value: title),
+            URLQueryItem(name: "artist", value: artist)
+        ]
+        if let durationSeconds, durationSeconds > 0,
+           durationSeconds <= Int.max / 1_000 {
+            query.append(URLQueryItem(
+                name: "durationMs", value: String(durationSeconds * 1_000)
+            ))
+        }
+        components?.queryItems = query
+        guard let url = components?.url,
+              let data = await fetch(url),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let root = object as? [String: Any],
+              let item = root["item"] as? [String: Any],
+              let id = item["id"] as? String, !id.isEmpty,
+              let resolvedTitle = item["title"] as? String,
+              let resolvedArtist = item["artist"] as? String,
+              !resolvedTitle.isEmpty, !resolvedArtist.isEmpty else {
+            return nil
+        }
+        let type = ((item["type"] as? String) ?? "track").lowercased()
+        guard isMusicItemType(type) else { return nil }
+        let duration: Int? = Self.parseDurationSeconds(item["duration"])
+            ?? (item["durationMs"] as? Int).map { $0 / 1_000 }
+        let poster = item["artworkURL"] as? String
+        return AddonTrack(
+            installationKey: installation.key,
+            type: type,
+            id: id,
+            title: resolvedTitle,
+            poster: poster.flatMap(URL.init(string:)),
+            detail: item["album"] as? String,
+            artist: resolvedArtist,
+            album: item["album"] as? String,
+            durationSeconds: duration
+        )
+    }
+
     /// Albums returned by the same search call (Eclipse addons only).
     func searchAlbums(_ query: String, limit: Int = 8) async -> [AddonAlbum] {
-        guard eclipseMode else { return [] }
+        guard eclipseMode,
+              installation.manifest.stremio?.offers("search") == true else { return [] }
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return [] }
         var components = URLComponents(
