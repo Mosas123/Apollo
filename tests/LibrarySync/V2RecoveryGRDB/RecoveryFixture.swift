@@ -269,6 +269,13 @@ enum RecoveryFixture {
         precondition(!String(decoding: combinedArchive, as: UTF8.self)
             .contains("encoded-private-manifest"))
 
+        // The subsequent V2-only restore fixture starts with no legacy
+        // memberships, as required by that older restore's collision guard.
+        // This is fixture-only deletion, never production restore behavior.
+        try await DatabaseService.shared.write { db in
+            try db.execute(sql: "DELETE FROM playlist_song_map WHERE id = 11")
+        }
+
         // This is the actual export/snapshot implementation, not a copy.
         let original = try await TropLibraryV2RecoveryStore.snapshot()
         precondition(original.omittedPrivateAliases == 1)
