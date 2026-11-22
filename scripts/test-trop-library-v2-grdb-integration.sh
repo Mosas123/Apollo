@@ -11,6 +11,10 @@ mkdir -p "$package/Sources/V2RecoveryGRDBFixture"
 cp tests/LibrarySync/V2RecoveryGRDB/Package.swift "$package/Package.swift"
 cp tests/LibrarySync/V2RecoveryGRDB/RecoveryFixture.swift \
     "$package/Sources/V2RecoveryGRDBFixture/RecoveryFixture.swift"
+cp tests/LibrarySync/V2RecoveryGRDB/LegacyImporterFixture.swift \
+    "$package/Sources/V2RecoveryGRDBFixture/LegacyImporterFixture.swift"
+cp Trop/Core/LibrarySync/TropLibraryV2LegacyImporter.swift \
+    "$package/Sources/V2RecoveryGRDBFixture/TropLibraryV2LegacyImporter.swift"
 cp Trop/Core/LibrarySync/TropLibraryV2IdentityPolicy.swift \
     "$package/Sources/V2RecoveryGRDBFixture/TropLibraryV2IdentityPolicy.swift"
 cp Trop/Core/LibrarySync/TropLibraryV2RecoveryArchive.swift \
