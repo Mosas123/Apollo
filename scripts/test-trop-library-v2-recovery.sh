@@ -33,6 +33,7 @@ swiftc -swift-version 6 -strict-concurrency=complete \
 "$tmp_dir/v2-combined-archive-checks"
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryBackupService.swift
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryCombinedBackupService.swift
+swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryCombinedRestorePreflight.swift
 
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2RecoveryStore.swift
 swiftc -frontend -parse Trop/Settings/TropLibraryV2RecoveryView.swift
