@@ -8,12 +8,19 @@ struct TropLibraryCombinedBackupView: View {
     @State private var showExporter = false
     @State private var showPicker = false
     @State private var isPreparing = false
+    @State private var isSavingLocal = false
+    @State private var isExportingLocal = false
     @State private var isVerifying = false
     @State private var isRehearsing = false
     @State private var preview: TropLibraryCombinedBackupService.Preview?
     @State private var statusMessage: String?
     @State private var alertMessage = ""
     @State private var showAlert = false
+
+    private var isBusy: Bool {
+        isPreparing || isSavingLocal || isExportingLocal
+            || isVerifying || isRehearsing
+    }
 
     var body: some View {
         List {
@@ -38,7 +45,36 @@ struct TropLibraryCombinedBackupView: View {
                         systemImage: "square.and.arrow.up"
                     )
                 }
-                .disabled(isPreparing || isVerifying || isRehearsing)
+                .disabled(isBusy)
+
+                Button {
+                    Task { await saveLocalCopy() }
+                } label: {
+                    Label(
+                        isSavingLocal ? "Saving to iPhone…" : "Save a copy on this iPhone",
+                        systemImage: "iphone.gen3"
+                    )
+                }
+                .disabled(isBusy)
+
+                Button {
+                    Task { await exportLatestLocal() }
+                } label: {
+                    Label(
+                        isExportingLocal ? "Preparing saved copy…" : "Export latest local copy to Files",
+                        systemImage: "square.and.arrow.up.on.square"
+                    )
+                }
+                .disabled(isBusy)
+
+                Text(
+                    "Save locally first, then export a verified copy whenever you want. "
+                        + "Local copies stay in Trop's Documents folder, whether or not "
+                        + "the Files app shows its Thrum folder. Keep a second copy outside " 
+                        + "Trop before changing or removing the app."
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
                 Text(
                     "You choose the destination in Files. Keep Trop installed and "
                         + "do not rely on this experimental file as your only backup: "
@@ -57,19 +93,19 @@ struct TropLibraryCombinedBackupView: View {
                         systemImage: "checkmark.shield"
                     )
                 }
-                .disabled(isPreparing || isVerifying || isRehearsing)
+                .disabled(isBusy)
 
                 Button {
                     showPicker = true
                 } label: {
                     Label("Verify another file from Files", systemImage: "doc.text.magnifyingglass")
                 }
-                .disabled(isPreparing || isVerifying || isRehearsing)
+                .disabled(isBusy)
 
                 Text(
-                    "Local verification reads On My iPhone → Thrum, without opening "
-                        + "the Files picker. Other locations use the system document "
-                        + "picker, which still needs on-device QA."
+                    "Local verification reads the app's Documents folder directly, "
+                        + "even if On My iPhone does not display Thrum. You can also "
+                        + "verify other locations with the Files picker."
                 )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -86,7 +122,7 @@ struct TropLibraryCombinedBackupView: View {
                         systemImage: "checkmark.shield"
                     )
                 }
-                .disabled(isPreparing || isVerifying || isRehearsing)
+                .disabled(isBusy)
                 Text(
                     "This creates a temporary SQLite database in memory, "
                         + "rebuilds the saved metadata, and checks the results. "
@@ -103,7 +139,7 @@ struct TropLibraryCombinedBackupView: View {
                 } label: {
                     Label("Restore metadata from Files", systemImage: "arrow.uturn.backward.circle")
                 }
-                .disabled(isPreparing || isVerifying || isRehearsing)
+                .disabled(isBusy)
                 Text(
                     "Only a completely empty installation is eligible. "
                         + "Existing songs, playlists, downloads and history "
@@ -174,7 +210,7 @@ struct TropLibraryCombinedBackupView: View {
             isPresented: $showExporter,
             document: document,
             contentType: .json,
-            defaultFilename: "Trop-Combined-Experimental-Snapshot"
+            defaultFilename: TropLibraryCombinedLocalSnapshotFinder.filenamePrefix
         ) { result in
             switch result {
             case .success:
@@ -198,7 +234,7 @@ struct TropLibraryCombinedBackupView: View {
 
     @MainActor
     private func prepareExport() async {
-        guard !isPreparing else { return }
+        guard !isBusy else { return }
         isPreparing = true
         defer { isPreparing = false }
         do {
@@ -217,9 +253,71 @@ struct TropLibraryCombinedBackupView: View {
         }
     }
 
+    /// Save a new, validated metadata copy in the app's Documents folder.
+    /// Existing local and external files are never replaced.
+    @MainActor
+    private func saveLocalCopy() async {
+        guard !isBusy else { return }
+        isSavingLocal = true
+        defer { isSavingLocal = false }
+        do {
+            let data = try await TropLibraryCombinedBackupService.export()
+            let checked = try TropLibraryCombinedBackupService.preview(data)
+            let saved = try await Task.detached(priority: .userInitiated) {
+                try TropLibraryCombinedLocalSnapshotStore.saveVerified(data)
+            }.value
+            preview = checked
+            showMessage(
+                "Verified metadata copy saved on this iPhone: "
+                    + saved.lastPathComponent
+                    + ". Use Export latest local copy to Files to keep another "
+                    + "copy outside Trop. No library data changed."
+            )
+            Log.libraryView.info("COMBINED_LOCAL_SAVE verified")
+        } catch {
+            showMessage(
+                "Could not save the local metadata copy. Existing files and "
+                    + "library data were not replaced."
+            )
+            Log.libraryView.warning("COMBINED_LOCAL_SAVE failed")
+        }
+    }
+
+    /// Export the latest saved local archive without re-reading the library.
+    /// This continues working when Files does not surface the Thrum folder.
+    @MainActor
+    private func exportLatestLocal() async {
+        guard !isBusy else { return }
+        isExportingLocal = true
+        defer { isExportingLocal = false }
+        do {
+            let result = try await Task.detached(priority: .userInitiated) {
+                let file = try TropLibraryCombinedLocalSnapshotFinder.latest()
+                let checked = try TropLibraryCombinedBackupService.preview(file.bytes)
+                return (file.bytes, checked)
+            }.value
+            document = TropLibraryV2RecoveryDocument(data: result.0)
+            preview = result.1
+            statusMessage = nil
+            showExporter = true
+            Log.libraryView.info("COMBINED_LOCAL_EXPORT prepared")
+        } catch TropLibraryCombinedLocalSnapshotFinder.LookupError.noSnapshot {
+            showMessage(
+                "No combined metadata copy is saved in Trop's Documents folder. "
+                    + "Use Save a copy on this iPhone first."
+            )
+        } catch {
+            showMessage(
+                "The saved local copy could not be verified for export. "
+                    + "Nothing was deleted or restored."
+            )
+            Log.libraryView.warning("COMBINED_LOCAL_EXPORT failed")
+        }
+    }
+
     @MainActor
     private func inspectLocal() async {
-        guard !isVerifying else { return }
+        guard !isBusy else { return }
         isVerifying = true
         defer { isVerifying = false }
         do {
@@ -230,7 +328,7 @@ struct TropLibraryCombinedBackupView: View {
             verified(result)
             Log.libraryView.info("COMBINED_LOCAL_VERIFY success")
         } catch TropLibraryCombinedLocalSnapshotFinder.LookupError.noSnapshot {
-            failed("No combined file was found in On My iPhone → Thrum.")
+            failed("No combined file was found in Trop's internal Documents folder.")
         } catch {
             failed("The combined file could not be verified. Nothing was restored.")
         }
@@ -238,7 +336,7 @@ struct TropLibraryCombinedBackupView: View {
 
     @MainActor
     private func rehearseLocalArchive() async {
-        guard !isRehearsing else { return }
+        guard !isBusy else { return }
         isRehearsing = true
         defer { isRehearsing = false }
         do {
@@ -256,7 +354,7 @@ struct TropLibraryCombinedBackupView: View {
             Log.libraryView.info("COMBINED_REHEARSAL succeeded in isolated memory")
         } catch TropLibraryCombinedLocalSnapshotFinder.LookupError.noSnapshot {
             showMessage(
-                "No combined metadata file was found in On My iPhone → Thrum. "
+                "No combined metadata file was found in Trop's internal Documents folder. "
                     + "Nothing changed in your library."
             )
         } catch let issue as TropLibraryCombinedRestoreRehearsal.Failure {
@@ -280,7 +378,7 @@ struct TropLibraryCombinedBackupView: View {
 
     @MainActor
     private func inspectExternal(_ url: URL) async {
-        guard !isVerifying else { return }
+        guard !isBusy else { return }
         isVerifying = true
         defer { isVerifying = false }
         do {
