@@ -4,6 +4,20 @@ import Foundation
 /// Intro skipping is a separate explicit user opt-in, independent of the
 /// global "Skip Segments" toggle.
 enum SponsorBlockSkipPolicy {
+    /// SponsorBlock timestamps describe the *original YouTube video*, not a
+    /// rematched studio recording. Fail closed for unknown provider names:
+    /// legacy videoId equality does NOT prove the current audio came from YT.
+    /// These identifiers come from SwiftyTube's YouTubeClient.clientName.
+    static func allowsSource(clientName: String) -> Bool {
+        switch clientName.uppercased() {
+        case "WEB", "WEB_REMIX", "IOS", "ANDROID", "ANDROID_VR",
+             "TVHTML5", "TVHTML5_SIMPLY_EMBEDDED_PLAYER", "VISIONOS":
+            return true
+        default:
+            return false
+        }
+    }
+
     static func shouldSkip(
         start: Double,
         end: Double,
