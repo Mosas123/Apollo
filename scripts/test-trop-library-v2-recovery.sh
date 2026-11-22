@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf "$tmp_dir"' EXIT
+
+swiftc -swift-version 6 -strict-concurrency=complete \
+  Trop/Core/LibrarySync/TropLibraryV2IdentityPolicy.swift \
+  Trop/Core/LibrarySync/TropLibraryV2RecoveryArchive.swift \
+  tests/LibrarySync/TropLibraryV2RecoveryArchiveChecks.swift \
+  -o "$tmp_dir/v2-recovery-archive-checks"
+"$tmp_dir/v2-recovery-archive-checks"
+
+swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2RecoveryStore.swift
+
+python3 - <<'PY'
+from pathlib import Path
+import sqlite3
+import re
+
+migrations = Path("Trop/Database/DatabaseMigrations.swift").read_text()
+store = Path("Trop/Core/LibrarySync/TropLibraryV2RecoveryStore.swift").read_text()
+archive = Path("Trop/Core/LibrarySync/TropLibraryV2RecoveryArchive.swift").read_text()
+
+def ddl(section, next_section):
+    chunk = migrations.split("static let " + section + ":", 1)[1]
+    chunk = chunk.split("static let " + next_section + ":", 1)[0]
+    return re.findall(r'try db\.execute\(sql: """(.*?)"""\)', chunk, re.S)
+
+queries = ddl("v10", "v11") + ddl("v11", "v12")
+part12 = migrations.split("static let v12:", 1)[1].split("\n}", 1)[0]
+queries += re.findall(r'try db\.execute\(sql: """(.*?)"""\)', part12, re.S)
+assert len(queries) == 10
+assert 'guard DatabaseService.shared.usesPersistentStore' in store
+assert 'throw TropLibraryV2RecoveryError.existingLibrary' in store
+assert 'try await DatabaseService.shared.write { db in' in store
+assert 'TropLibraryV2RecoveryArchive.decode(archive)' in store
+assert 'isPortableAlias' in store and 'omitted += 1' in store
+assert 'SHA256.hash' in archive and 'checksumMismatch' in archive
+
+def new_db():
+    db = sqlite3.connect(":memory:")
+    db.execute("PRAGMA foreign_keys=ON")
+    db.execute("CREATE TABLE song (id TEXT PRIMARY KEY, title TEXT)")
+    db.execute("INSERT INTO song VALUES ('legacy-song', 'Preserve me')")
+    for query in queries:
+        db.execute(query)
+    return db
+
+source = new_db()
+playlist = "a0000000-0000-4000-8000-000000000002"
+song = "a0000000-0000-4000-8000-000000000001"
+stamp = "2026-11-22 09:00:00.000"
+
+for item_id, kind, title in [(playlist, "playlist", "My Mix"),
+                              (song, "recording", "A song")]:
+    source.execute(
+        """INSERT INTO trop_v2_item(id, kind, title, created_at, modified_at)
+           VALUES (?, ?, ?, ?, ?)""", (item_id, kind, title, stamp, stamp)
+    )
+source.execute(
+    """INSERT INTO trop_v2_source_alias
+       (id, item_id, kind, provider, source_scope, external_id)
+       VALUES ('safe-alias', ?, 'recording', 'youtube', 'global', 'yt001')""",
+    (song,)
+)
+for i in (0, 1):
+    source.execute(
+        """INSERT INTO trop_v2_playlist_entry
+           (id, playlist_id, recording_id, position, created_at)
+           VALUES (?, ?, ?, ?, ?)""",
+        (f"entry-{i}", playlist, song, i, stamp)
+    )
+    source.execute(
+        """INSERT INTO trop_v2_legacy_import_entry
+           (legacy_membership_id, entry_id, imported_at)
+           VALUES (?, ?, ?)""",
+        (i + 1, f"entry-{i}", stamp)
+    )
+source.execute(
+    """INSERT INTO trop_v2_radio_favorite
+       (id, station_uuid, name, subtitle, added_at)
+       VALUES ('radio-id', '9617ba77-0601-11e8-ae97-52543be04c81',
+               'Latina Salsa', '', ?)""", (stamp,)
+)
+
+tables = ["trop_v2_item", "trop_v2_source_alias", "trop_v2_playlist_entry",
+          "trop_v2_radio_favorite", "trop_v2_legacy_import_entry",
+          "trop_v2_legacy_relation"]
+columns = {
+    "trop_v2_item": "id, kind, title, artist_or_author, duration_seconds, saved_at, liked_at, created_at, modified_at",
+    "trop_v2_source_alias": "id, item_id, kind, provider, source_scope, external_id",
+    "trop_v2_playlist_entry": "id, playlist_id, recording_id, position, created_at",
+    "trop_v2_radio_favorite": "id, station_uuid, name, subtitle, added_at",
+    "trop_v2_legacy_import_entry": "legacy_membership_id, entry_id, imported_at",
+    "trop_v2_legacy_relation": "id, owner_item_id, link_kind, external_id, created_at",
+}
+dump = {
+    table: source.execute(f"SELECT {columns[table]} FROM {table} ORDER BY 1").fetchall()
+    for table in tables
+}
+
+restored = new_db()
+restored.execute("BEGIN")
+for table in tables:
+    fields = [field.strip() for field in columns[table].split(",")]
+    sql = f"INSERT INTO {table} ({columns[table]}) VALUES ({','.join('?' for _ in fields)})"
+    restored.executemany(sql, dump[table])
+restored.execute("COMMIT")
+
+for table in tables:
+    assert restored.execute(f"SELECT {columns[table]} FROM {table} ORDER BY 1").fetchall() == dump[table]
+assert restored.execute(
+    "SELECT recording_id FROM trop_v2_playlist_entry ORDER BY position"
+).fetchall() == [(song,), (song,)]
+assert source.execute("SELECT title FROM song").fetchone() == ("Preserve me",)
+assert restored.execute("SELECT title FROM song").fetchone() == ("Preserve me",)
+
+# A restore into a populated DB is prohibited; no overwrite or data loss.
+assert restored.execute("SELECT COUNT(*) FROM trop_v2_item").fetchone()[0] == 2
+
+# A broken link must roll back the *entire* destination transaction.
+broken = new_db()
+try:
+    broken.execute("BEGIN")
+    broken.execute(
+        """INSERT INTO trop_v2_item(id, kind, title, created_at, modified_at)
+           VALUES (?, 'recording', 'Will roll back', ?, ?)""",
+        (song, stamp, stamp)
+    )
+    broken.execute(
+        """INSERT INTO trop_v2_playlist_entry
+           (id, playlist_id, recording_id, position, created_at)
+           VALUES ('bad', 'missing-playlist', ?, 0, ?)""",
+        (song, stamp)
+    )
+    broken.execute("COMMIT")
+    raise AssertionError("Broken reference was accepted")
+except sqlite3.IntegrityError:
+    broken.execute("ROLLBACK")
+assert broken.execute("SELECT COUNT(*) FROM trop_v2_item").fetchone()[0] == 0
+
+# Deleting an imported entry does not delete the import ledger provenance.
+restored.execute("DELETE FROM trop_v2_playlist_entry WHERE id='entry-0'")
+assert restored.execute(
+    "SELECT entry_id FROM trop_v2_legacy_import_entry WHERE legacy_membership_id=1"
+).fetchone() == (None,)
+print("Trop V2 recovery SQLite fixtures, rollback, ordering and tombstones passed")
+PY
