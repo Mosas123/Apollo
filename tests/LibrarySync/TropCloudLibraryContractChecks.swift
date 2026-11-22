@@ -72,6 +72,28 @@ struct TropCloudLibraryContractChecks {
         precondition(TropCloudLibrarySyncPolicy.canApplyRemoteRemoval(local: removed, incoming: removed))
         precondition(!TropCloudLibrarySyncPolicy.canApplyRemoteRemoval(local: record, incoming: record))
 
+        let playlistID = TropCloudItemID(kind: .playlist)
+        let entryID = UUID(uuidString: "3cc6322f-88bb-4447-9007-a64b754f7106")!
+        let membership = TropCloudPlaylistEntry(
+            entryID: entryID, playlistID: playlistID,
+            recordingID: id, position: 0, modifiedAt: now, deletedAt: nil
+        )
+        precondition(membership.isValidForCloud)
+        precondition(try JSONDecoder().decode(
+            TropCloudPlaylistEntry.self, from: JSONEncoder().encode(membership)
+        ) == membership)
+        var reordered = membership
+        reordered.position = 5
+        precondition(reordered.entryID == membership.entryID)
+        var invalidMembership = membership
+        invalidMembership.position = -1
+        precondition(!invalidMembership.isValidForCloud)
+        invalidMembership = TropCloudPlaylistEntry(
+            entryID: entryID, playlistID: id,
+            recordingID: id, position: 0, modifiedAt: now, deletedAt: nil
+        )
+        precondition(!invalidMembership.isValidForCloud)
+
         let itemKinds: [TropCloudItemKind] = [
             .recording, .album, .artist, .playlist, .podcast, .episode
         ]
