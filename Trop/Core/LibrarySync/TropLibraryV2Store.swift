@@ -441,6 +441,41 @@ enum TropLibraryV2Store {
         }
     }
 
+    /// Metadata-only catalogue categories for the original Library navigation.
+    /// Only Trop-owned, explicitly saved V2 items are returned. No legacy DB,
+    /// remote catalogue, provider login, or mutation is involved.
+    struct SavedCatalogItem: Identifiable, Equatable, Sendable {
+        let id: String
+        let title: String
+        let subtitle: String?
+    }
+
+    static func savedCatalogItems(
+        kind: TropLibraryV2Kind
+    ) async throws -> [SavedCatalogItem] {
+        guard kind == .artist || kind == .album || kind == .podcast else {
+            throw TropLibraryV2ValidationError.unexpectedItemKind
+        }
+        return try await DatabaseService.shared.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT id, title, artist_or_author
+                    FROM trop_v2_item
+                    WHERE kind = ? AND saved_at IS NOT NULL
+                    ORDER BY title COLLATE NOCASE, id
+                    """,
+                arguments: [kind.rawValue]
+            ).map { row in
+                SavedCatalogItem(
+                    id: row["id"],
+                    title: row["title"],
+                    subtitle: row["artist_or_author"]
+                )
+            }
+        }
+    }
+
     static func playlistTracks(_ rawPlaylistID: String) async throws -> [PlaylistTrack] {
         let id = try TropLibraryV2IdentityPolicy.checkedID(rawPlaylistID)
         return try await DatabaseService.shared.read { db in
