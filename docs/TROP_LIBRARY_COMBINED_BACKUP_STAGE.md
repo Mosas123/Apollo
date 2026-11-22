@@ -19,14 +19,19 @@ It does not silently change the previous formats or move existing data.
 
 ## Transport contract
 
-- Format: `trop-library-combined-metadata`, version `3` (internal, not
+- Format: `trop-library-combined-metadata`, version `4` (internal, not
   released to users). Earlier combined v1/v2 prototypes were not shipped.
   The standalone legacy v1 and standalone Library V2 v2 formats are unchanged.
 - JSON with sorted keys, dates in milliseconds and SHA-256 over the canonical
   payload. This is **corruption detection, not encryption/authentication**.
 - Payload consists of `legacy` and `libraryV2` snapshot objects, the original
   `legacyMemberships`, a stable installation-local UUID `originScope`, and
-  `foreignTombstones` scoped to their original installation. Both library sections pass their existing
+  `foreignTombstones` scoped to their original installation.
+  V4 adds ordered `podcastEpisodeMemberships`, plus minimal metadata for
+  unsaved/unsubscribed referenced podcasts and episodes. This preserves
+  the legacy `podcast_episode_map` without inventing saved/subscribed dates;
+  its links must have existing parent and child records or export fails.
+  The standalone legacy V1 archive is unchanged. Both library sections pass their existing
   allowlist/record/reference/privacy validators; the new membership map must
   correspond **exactly** to every legacy playlist entry, with no missing,
   duplicated or forged source row IDs. The independent legacy `.tropbackup` v1
@@ -108,6 +113,14 @@ These are test claims to verify in the latest CI.
 or private addon aliases, even when tombstone metadata survives.
 Legacy episode/artist/album relations beyond the existing allowlisted metadata
 and migrations still need deeper restore audits before user release.
+
+**Audit 22 Nov:** the legacy V1 archive filters podcasts to subscribed rows
+and episodes to saved rows, and did not include the ordered
+`podcast_episode_map`. Combined V4 now preserves that relationship, including
+unsaved/unsubscribed items it references. GRDB fixtures check exact link order,
+all associated podcast/episode metadata, and the independent radio favorite
+`station_uuid`/name/date across restore and re-export; no radio stream URL
+is archived. These tests do not establish playback/Now Playing or iPhone QA.
 
 Before any public Restore action:
 

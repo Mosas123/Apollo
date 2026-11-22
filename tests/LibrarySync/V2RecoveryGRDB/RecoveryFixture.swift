@@ -135,6 +135,14 @@ enum RecoveryFixture {
                     is_played INTEGER NOT NULL, saved_at DATETIME
                 )
                 """)
+            try db.execute(sql: """
+                CREATE TABLE podcast_episode_map (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    podcast_id TEXT NOT NULL, episode_id TEXT NOT NULL,
+                    position INTEGER NOT NULL,
+                    UNIQUE (podcast_id, episode_id)
+                )
+                """)
             try db.execute(
                 sql: """
                     INSERT INTO song
@@ -173,6 +181,32 @@ enum RecoveryFixture {
                 INSERT INTO playlist_song_map
                     (id, playlist_id, song_id, position)
                 VALUES (11, 'old-playlist', 'legacy-keep', 0)
+                """)
+            // One saved/subscribed pair and one unflagged pair. Neither
+            // legacy metadata state nor their ordering may be lost.
+            try db.execute(
+                sql: """
+                    INSERT INTO podcast (id, name, subscribed_at)
+                    VALUES ('saved-podcast', 'Subscribed Show', ?),
+                           ('linked-podcast', 'Unsubscribed Show', NULL)
+                    """,
+                arguments: [now]
+            )
+            try db.execute(
+                sql: """
+                    INSERT INTO episode
+                        (id, title, podcast_id, duration, is_played, saved_at)
+                    VALUES ('saved-episode', 'Saved Episode',
+                            'saved-podcast', 180, 1, ?),
+                           ('linked-episode', 'Unsaved Episode',
+                            'linked-podcast', 240, 0, NULL)
+                    """,
+                arguments: [now]
+            )
+            try db.execute(sql: """
+                INSERT INTO podcast_episode_map (podcast_id, episode_id, position)
+                VALUES ('saved-podcast', 'saved-episode', 1),
+                       ('linked-podcast', 'linked-episode', 7)
                 """)
             for (id, kind, title, author) in [
                 (recording, "recording", "Una Canción", "Artista"),
@@ -468,6 +502,13 @@ enum RecoveryFixture {
         precondition(combined.library.legacy.tracks.count == 1)
         precondition(combined.library.legacy.tracks[0].title == "Legacy song preserved")
         precondition(combined.library.legacy.playlists.count == 1)
+        precondition(combined.library.legacy.podcasts.count == 1)
+        precondition(combined.library.legacy.episodes.count == 1)
+        precondition(combined.library.relatedPodcasts.count == 1)
+        precondition(combined.library.relatedEpisodes.count == 1)
+        precondition(combined.library.podcastEpisodeMemberships.count == 2)
+        precondition(combined.library.libraryV2.radioFavorites.count == 1)
+        precondition(combined.library.libraryV2.radioFavorites[0].name == "Latina Salsa")
         precondition(combined.library.libraryV2.items.count == 3)
         precondition(combined.library.libraryV2.playlistEntries.count == 2)
         precondition(combined.library.libraryV2.omittedPrivateAliases == 1)
@@ -597,7 +638,7 @@ enum RecoveryFixture {
                 "trop_v2_source_alias", "trop_v2_legacy_relation",
                 "trop_v2_radio_favorite", "trop_v2_item",
                 "playlist_song_map", "song", "album", "artist",
-                "playlist", "podcast", "episode"
+                "playlist", "podcast", "episode", "podcast_episode_map"
             ] {
                 try db.execute(sql: "DELETE FROM \(table)")
             }
@@ -696,6 +737,19 @@ enum RecoveryFixture {
         let restoredCombined = try await TropLibraryCombinedBackupService.snapshot()
         precondition(restoredCombined.legacy.tracks.count == 1)
         precondition(restoredCombined.legacy.playlists.count == 1)
+        precondition(restoredCombined.legacy.podcasts == combined.library.legacy.podcasts)
+        precondition(restoredCombined.legacy.episodes == combined.library.legacy.episodes)
+        precondition(restoredCombined.relatedPodcasts == combined.library.relatedPodcasts)
+        precondition(restoredCombined.relatedEpisodes == combined.library.relatedEpisodes)
+        precondition(
+            restoredCombined.podcastEpisodeMemberships
+                == combined.library.podcastEpisodeMemberships
+        )
+        precondition(
+            restoredCombined.libraryV2.radioFavorites
+                == combined.library.libraryV2.radioFavorites
+        )
+        precondition(restoredCombined.libraryV2.radioFavorites.count == 1)
         precondition(restoredCombined.legacyMemberships.count == 1)
         precondition(restoredCombined.libraryV2.items.count == 3)
         precondition(restoredCombined.libraryV2.playlistEntries.count == 2)
@@ -707,6 +761,12 @@ enum RecoveryFixture {
         let reexported = try await TropLibraryCombinedBackupService.export()
         let redecoded = try TropLibraryCombinedBackupArchive.decode(reexported)
         precondition(redecoded.library.foreignTombstones == restoredCombined.foreignTombstones)
+        precondition(
+            redecoded.library.podcastEpisodeMemberships
+                == combined.library.podcastEpisodeMemberships
+        )
+        precondition(redecoded.library.libraryV2.radioFavorites == combined.library.libraryV2.radioFavorites)
+        precondition(!String(decoding: reexported, as: UTF8.self).contains("stream_url"))
         precondition(
             restoredCombined.libraryV2.importLedger[0].legacyMembershipID
                 == restoredCombined.legacyMemberships[0].sourceRowID

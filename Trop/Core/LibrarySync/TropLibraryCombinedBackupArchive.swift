@@ -21,11 +21,55 @@ struct TropLibraryCombinedBackupSnapshot: Codable, Equatable, Sendable {
         let importedAt: Date
     }
 
+    /// Unsubscribed / unsaved entities that participate in a podcast link.
+    /// Nil dates retain their original state; do not invent subscriptions.
+    struct RelatedPodcast: Codable, Equatable, Sendable {
+        let id: String
+        let name: String
+        let subscribedAt: Date?
+    }
+    struct RelatedEpisode: Codable, Equatable, Sendable {
+        let id: String
+        let title: String
+        let podcastID: String?
+        let duration: Int
+        let isPlayed: Bool
+        let savedAt: Date?
+    }
+    struct PodcastEpisodeMembership: Codable, Equatable, Sendable {
+        let podcastID: String
+        let episodeID: String
+        let position: Int
+    }
+
     let legacy: TropLibraryBackupSnapshot
     let libraryV2: TropLibraryV2RecoverySnapshot
     let legacyMemberships: [LegacyMembership]
     let originScope: String
     let foreignTombstones: [ForeignTombstone]
+    let relatedPodcasts: [RelatedPodcast]
+    let relatedEpisodes: [RelatedEpisode]
+    let podcastEpisodeMemberships: [PodcastEpisodeMembership]
+
+    init(
+        legacy: TropLibraryBackupSnapshot,
+        libraryV2: TropLibraryV2RecoverySnapshot,
+        legacyMemberships: [LegacyMembership],
+        originScope: String,
+        foreignTombstones: [ForeignTombstone],
+        relatedPodcasts: [RelatedPodcast] = [],
+        relatedEpisodes: [RelatedEpisode] = [],
+        podcastEpisodeMemberships: [PodcastEpisodeMembership] = []
+    ) {
+        self.legacy = legacy
+        self.libraryV2 = libraryV2
+        self.legacyMemberships = legacyMemberships
+        self.originScope = originScope
+        self.foreignTombstones = foreignTombstones
+        self.relatedPodcasts = relatedPodcasts
+        self.relatedEpisodes = relatedEpisodes
+        self.podcastEpisodeMemberships = podcastEpisodeMemberships
+    }
 }
 
 struct TropLibraryCombinedBackupEnvelope: Codable, Sendable {
@@ -50,7 +94,7 @@ enum TropLibraryCombinedBackupError: Error, Equatable, Sendable {
 /// foreign device without an explicit origin/provenance mapping.
 enum TropLibraryCombinedBackupArchive {
     static let format = "trop-library-combined-metadata"
-    static let version = 3
+    static let version = 4
     static let maximumBytes = 40 * 1_024 * 1_024
 
     private static func encoder() -> JSONEncoder {
@@ -91,6 +135,53 @@ enum TropLibraryCombinedBackupArchive {
                 == library.legacy.playlistEntries.count,
               library.legacyMemberships.count <= TropLibraryBackupArchive.maximumRecords
         else { throw TropLibraryCombinedBackupError.invalidPayload }
+
+        // Podcast_episode_map is a separate ordered relationship in the
+        // real legacy schema. Reject dangling, forged or duplicated links.
+        func validLegacyID(_ id: String) -> Bool {
+            !id.isEmpty && id.utf8.count <= 512
+                && !id.contains("://") && !id.contains("?")
+                && !id.contains("#") && !id.hasPrefix("/")
+                && !id.contains("\\")
+                && !id.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+        }
+        func validText(_ string: String) -> Bool {
+            string.utf8.count <= 2_048
+                && !string.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+        }
+        guard library.relatedPodcasts.count + library.relatedEpisodes.count
+                + library.podcastEpisodeMemberships.count
+                    <= TropLibraryBackupArchive.maximumRecords
+        else { throw TropLibraryCombinedBackupError.invalidPayload }
+        let savedPodcasts = Set(library.legacy.podcasts.map(\.id))
+        let savedEpisodes = Set(library.legacy.episodes.map(\.id))
+        let relatedPodcastIDs = library.relatedPodcasts.map(\.id)
+        let relatedEpisodeIDs = library.relatedEpisodes.map(\.id)
+        guard Set(relatedPodcastIDs).count == relatedPodcastIDs.count,
+              Set(relatedEpisodeIDs).count == relatedEpisodeIDs.count,
+              savedPodcasts.isDisjoint(with: relatedPodcastIDs),
+              savedEpisodes.isDisjoint(with: relatedEpisodeIDs),
+              library.relatedPodcasts.allSatisfy({
+                  validLegacyID($0.id) && validText($0.name)
+                      && $0.subscribedAt == nil
+              }),
+              library.relatedEpisodes.allSatisfy({
+                  validLegacyID($0.id) && validText($0.title)
+                      && $0.podcastID.map(validLegacyID) != false
+                      && $0.duration >= 0 && $0.savedAt == nil
+              })
+        else { throw TropLibraryCombinedBackupError.invalidPayload }
+        let allPodcasts = savedPodcasts.union(relatedPodcastIDs)
+        let allEpisodes = savedEpisodes.union(relatedEpisodeIDs)
+        var linkKeys = Set<String>()
+        for link in library.podcastEpisodeMemberships {
+            guard validLegacyID(link.podcastID), validLegacyID(link.episodeID),
+                  link.position >= 0,
+                  allPodcasts.contains(link.podcastID),
+                  allEpisodes.contains(link.episodeID),
+                  linkKeys.insert(link.podcastID + ":" + link.episodeID).inserted
+            else { throw TropLibraryCombinedBackupError.invalidPayload }
+        }
 
         let ids = library.legacyMemberships.map(\.sourceRowID)
         guard ids.allSatisfy({ $0 > 0 }),

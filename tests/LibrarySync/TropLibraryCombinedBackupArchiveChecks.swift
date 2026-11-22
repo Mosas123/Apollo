@@ -65,7 +65,20 @@ enum TropLibraryCombinedBackupArchiveChecks {
                     songID: "legacy-video-1", position: 0
                 )
             ],
-            originScope: "a0000000-0000-4000-8000-000000000099", foreignTombstones: []
+            originScope: "a0000000-0000-4000-8000-000000000099", foreignTombstones: [],
+            relatedPodcasts: [
+                .init(id: "podcast-unsaved", name: "Unsubscribed show", subscribedAt: nil)
+            ],
+            relatedEpisodes: [
+                .init(
+                    id: "episode-unsaved", title: "Episode without saved flag",
+                    podcastID: "podcast-unsaved", duration: 600,
+                    isPlayed: false, savedAt: nil
+                )
+            ],
+            podcastEpisodeMemberships: [
+                .init(podcastID: "podcast-unsaved", episodeID: "episode-unsaved", position: 3)
+            ]
         )
     }
 
@@ -130,6 +143,9 @@ enum TropLibraryCombinedBackupArchiveChecks {
         precondition(recovered.library.legacy.playlistEntries.count == 1)
         precondition(recovered.library.libraryV2.playlistEntries.count == 1)
         precondition(recovered.library.legacyMemberships[0].sourceRowID == 11)
+        precondition(recovered.library.podcastEpisodeMemberships.count == 1)
+        precondition(recovered.library.relatedPodcasts[0].subscribedAt == nil)
+        precondition(recovered.library.relatedEpisodes[0].savedAt == nil)
 
         // Reject duplicate legacy origin row IDs even if song metadata agrees.
         let duplicated = TropLibraryCombinedBackupSnapshot(
@@ -353,6 +369,25 @@ enum TropLibraryCombinedBackupArchiveChecks {
             _ = try TropLibraryCombinedBackupArchive.encode(badHistory)
             preconditionFailure("Invalid historical entry ID must fail")
         } catch TropLibraryCombinedBackupError.invalidPayload {}
-        print("Combined legacy+V2 archive, scoped tombstones and remap checks passed")
+        // A link to a missing podcast must fail rather than disappear.
+        let badPodcastLink = TropLibraryCombinedBackupSnapshot(
+            legacy: original.legacy, libraryV2: original.libraryV2,
+            legacyMemberships: original.legacyMemberships,
+            originScope: original.originScope,
+            foreignTombstones: original.foreignTombstones,
+            relatedPodcasts: original.relatedPodcasts,
+            relatedEpisodes: original.relatedEpisodes,
+            podcastEpisodeMemberships: [
+                .init(
+                    podcastID: "missing-podcast", episodeID: "episode-unsaved",
+                    position: 3
+                )
+            ]
+        )
+        do {
+            _ = try TropLibraryCombinedBackupArchive.encode(badPodcastLink)
+            preconditionFailure("Missing legacy podcast metadata must be rejected")
+        } catch TropLibraryCombinedBackupError.invalidPayload {}
+        print("Combined legacy+V2 archive, scoped tombstones and podcast link checks passed")
     }
 }

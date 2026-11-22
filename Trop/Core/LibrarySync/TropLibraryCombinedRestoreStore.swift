@@ -98,6 +98,41 @@ enum TropLibraryCombinedRestoreStore {
                 )
             }
 
+            // Restore the extra unsaved/unsubscribed podcast entities without
+            // inventing subscription dates, and then their exact ordering.
+            for podcast in source.relatedPodcasts {
+                try db.execute(
+                    sql: """
+                        INSERT INTO podcast (id, name, subscribed_at)
+                        VALUES (?, ?, ?)
+                        """,
+                    arguments: [podcast.id, podcast.name, podcast.subscribedAt]
+                )
+            }
+            for episode in source.relatedEpisodes {
+                try db.execute(
+                    sql: """
+                        INSERT INTO episode
+                            (id, title, podcast_id, duration, is_played, saved_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                    arguments: [
+                        episode.id, episode.title, episode.podcastID,
+                        episode.duration, episode.isPlayed, episode.savedAt
+                    ]
+                )
+            }
+            for link in source.podcastEpisodeMemberships {
+                try db.execute(
+                    sql: """
+                        INSERT INTO podcast_episode_map
+                            (podcast_id, episode_id, position)
+                        VALUES (?, ?, ?)
+                        """,
+                    arguments: [link.podcastID, link.episodeID, link.position]
+                )
+            }
+
             // The destination assigns new local row IDs. Store the exact
             // source-to-destination association before restoring V2's ledger.
             var inserted: [TropLibraryCombinedRestorePlanner.DestinationMembership] = []
