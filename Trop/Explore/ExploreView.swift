@@ -14,18 +14,24 @@ struct ExploreView: View {
     @State private var pendingRoute: DetailRoute?
 
     private let accountState = AccountSheetState.shared
+    @AppStorage("trop.library.v2.previewEnabled")
+    private var libraryV2PreviewEnabled = false
 
     var body: some View {
         NavigationStack(path: $router.explorePath) {
             VStack(spacing: 0) {
                 TabHeaderView(
                     title: "Explore",
-                    accountIsLoggedIn: accountState.isLoggedIn,
-                    accountImageUrl: accountState.accountImageUrl,
+                    accountIsLoggedIn: !libraryV2PreviewEnabled && accountState.isLoggedIn,
+                    accountImageUrl: libraryV2PreviewEnabled ? nil : accountState.accountImageUrl,
                     onAccount: { router.explorePath.append(DetailRoute.settings) }
                 )
 
-                content
+                if libraryV2PreviewEnabled {
+                    v2AudioExplore
+                } else {
+                    content
+                }
             }
             .frame(maxHeight: .infinity, alignment: .top)
             .toolbar(.hidden, for: .navigationBar)
@@ -39,12 +45,19 @@ struct ExploreView: View {
                     pendingRoute = nil
                 }
             }
-            .onAppear { viewModel.load() }
+            .onAppear {
+                if !libraryV2PreviewEnabled { viewModel.load() }
+            }
+            .onChange(of: libraryV2PreviewEnabled) { _, enabled in
+                if !enabled { viewModel.load() }
+            }
             .task {
+                guard !libraryV2PreviewEnabled else { return }
                 await accountState.restoreSession()
                 await accountState.fetchAccountInfo()
             }
             .task(id: viewModel.sections.count) {
+                guard !libraryV2PreviewEnabled else { return }
                 let urls = viewModel.sections
                     .flatMap(\.items)
                     .compactMap(\.thumbnailUrl)
@@ -55,6 +68,43 @@ struct ExploreView: View {
     }
 
     // MARK: - Content
+
+    /// The previous Explore shelves and mood feeds came exclusively from
+    /// YouTube Music. Do not relabel those as Trop's catalogue. While our
+    /// own discovery index is built, route users to the independent audio
+    /// provider search instead of fetching any InnerTube feed.
+    private var v2AudioExplore: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Label("Explore audio", systemImage: "music.magnifyingglass")
+                    .font(.title2.weight(.bold))
+                Text(
+                    "Trop no longer uses YouTube Music's catalogue here. "
+                        + "Discover tracks from available audio providers through Search."
+                )
+                .foregroundStyle(.secondary)
+                Button {
+                    router.selectedTabIndex = 3
+                } label: {
+                    Label("Search music", systemImage: "magnifyingglass")
+                }
+                .buttonStyle(.borderedProminent)
+                Button {
+                    router.selectedTabIndex = 2
+                } label: {
+                    Label("Your library", systemImage: "music.note.list")
+                }
+                .buttonStyle(.bordered)
+                Text("Independent charts and recommendations are still being built.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
+        }
+        .miniPlayerTracksScroll()
+        .scrollEdgeEffectHidden(true, for: .bottom)
+    }
 
     @ViewBuilder
     private var content: some View {

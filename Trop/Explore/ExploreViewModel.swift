@@ -32,15 +32,22 @@ final class ExploreViewModel {
     // MARK: - Loading
 
     func load() {
+        guard !TropLibraryV2AccountIsolation.isEnabled else { return }
         guard !hasLoaded else { return }
         Task { await fetch() }
     }
 
     func refresh() async {
+        guard !TropLibraryV2AccountIsolation.isEnabled else { return }
         await fetch()
     }
 
     private func fetch() async {
+        guard !TropLibraryV2AccountIsolation.isEnabled else {
+            sections = []
+            phase = .empty
+            return
+        }
         phase = .loading
         error = nil
         let region = SettingsStore.shared.contentCountry
@@ -51,6 +58,7 @@ final class ExploreViewModel {
                 formData: ["selectedValues": [region]]
             ).value
             Log.explore.debug("Explore fetch ok topKeys=\((json.keys.sorted()))")
+            guard !TropLibraryV2AccountIsolation.isEnabled else { return }
             sections = HomePageParser.parseExploreSections(from: json)
             await applyRegionalTrending(region: region)
             let moodCount = sections.reduce(0) { $0 + $1.moods.count }
@@ -92,6 +100,7 @@ final class ExploreViewModel {
 
     /// Full category page (songs, playlists, videos, albums shelves).
     static func loadMoodDetail(_ mood: MoodItem) async -> [ExploreSection] {
+        guard !TropLibraryV2AccountIsolation.isEnabled else { return [] }
         Log.explore.debug("Explore mood '\(mood.title)' fetch params=\(mood.params ?? "none")")
         do {
             let json = try await InnerTubeClient.tropShared.browse(

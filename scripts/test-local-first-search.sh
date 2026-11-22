@@ -19,3 +19,10 @@ grep -Fq "SearchLocalFirstPolicy.requestYouTubeCatalogue" Trop/Search/SearchView
 grep -Fq "if requestsYouTubeCatalogue {" Trop/Search/SearchViewModel.swift
 grep -Fq "await withTaskGroup(of: ProviderSearchResult.self)" Trop/Search/SearchViewModel.swift
 grep -Fq "suggestions = []" Trop/Search/SearchViewModel.swift
+# Production Home and Explore must not bootstrap InnerTube feeds when V2
+# owns the library. These source checks catch accidental gate removal.
+grep -Fq "if libraryV2PreviewEnabled {" Trop/Home/HomeScreenView.swift
+grep -Fq "v2HomeContent" Trop/Home/HomeScreenView.swift
+grep -Fq "guard !TropLibraryV2AccountIsolation.isEnabled else { return }" Trop/Home/HomeViewModel.swift
+grep -Fq "if libraryV2PreviewEnabled {" Trop/Explore/ExploreView.swift
+grep -Fq "guard !TropLibraryV2AccountIsolation.isEnabled else { return }" Trop/Explore/ExploreViewModel.swift

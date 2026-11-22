@@ -37,38 +37,35 @@ struct HomeScreenView: View {
     @State private var forYouSongs: [SongItem] = []
     @State private var discoverArtists: [ArtistItem] = []
     @State private var podcastSuggestions: [YTItem] = []
+    // V2 Home reads only Trop-owned metadata. A saved recording does not
+    // imply an available audio stream or a resolved provider.
+    @State private var v2Recordings: [TropLibraryV2Store.RecordingSummary] = []
+    @State private var v2Playlists: [TropLibraryV2Store.PlaylistSummary] = []
+    @State private var v2Radios: [TropLibraryV2RadioStore.Favorite] = []
+    @State private var v2HomeLoading = true
+    @State private var v2HomeMessage: String?
 
     var body: some View {
         NavigationStack(path: $router.homePath) {
             ZStack(alignment: .top) {
                 Group {
-                    if viewModel.isLoading {
+                    if libraryV2PreviewEnabled {
+                        v2HomeContent
+                    } else if viewModel.isLoading {
                         ShimmerLoadingView()
                     } else if let error = viewModel.error {
-                        if libraryV2PreviewEnabled,
-                           TropOfflineHomePolicy.isDisconnected(error),
-                           !downloadManager.isLoaded {
-                            LoadingStateView("Checking local downloads…")
-                        } else if TropOfflineHomePolicy.showDownloads(
-                            libraryV2Enabled: libraryV2PreviewEnabled,
-                            isDisconnected: TropOfflineHomePolicy.isDisconnected(error),
-                            verifiedDownloadCount: downloadManager.tracks.count
-                        ) {
-                            DownloadsView(embeddedInHome: true)
-                                .padding(.top, headerHeight)
-                        } else {
-                            errorView(error)
-                        }
+                        errorView(error)
                     } else {
                         homescreenContent
                     }
                 }
                 TabHeaderView(
                     title: "Home",
-                    accountIsLoggedIn: accountState.isLoggedIn,
-                    accountImageUrl: accountState.accountImageUrl,
+                    accountIsLoggedIn: !libraryV2PreviewEnabled && accountState.isLoggedIn,
+                    accountImageUrl: libraryV2PreviewEnabled ? nil : accountState.accountImageUrl,
                     onAccount: { router.homePath.append(DetailRoute.settings) },
-                    accountInitial: accountState.accountName.first.map(String.init)
+                    accountInitial: libraryV2PreviewEnabled
+                        ? nil : accountState.accountName.first.map(String.init)
                 )
                 .floatingTabHeader(scrollOffset: headerOffset, height: $headerHeight)
             }
@@ -86,35 +83,36 @@ struct HomeScreenView: View {
                 viewModel.handleSessionChange(loggedIn: loggedIn)
             }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active, viewModel.error != nil {
+                if phase == .active, !libraryV2PreviewEnabled,
+                   viewModel.error != nil {
                     Task { await viewModel.refresh() }
                 }
             }
             .onChange(of: libraryV2PreviewEnabled) { _, enabled in
                 if enabled {
+                    viewModel.stopForLibraryV2()
                     Task { await downloadManager.reload() }
+                } else {
+                    viewModel.loadHomeData()
                 }
             }
             .task {
                 if libraryV2PreviewEnabled {
-                    // Reconcile on-disk audio before displaying offline Home.
-                    // A saved remote ID is not a playable downloaded file.
-                    Task { await downloadManager.reload() }
+                    // The V2 view loads only Trop-owned saved metadata.
+                    // Do not restore YouTube sessions or fetch FEmusic_home.
+                    viewModel.stopForLibraryV2()
+                    await downloadManager.reload()
+                    return
                 }
-                // Library V2 never needs YouTube account state merely to
-                // browse Home. The music catalogue remains available to guests.
-                if !libraryV2PreviewEnabled {
-                    await viewModel.restoreSession()
-                    await accountState.restoreSession()
-                    await accountState.fetchAccountInfo()
-                }
+                await viewModel.restoreSession()
+                await accountState.restoreSession()
+                await accountState.fetchAccountInfo()
                 viewModel.loadHomeData()
                 await reloadSpeedDial()
-                if !libraryV2PreviewEnabled {
-                    Task { await SyncBridge.checkAndSyncIfStale() }
-                }
+                Task { await SyncBridge.checkAndSyncIfStale() }
             }
             .task(id: viewModel.homeSections.count) {
+                guard !libraryV2PreviewEnabled else { return }
                 let urls = viewModel.homeSections
                     .flatMap(\.items)
                     .compactMap(\.thumbnailUrl)
@@ -122,6 +120,147 @@ struct HomeScreenView: View {
                 await ImagePreloader.shared.preload(urls)
             }
         }
+    }
+
+    /// Separate V2 Home surface. No legacy YTItem, InnerTube browse, account
+    /// login, YouTube likes or remote playlists are needed to display it.
+    private var v2HomeContent: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                Color.clear.frame(height: headerHeight)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Your music in Trop")
+                        .font(.title2.weight(.bold))
+                    Text("Your own library, independent of YouTube Music.")
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 16)
+
+                if v2HomeLoading {
+                    ProgressView().frame(maxWidth: .infinity).padding(.vertical, 24)
+                } else if let v2HomeMessage {
+                    Text(v2HomeMessage)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 16)
+                }
+
+                if !v2Playlists.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Your playlists").font(.headline)
+                        ForEach(v2Playlists, id: \.id) { playlist in
+                            NavigationLink {
+                                TropLibraryV2PlaylistScreen(playlist: playlist)
+                            } label: {
+                                Label(playlist.name, systemImage: "music.note.list")
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+
+                if !v2Recordings.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Recently saved").font(.headline)
+                        ForEach(v2Recordings.prefix(12), id: \.id) { recording in
+                            HStack(spacing: 10) {
+                                Image(systemName: "music.note")
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(recording.title).lineLimit(1)
+                                    if let artist = recording.artist {
+                                        Text(artist).font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                if recording.isLiked {
+                                    Image(systemName: "heart.fill")
+                                        .foregroundStyle(.red)
+                                }
+                            }
+                            // Playback needs a verified source alias;
+                            // never guess a YouTube ID from a Trop UUID.
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+
+                if !v2Radios.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Your radio stations").font(.headline)
+                        ForEach(v2Radios, id: \.stationUUID) { radio in
+                            Button {
+                                Task {
+                                    do {
+                                        try await RadioPlaybackCoordinator.playSaved(
+                                            stationUUID: radio.stationUUID
+                                        )
+                                        v2HomeMessage = nil
+                                    } catch {
+                                        v2HomeMessage = "Station unavailable right now."
+                                    }
+                                }
+                            } label: {
+                                Label(radio.name, systemImage: "dot.radiowaves.left.and.right")
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+
+                if !v2HomeLoading && v2Recordings.isEmpty
+                    && v2Playlists.isEmpty && v2Radios.isEmpty {
+                    ContentUnavailableView(
+                        "Your Trop library is ready",
+                        systemImage: "music.note.list",
+                        description: Text("Save a recording, a playlist or a radio station to begin.")
+                    )
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Button {
+                        router.selectedTabIndex = 2
+                    } label: {
+                        Label("Open Library", systemImage: "music.note.list")
+                    }
+                    Button {
+                        router.selectedTabIndex = 3
+                    } label: {
+                        Label("Search audio providers", systemImage: "magnifyingglass")
+                    }
+                    NavigationLink {
+                        DownloadsView()
+                    } label: {
+                        Label("Downloaded audio", systemImage: "arrow.down.circle")
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
+            }
+        }
+        .miniPlayerTracksScroll(headerOffset: quantizedHeaderOffset)
+        .scrollEdgeEffectHidden(true, for: .bottom)
+        .task { await refreshV2Home() }
+        .refreshable { await refreshV2Home() }
+    }
+
+    @MainActor
+    private func refreshV2Home() async {
+        guard libraryV2PreviewEnabled else { return }
+        v2HomeLoading = true
+        do {
+            async let recordings = TropLibraryV2Store.recordings()
+            async let playlists = TropLibraryV2Store.playlists()
+            async let radios = TropLibraryV2RadioStore.favorites()
+            let (tracks, lists, stations) = try await (recordings, playlists, radios)
+            guard libraryV2PreviewEnabled else { return }
+            v2Recordings = tracks
+            v2Playlists = lists
+            v2Radios = stations
+            v2HomeMessage = nil
+        } catch {
+            v2HomeMessage = "Could not read local library. No data was deleted."
+        }
+        v2HomeLoading = false
     }
 
     private var homescreenContent: some View {

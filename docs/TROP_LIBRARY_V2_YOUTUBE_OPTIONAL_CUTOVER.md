@@ -70,6 +70,27 @@ implemented in this slice. Test the provider-only mode and incremental
 arrival on an iPhone **after** CI and a consolidated QA candidate, not
 with a series of user installs.
 
+## Second implementation slice — V2 Home and Explore (22 Nov 2026)
+
+Under experimental Library V2, **Home now reads Trop-owned saved
+recordings, playlists and radio favorites directly**, with navigation to
+local playlists and Search. A saved recording is displayed as metadata,
+not played by guessing a YouTube source from its Trop UUID; radio stations
+continue to use the dedicated radio catalogue resolver. It also exposes
+downloaded audio without creating a YouTube session.
+
+V2 **Explore no longer fetches YouTube Music's mood, genre, chart or
+trending shelves**. It offers entry points to independent audio-provider
+Search and the local library, while accurately marking native Trop charts
+and recommendation indexes as forthcoming. This is a temporary honest
+discovery surface, not a claimed replacement catalogue.
+
+The existing YouTube Home/Explore feeds remain temporarily in legacy
+mode for safe migration. Both models have V2 gates in addition to view
+routing, and both skip the old YouTube session bootstrap in V2. Explicit
+user data, like states, local files and legacy account data are left
+untouched. The UI still needs on-device QA after Xcode CI succeeds.
+
 ## Coupled implementation order — no extra user-facing IPA churn
 
 1. **Safety baseline:** finish PR #80 restore validations, portable backup,

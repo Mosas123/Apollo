@@ -5,6 +5,10 @@ on:
     paths:
       - "Trop/Search/SearchLocalFirstPolicy.swift"
       - "Trop/Search/SearchViewModel.swift"
+      - "Trop/Home/HomeScreenView.swift"
+      - "Trop/Home/HomeViewModel.swift"
+      - "Trop/Explore/ExploreView.swift"
+      - "Trop/Explore/ExploreViewModel.swift"
       - "tests/Search/LocalFirstSearchPolicyChecks.swift"
       - "scripts/test-local-first-search.sh"
       - ".github/workflows/search-local-first-checks.yml"

@@ -100,12 +100,14 @@ final class HomeViewModel {
     }
 
     func loadHomeData() {
+        guard !TropLibraryV2AccountIsolation.isEnabled else { return }
         guard !isHomeDataLoaded else { return }
         isHomeDataLoaded = true
         Task { await load() }
     }
 
     func refresh() async {
+        guard !TropLibraryV2AccountIsolation.isEnabled else { return }
         guard !isRefreshing else { return }
         isRefreshing = true
         cachedLocalSections = []
@@ -146,7 +148,23 @@ final class HomeViewModel {
 
     // MARK: - Home Data Loading
 
+    /// Invalidates outstanding legacy browse generations when Library V2
+    /// is selected. No old Home feed is shown in the V2 screen.
+    func stopForLibraryV2() {
+        loadGeneration += 1
+        cleanup.chipTask?.cancel()
+        homePage = nil
+        homeSections = []
+        error = nil
+        isLoading = false
+        isHomeDataLoaded = false
+    }
+
     private func load() async {
+        guard !TropLibraryV2AccountIsolation.isEnabled else {
+            stopForLibraryV2()
+            return
+        }
         loadGeneration += 1
         let generation = loadGeneration
         isLoading = true
@@ -270,6 +288,7 @@ final class HomeViewModel {
     var categoryFeeds: [ContentCategory: [HomePage.Section]] = [:]
 
     func loadCategoryFeed(_ category: ContentCategory) async {
+        guard !TropLibraryV2AccountIsolation.isEnabled else { return }
         guard category == .podcast || category == .audiobook else { return }
         guard categoryFeeds[category] == nil else { return }
         guard let chip = homePage?.chips.first(where: { chipMatches($0.title, category) }) else {
@@ -298,6 +317,7 @@ final class HomeViewModel {
     }
 
     func toggleChip(_ chip: HomePage.Chip?) {
+        guard !TropLibraryV2AccountIsolation.isEnabled else { return }
         cleanup.chipTask?.cancel()
         if chip == nil || chip?.title == selectedChip?.title {
             homePage = previousHomePage
@@ -339,6 +359,7 @@ final class HomeViewModel {
     }
 
     func loadMoreIfNeeded(currentIndex: Int, total: Int) {
+        guard !TropLibraryV2AccountIsolation.isEnabled else { return }
         guard total - currentIndex <= 3,
               let continuation = homePage?.continuation,
               !isLoadingMore else { return }
