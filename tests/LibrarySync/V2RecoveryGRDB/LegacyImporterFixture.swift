@@ -39,6 +39,20 @@ extension RecoveryFixture {
                 """)
         }
 
+        // A preflight must expose the exact expected importer action without
+        // performing a single SQLite write or modifying existing V2 rows.
+        let beforeDryRun = try await DatabaseService.shared.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM trop_v2_item") ?? -1
+        }
+        let freshPlan = try await TropLibraryV2MigrationDryRun.load()
+        precondition(freshPlan.newItems == 6 && freshPlan.reusedItems == 0)
+        precondition(freshPlan.newEntries == 2 && freshPlan.existingEntries == 0)
+        precondition(!freshPlan.hasBlockers)
+        let afterDryRun = try await DatabaseService.shared.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM trop_v2_item") ?? -1
+        }
+        precondition(beforeDryRun == afterDryRun, "Read-only dry run wrote data")
+
         let first = try await TropLibraryV2LegacyImporter.importLegacySnapshot()
         precondition(first.createdItems == 6, "Expected six distinct legacy entities")
         precondition(first.createdEntries == 2, "Duplicate legacy occurrences lost")
@@ -96,6 +110,10 @@ extension RecoveryFixture {
                     liked_at = NULL WHERE id = ?
                 """, arguments: [migratedSongID])
         }
+        let replayPlan = try await TropLibraryV2MigrationDryRun.load()
+        precondition(replayPlan.newItems == 0 && replayPlan.reusedItems == 6)
+        precondition(replayPlan.newEntries == 0 && replayPlan.existingEntries == 2)
+        precondition(!replayPlan.hasBlockers)
         let replay = try await TropLibraryV2LegacyImporter.importLegacySnapshot()
         precondition(replay.createdItems == 0 && replay.createdEntries == 0)
         precondition(replay.reusedItems == 6 && replay.existingEntries == 2)
@@ -127,6 +145,10 @@ extension RecoveryFixture {
                 arguments: [deletedEntry]
             )
         }
+        let removalPlan = try await TropLibraryV2MigrationDryRun.load()
+        precondition(removalPlan.existingEntries == 1)
+        precondition(removalPlan.userRemovedEntries == 1)
+        precondition(!removalPlan.hasBlockers)
         let afterRemoval = try await TropLibraryV2LegacyImporter.importLegacySnapshot()
         precondition(afterRemoval.createdEntries == 0)
         precondition(afterRemoval.existingEntries == 1)
@@ -150,6 +172,9 @@ extension RecoveryFixture {
                        ('zzz-invalid-new', '   ', 'Test', 130, 1, 0, ?)
                 """, arguments: [now, now])
         }
+        let invalidPlan = try await TropLibraryV2MigrationDryRun.load()
+        precondition(invalidPlan.invalidItems == 1)
+        precondition(invalidPlan.newItems == 1 && invalidPlan.hasBlockers)
         do {
             _ = try await TropLibraryV2LegacyImporter.importLegacySnapshot()
             preconditionFailure("Malformed legacy record unexpectedly imported")
@@ -179,6 +204,18 @@ extension RecoveryFixture {
             precondition(sourceStillPresent == 2, "Legacy rows were modified")
         }
 
+        // A broken playlist member is a separate hard blocker. It should be
+        // reported by the read-only scan without mutating the legacy table.
+        try await DatabaseService.shared.write { db in
+            try db.execute(sql: """
+                INSERT INTO playlist_song_map (id, playlist_id, song_id, position)
+                VALUES (3222, 'old-playlist', 'not-in-song', 2)
+                """)
+        }
+        let orphanPlan = try await TropLibraryV2MigrationDryRun.load()
+        precondition(orphanPlan.unresolvedMemberships == 1)
+        precondition(orphanPlan.hasBlockers)
+        print("Production GRDB migration dry-run passed: fresh, replay, tombstones, invalid rows and orphan blockers")
         print("Production GRDB legacy importer passed: duplicates, replay, user edits, deletion tombstones and atomic rollback")
     }
 }
