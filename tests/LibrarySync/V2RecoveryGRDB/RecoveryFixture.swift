@@ -30,6 +30,12 @@ actor DatabaseService {
     ) async throws {
         try await dbPool.write { db in try block(db) }
     }
+
+    func writeReturning<T: Sendable>(
+        _ block: @escaping @Sendable (Database) throws -> T
+    ) async throws -> T {
+        try await dbPool.write { db in try block(db) }
+    }
 }
 
 @main
@@ -925,5 +931,8 @@ enum RecoveryFixture {
         precondition(!String(decoding: withoutProviderExport, as: UTF8.self).contains("youtube"))
         print("Combined GRDB metadata roundtrip passed without YouTube/provider aliases")
 
+        // Exercise the actual, production legacy importer on this disposable
+        // restored database. This code is NEVER invoked by the app or user UI.
+        try await checkProductionLegacyImporter()
     }
 }
