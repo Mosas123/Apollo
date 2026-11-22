@@ -282,4 +282,57 @@ enum DatabaseMigrations {
             try db.execute(sql: sql)
         }
     }
+
+    /// Trop Library V2 is deliberately parallel to the legacy YouTube-keyed
+    /// tables. It starts EMPTY on both fresh and upgraded installations.
+    /// Never copy, DELETE, DROP or rewrite the legacy library here.
+    static let v10: @Sendable (Database) throws -> Void = logged("v10-trop-library-v2") { db in
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS trop_v2_item (
+                id TEXT PRIMARY KEY NOT NULL,
+                kind TEXT NOT NULL
+                    CHECK (kind IN ('recording', 'album', 'artist', 'playlist', 'podcast', 'episode')),
+                title TEXT NOT NULL,
+                artist_or_author TEXT,
+                duration_seconds INTEGER NOT NULL DEFAULT 0 CHECK (duration_seconds >= 0),
+                saved_at DATETIME,
+                liked_at DATETIME,
+                created_at DATETIME NOT NULL,
+                modified_at DATETIME NOT NULL
+            )
+            """)
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS trop_v2_source_alias (
+                id TEXT PRIMARY KEY NOT NULL,
+                item_id TEXT NOT NULL REFERENCES trop_v2_item(id) ON DELETE RESTRICT,
+                kind TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                source_scope TEXT NOT NULL,
+                external_id TEXT NOT NULL,
+                UNIQUE (provider, source_scope, kind, external_id)
+            )
+            """)
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS trop_v2_playlist_entry (
+                id TEXT PRIMARY KEY NOT NULL,
+                playlist_id TEXT NOT NULL REFERENCES trop_v2_item(id) ON DELETE RESTRICT,
+                recording_id TEXT NOT NULL REFERENCES trop_v2_item(id) ON DELETE RESTRICT,
+                position INTEGER NOT NULL CHECK (position >= 0),
+                created_at DATETIME NOT NULL
+            )
+            """)
+        try db.execute(sql: """
+            CREATE INDEX IF NOT EXISTS idx_trop_v2_item_kind_saved
+            ON trop_v2_item(kind, saved_at)
+            """)
+        try db.execute(sql: """
+            CREATE INDEX IF NOT EXISTS idx_trop_v2_alias_item
+            ON trop_v2_source_alias(item_id)
+            """)
+        try db.execute(sql: """
+            CREATE INDEX IF NOT EXISTS idx_trop_v2_entry_playlist_position
+            ON trop_v2_playlist_entry(playlist_id, position, created_at, id)
+            """)
+    }
+
 }
