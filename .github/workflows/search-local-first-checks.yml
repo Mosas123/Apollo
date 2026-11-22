@@ -1,0 +1,19 @@
+name: Local-first Search Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Search/SearchLocalFirstPolicy.swift"
+      - "Trop/Search/SearchViewModel.swift"
+      - "tests/Search/LocalFirstSearchPolicyChecks.swift"
+      - "scripts/test-local-first-search.sh"
+      - ".github/workflows/search-local-first-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify local-first search presentation
+        run: bash scripts/test-local-first-search.sh
