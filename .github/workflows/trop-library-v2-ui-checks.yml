@@ -9,6 +9,7 @@ on:
       - "Trop/ContentView.swift"
       - "Trop/Settings/SettingsView.swift"
       - "Trop/Database/DatabaseService.swift"
+      - "Trop/Services/LikeStore.swift"
       - "scripts/test-trop-library-v2-ui.sh"
       - ".github/workflows/trop-library-v2-ui-checks.yml"
   workflow_dispatch:
