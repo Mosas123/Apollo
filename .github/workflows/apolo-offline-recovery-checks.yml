@@ -1,0 +1,19 @@
+name: Apolo Offline Transport Recovery Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Audio/PlayerController/ApoloOfflineRecoveryPolicy.swift"
+      - "Trop/Audio/PlayerController/PlayerController.swift"
+      - "tests/Audio/ApoloOfflineRecoveryPolicyChecks.swift"
+      - "scripts/test-apolo-offline-recovery.sh"
+      - ".github/workflows/apolo-offline-recovery-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify offline route and playback-intent policies
+        run: bash scripts/test-apolo-offline-recovery.sh
