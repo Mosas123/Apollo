@@ -7,6 +7,7 @@ actor DatabaseService {
     nonisolated static let shared = DatabaseService()
     nonisolated let usesPersistentStore = true
     let dbPool: DatabasePool
+    private(set) var readCount = 0
 
     private init() {
         let file = FileManager.default.temporaryDirectory
@@ -20,7 +21,8 @@ actor DatabaseService {
     func read<T: Sendable>(
         _ block: @escaping @Sendable (Database) throws -> T
     ) async throws -> T {
-        try await dbPool.read { db in try block(db) }
+        readCount += 1
+        return try await dbPool.read { db in try block(db) }
     }
 
     func write(
@@ -85,15 +87,70 @@ enum RecoveryFixture {
         precondition(statements.count == 10, "Must use actual v10-v12 schema")
         try await DatabaseService.shared.write { db in
             try db.execute(sql: "PRAGMA foreign_keys = ON")
-            try db.execute(sql: "CREATE TABLE song (id TEXT PRIMARY KEY, title TEXT)")
+            // Legacy tables contain only the production columns used by
+            // the allowlisted metadata SELECTs; no credentials or paths.
+            try db.execute(sql: """
+                CREATE TABLE song (
+                    id TEXT PRIMARY KEY, title TEXT NOT NULL, artist_name TEXT,
+                    album_name TEXT, duration INTEGER NOT NULL,
+                    liked INTEGER NOT NULL, in_library DATETIME,
+                    is_episode INTEGER NOT NULL, create_date DATETIME NOT NULL
+                )
+                """)
+            try db.execute(sql: """
+                CREATE TABLE playlist (
+                    id TEXT PRIMARY KEY, name TEXT NOT NULL, browse_id TEXT,
+                    bookmarked_at DATETIME, is_editable INTEGER NOT NULL
+                )
+                """)
             try db.execute(sql: """
                 CREATE TABLE playlist_song_map (
                     id INTEGER PRIMARY KEY, playlist_id TEXT,
                     song_id TEXT, position INTEGER
                 )
                 """)
+            try db.execute(sql: """
+                CREATE TABLE album (
+                    id TEXT PRIMARY KEY, title TEXT NOT NULL,
+                    bookmarked_at DATETIME
+                )
+                """)
+            try db.execute(sql: """
+                CREATE TABLE artist (
+                    id TEXT PRIMARY KEY, name TEXT NOT NULL,
+                    bookmarked_at DATETIME
+                )
+                """)
+            try db.execute(sql: """
+                CREATE TABLE podcast (
+                    id TEXT PRIMARY KEY, name TEXT NOT NULL,
+                    subscribed_at DATETIME
+                )
+                """)
+            try db.execute(sql: """
+                CREATE TABLE episode (
+                    id TEXT PRIMARY KEY, title TEXT NOT NULL,
+                    podcast_id TEXT, duration INTEGER NOT NULL,
+                    is_played INTEGER NOT NULL, saved_at DATETIME
+                )
+                """)
             try db.execute(
-                sql: "INSERT INTO song VALUES ('legacy-keep', 'Legacy song preserved')"
+                sql: """
+                    INSERT INTO song
+                        (id, title, artist_name, duration, liked,
+                         is_episode, create_date)
+                    VALUES ('legacy-keep', 'Legacy song preserved',
+                            'Legacy Artist', 180, 1, 0, ?)
+                    """,
+                arguments: [now]
+            )
+            try db.execute(
+                sql: """
+                    INSERT INTO playlist
+                        (id, name, browse_id, bookmarked_at, is_editable)
+                    VALUES ('old-playlist', 'Legacy Playlist', NULL, ?, 1)
+                    """,
+                arguments: [now]
             )
             for statement in statements {
                 try db.execute(sql: statement)
@@ -182,6 +239,25 @@ enum RecoveryFixture {
         }
         try await createSchema(from: CommandLine.arguments[1])
         try await createSource()
+
+        // Both independent metadata models are obtained from precisely one
+        // production GRDB read closure; confirm no extra read slips in.
+        let readsBefore = await DatabaseService.shared.readCount
+        let combinedArchive = try await TropLibraryCombinedBackupService.export()
+        let readsAfter = await DatabaseService.shared.readCount
+        precondition(readsAfter == readsBefore + 1, "Combined export must use one read")
+        let combined = try TropLibraryCombinedBackupArchive.decode(combinedArchive)
+        precondition(combined.library.legacy.tracks.count == 1)
+        precondition(combined.library.legacy.tracks[0].title == "Legacy song preserved")
+        precondition(combined.library.legacy.playlists.count == 1)
+        precondition(combined.library.libraryV2.items.count == 3)
+        precondition(combined.library.libraryV2.playlistEntries.count == 2)
+        precondition(combined.library.libraryV2.omittedPrivateAliases == 1)
+        let combinedSummary = try TropLibraryCombinedBackupService.preview(combinedArchive)
+        precondition(combinedSummary.legacyTracks == 1 && combinedSummary.v2Playlists == 1)
+        precondition(combinedSummary.legacyLedgerEntriesNeedingOrigin == 2)
+        precondition(!String(decoding: combinedArchive, as: UTF8.self)
+            .contains("encoded-private-manifest"))
 
         // This is the actual export/snapshot implementation, not a copy.
         let original = try await TropLibraryV2RecoveryStore.snapshot()
