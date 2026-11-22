@@ -337,6 +337,7 @@ enum TropLibraryV2Store {
         let id: String
         let title: String
         let artist: String?
+        let durationSeconds: Int
         let isLiked: Bool
     }
 
@@ -345,6 +346,7 @@ enum TropLibraryV2Store {
         let recordingID: String
         let title: String
         let artist: String?
+        let durationSeconds: Int
         let position: Int
     }
 
@@ -422,7 +424,7 @@ enum TropLibraryV2Store {
             try Row.fetchAll(
                 db,
                 sql: """
-                    SELECT id, title, artist_or_author,
+                    SELECT id, title, artist_or_author, duration_seconds,
                            (liked_at IS NOT NULL) AS is_liked
                     FROM trop_v2_item
                     WHERE kind = 'recording' AND saved_at IS NOT NULL
@@ -432,6 +434,7 @@ enum TropLibraryV2Store {
                 RecordingSummary(
                     id: row["id"], title: row["title"],
                     artist: row["artist_or_author"],
+                    durationSeconds: row["duration_seconds"],
                     isLiked: row["is_liked"]
                 )
             }
@@ -445,7 +448,8 @@ enum TropLibraryV2Store {
                 db,
                 sql: """
                     SELECT entry.id, entry.recording_id, entry.position,
-                           recording.title, recording.artist_or_author
+                           recording.title, recording.artist_or_author,
+                           recording.duration_seconds
                     FROM trop_v2_playlist_entry AS entry
                     JOIN trop_v2_item AS recording
                       ON recording.id = entry.recording_id
@@ -457,12 +461,43 @@ enum TropLibraryV2Store {
                 PlaylistTrack(
                     id: row["id"], recordingID: row["recording_id"],
                     title: row["title"], artist: row["artist_or_author"],
+                    durationSeconds: row["duration_seconds"],
                     position: row["position"]
                 )
             }
         }
     }
 
+
+    /// Fetch only a saved recording's known source references. Read-only,
+    /// never probes YouTube, guesses by title or alters library relationships.
+    static func sourceAliases(forRecordingID rawRecordingID: String) async throws -> [TropLibraryV2SourceAlias] {
+        let recordingID = try TropLibraryV2IdentityPolicy.checkedID(rawRecordingID)
+        return try await DatabaseService.shared.read { db in
+            let kind = try String.fetchOne(
+                db, sql: "SELECT kind FROM trop_v2_item WHERE id = ?",
+                arguments: [recordingID]
+            )
+            guard kind == TropLibraryV2Kind.recording.rawValue else {
+                throw TropLibraryV2ValidationError.missingItem
+            }
+            return try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT provider, source_scope, external_id
+                    FROM trop_v2_source_alias
+                    WHERE item_id = ? AND kind = 'recording'
+                    ORDER BY provider, source_scope, external_id
+                    """,
+                arguments: [recordingID]
+            ).map { row in
+                try TropLibraryV2SourceAlias(
+                    provider: row["provider"], scope: row["source_scope"],
+                    externalID: row["external_id"]
+                )
+            }
+        }
+    }
 
     /// The player heart needs an alias lookup rather than a legacy video ID
     /// primary key. Unliking never deletes the item or its playlist entries.
