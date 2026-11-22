@@ -27,6 +27,7 @@ swiftc -swift-version 6 -strict-concurrency=complete \
   Trop/Core/LibrarySync/TropLibraryBackupArchive.swift \
   Trop/Core/LibrarySync/TropLibraryV2RecoveryArchive.swift \
   Trop/Core/LibrarySync/TropLibraryCombinedBackupArchive.swift \
+  Trop/Core/LibrarySync/TropLibraryCombinedRestorePlanner.swift \
   tests/LibrarySync/TropLibraryCombinedBackupArchiveChecks.swift \
   -o "$tmp_dir/v2-combined-archive-checks"
 "$tmp_dir/v2-combined-archive-checks"
