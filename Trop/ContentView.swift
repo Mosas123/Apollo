@@ -115,7 +115,7 @@ struct ContentView: View {
 
             Tab("Library", systemImage: "music.note.square.stack", value: 2) {
                 if libraryV2PreviewEnabled {
-                    TropLibraryV2Screen()
+                    TropLibraryV2MainStyleView()
                 } else {
                     LibraryView()
                 }
