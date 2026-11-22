@@ -52,7 +52,11 @@ enum TropLibraryCombinedRestoreRehearsal {
         encoder.outputFormatting = [.sortedKeys]
         encoder.dateEncodingStrategy = .custom { date, encoder in
             var value = encoder.singleValueContainer()
-            try value.encode(Int64((date.timeIntervalSince1970 * 1_000).rounded()))
+            let milliseconds = (date.timeIntervalSince1970 * 1_000).rounded()
+            guard milliseconds.isFinite, abs(milliseconds) < 9.0e18 else {
+                throw TropLibraryCombinedBackupError.invalidPayload
+            }
+            try value.encode(Int64(milliseconds))
         }
         guard let lhs = try? encoder.encode(original),
               let rhs = try? encoder.encode(recovered) else {
