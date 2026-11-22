@@ -1,8 +1,8 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Experimental read-only export/verification of BOTH legacy and V2 metadata.
-/// No restore action is exposed until a full on-device recovery gate passes.
+/// Export, local persistence and verification for combined legacy+V2 metadata.
+/// Actual restore has a separate empty-only screen with transactional guards.
 struct TropLibraryCombinedBackupView: View {
     @State private var document: TropLibraryV2RecoveryDocument?
     @State private var showExporter = false
@@ -70,7 +70,7 @@ struct TropLibraryCombinedBackupView: View {
                 Text(
                     "Save locally first, then export a verified copy whenever you want. "
                         + "Local copies stay in Trop's Documents folder, whether or not "
-                        + "the Files app shows its Thrum folder. Keep a second copy outside " 
+                        + "the Files app shows its Thrum folder. Keep a second copy outside "
                         + "Trop before changing or removing the app."
                 )
                 .font(.footnote)
