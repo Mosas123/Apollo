@@ -211,23 +211,35 @@ actor PlaybackManager {
             throw MusicCatalogError.unavailableTrack
         }
         let client = try MusicAddonClient(installation: installation)
-        let mode = SettingsStore.shared.musicQualityMode
-        let atmos = (mode == .auto || mode == .lossless) && SettingsStore.shared.preferAtmos
-        let streamQuality: AddonStreamQuality = atmos
-            ? .max
-            : (mode == .cd ? .lossless : (SettingsStore.shared.preferHiRes ? .hires : .lossless))
+        // Direct Search → Add-ons playback must obey the same user opt-ins
+        // as quality upgrades from a YouTube-origin song.
+        let policy = AddonStreamQualityPolicy(
+            mode: SettingsStore.shared.musicQualityMode,
+            preferHiRes: SettingsStore.shared.preferHiRes,
+            preferAtmos: SettingsStore.shared.preferAtmos
+        )
         let stream = try await client.resolveStream(
             type: ref.t,
             id: ref.i,
-            preferAtmos: atmos,
-            quality: streamQuality
+            preferAtmos: policy.allowAtmos,
+            quality: policy.requestedQuality,
+            allowHiRes: policy.allowHiRes,
+            requireLossless: policy.mode == .cd || policy.mode == .lossless
         )
-        guard !stream.isEncrypted else { throw MusicCatalogError.unavailableTrack }
+        guard !stream.isEncrypted, policy.accepts(stream) else {
+            Log.player.info(
+                "ADDON_QUALITY_REJECT mode=\(policy.mode.rawValue) " +
+                "hiresAllowed=\(policy.allowHiRes) atmosAllowed=\(policy.allowAtmos) " +
+                "tier=\(stream.qualityTier) bitDepth=\(stream.bitDepth ?? 0) " +
+                "sampleRate=\(stream.sampleRateHz ?? 0)"
+            )
+            throw MusicCatalogError.unavailableTrack
+        }
         let isAtmosStream = stream.qualityTier.lowercased().contains("atmos")
             || stream.mimeType.lowercased().contains("eac3")
             || stream.mimeType.lowercased().contains("ec+3")
         Log.player.info(
-            "ADDON_STREAM quality=\(stream.qualityTier) mime=\(stream.mimeType) atmos=\(isAtmosStream) requested=\(atmos)"
+            "ADDON_STREAM quality=\(stream.qualityTier) mime=\(stream.mimeType) atmos=\(isAtmosStream) requested=\(policy.allowAtmos)"
         )
         resolvedSourceNames[videoId] = installation.manifest.name
 
