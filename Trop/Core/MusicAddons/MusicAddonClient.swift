@@ -419,12 +419,16 @@ actor MusicAddonClient {
         type: String,
         id: String,
         preferAtmos: Bool = false,
-        quality: AddonStreamQuality = .max
+        quality: AddonStreamQuality = .max,
+        allowHiRes: Bool = false
     ) async throws -> AddonStream {
         if eclipseMode {
             return try await eclipseStream(id: id, preferAtmos: preferAtmos, quality: quality)
         }
-        return try await stremioStream(type: type, id: id)
+        return try await stremioStream(
+            type: type, id: id, preferAtmos: preferAtmos,
+            quality: quality, allowHiRes: allowHiRes
+        )
     }
 
     private func eclipseStream(
@@ -513,7 +517,13 @@ actor MusicAddonClient {
         )
     }
 
-    private func stremioStream(type: String, id: String) async throws -> AddonStream {
+    private func stremioStream(
+        type: String,
+        id: String,
+        preferAtmos: Bool,
+        quality: AddonStreamQuality,
+        allowHiRes: Bool
+    ) async throws -> AddonStream {
         guard isMusicItemType(type) else {
             throw MusicAddonClientError.noStream
         }
@@ -527,11 +537,18 @@ actor MusicAddonClient {
               let streams = root["streams"] as? [[String: Any]] else {
             throw MusicAddonClientError.noStream
         }
+        let policy = AddonStreamQualityPolicy.stremio(
+            requested: quality, preferAtmos: preferAtmos, allowHiRes: allowHiRes
+        )
         var best: (AddonStream, Int)?
         for stream in streams {
             if let ytId = stream["ytId"] as? String, !ytId.isEmpty {
-                let candidate = AddonStream(kind: .youtube(ytId), mimeType: "audio/mp4", bitrate: 0, qualityTier: "Standard", isEncrypted: (stream["encrypted"] as? Bool) ?? false)
-                if best == nil { best = (candidate, 0) }
+                let candidate = AddonStream(
+                    kind: .youtube(ytId), mimeType: "audio/mp4",
+                    bitrate: 0, qualityTier: "Standard",
+                    isEncrypted: (stream["encrypted"] as? Bool) ?? false
+                )
+                if policy.accepts(candidate), best == nil { best = (candidate, 0) }
                 continue
             }
             let raw = (stream["url"] as? String) ?? (stream["externalUrl"] as? String)
@@ -540,24 +557,26 @@ actor MusicAddonClient {
                   scheme == "http" || scheme == "https" else { continue }
             let hints = Self.describe(stream)
             let quality = Self.quality(from: hints, url: streamURL)
+            let hintsObject = stream["behaviorHints"] as? [String: Any]
+            let bitDepth = (stream["bitDepth"] as? Int) ?? (hintsObject?["bitDepth"] as? Int)
+            let sampleRate = (stream["sampleRate"] as? Int)
+                ?? (hintsObject?["sampleRate"] as? Int)
             let hiRes = hints.contains("hi-res") || hints.contains("hires")
                 || hints.contains("24bit") || hints.contains("24-bit")
-            let rank: Int
-            switch quality.tier {
-            case "Lossless": rank = 3
-            case "High": rank = 2
-            default: rank = 1
-            }
-            let hintsObject = stream["behaviorHints"] as? [String: Any]
+                || (bitDepth ?? 0) >= 24 || (sampleRate ?? 0) > 48_000
             let candidate = AddonStream(
                 kind: .url(streamURL),
                 mimeType: quality.mime,
                 bitrate: quality.bitrate,
                 qualityTier: quality.tier,
                 isEncrypted: (stream["encrypted"] as? Bool) ?? false,
+                sampleRateHz: sampleRate,
+                bitDepth: bitDepth,
                 isHiRes: hiRes,
                 sizeBytes: hintsObject?["videoSize"] as? Int
             )
+            let rank = policy.rank(candidate)
+            guard rank >= 0, !candidate.isEncrypted else { continue }
             if best == nil || rank > best!.1 { best = (candidate, rank) }
         }
         guard let best else { throw MusicAddonClientError.noStream }
