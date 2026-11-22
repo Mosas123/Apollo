@@ -335,4 +335,23 @@ enum DatabaseMigrations {
             """)
     }
 
+
+    /// Radio is not a recording. Keep favorite stations in an independent
+    /// metadata-only table; their stream URLs are resolved on each play.
+    static let v11: @Sendable (Database) throws -> Void = logged("v11-trop-radio-favorites") { db in
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS trop_v2_radio_favorite (
+                id TEXT PRIMARY KEY NOT NULL,
+                station_uuid TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                subtitle TEXT NOT NULL,
+                added_at DATETIME NOT NULL
+            )
+            """)
+        try db.execute(sql: """
+            CREATE INDEX IF NOT EXISTS idx_trop_v2_radio_favorite_added
+            ON trop_v2_radio_favorite(added_at)
+            """)
+    }
+
 }
