@@ -48,9 +48,11 @@ enum TropLibraryBackupArchiveChecks {
         assert(!text.contains("playback_url"))
         assert(!text.contains("thumbnail_url"))
 
-        var json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-        var library = json["library"] as! [String: Any]
-        var tracks = library["tracks"] as! [[String: Any]]
+        guard var json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var library = json["library"] as? [String: Any],
+              var tracks = library["tracks"] as? [[String: Any]] else {
+            fatalError("Unable to build synthetic archive mutation")
+        }
         tracks[0]["liked"] = false
         library["tracks"] = tracks
         json["library"] = library
@@ -62,11 +64,13 @@ enum TropLibraryBackupArchiveChecks {
             // Expected.
         }
 
-        json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-        json["schemaVersion"] = 9_999
+        guard var futureJSON = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            fatalError("Unable to build unsupported-version archive")
+        }
+        futureJSON["schemaVersion"] = 9_999
         do {
             _ = try TropLibraryBackupArchive.decode(
-                JSONSerialization.data(withJSONObject: json)
+                JSONSerialization.data(withJSONObject: futureJSON)
             )
             fatalError("Future schema must not be restored silently")
         } catch TropLibraryBackupError.unsupportedFormat {
