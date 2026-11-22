@@ -10,6 +10,9 @@ on:
       - "Trop/Settings/SettingsView.swift"
       - "tests/LibrarySync/TropLibraryV2RecoveryArchiveChecks.swift"
       - "scripts/test-trop-library-v2-recovery.sh"
+      - "scripts/test-trop-library-v2-grdb-integration.sh"
+      - "tests/LibrarySync/V2RecoveryGRDB/**"
+      - "Trop/Database/DatabaseMigrations.swift"
       - ".github/workflows/trop-library-v2-recovery-checks.yml"
   workflow_dispatch:
 
@@ -20,3 +23,10 @@ jobs:
       - uses: actions/checkout@v5
       - name: Run V2 archive integrity and SQLite recovery fixtures
         run: bash scripts/test-trop-library-v2-recovery.sh
+
+  grdb-roundtrip:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Exercise production V2 store against real GRDB 7.12
+        run: bash scripts/test-trop-library-v2-grdb-integration.sh
