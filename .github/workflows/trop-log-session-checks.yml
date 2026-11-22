@@ -1,0 +1,19 @@
+name: Trop Log Session Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/TropApp.swift"
+      - "Trop/Utilities/Log.swift"
+      - "tests/Logging/FileLogLaunchChecks.swift"
+      - "scripts/test-trop-log-session.sh"
+      - ".github/workflows/trop-log-session-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify clean per-process log sessions
+        run: bash scripts/test-trop-log-session.sh
