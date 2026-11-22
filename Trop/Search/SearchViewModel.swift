@@ -72,6 +72,17 @@ final class SearchViewModel {
     private(set) var jiosaavnTracks: [MusicCatalogTrack] = []
     private(set) var addonTracks: [MusicCatalogTrack] = []
 
+    // Saved V2 metadata is not a YouTube YTItem or a playable video ID.
+    // Keep it separate until a verified provider alias resolves to audio.
+    private(set) var localV2Recordings: [TropLibraryV2Store.RecordingSummary] = []
+    private(set) var localV2Playlists: [TropLibraryV2Store.PlaylistSummary] = []
+    private(set) var localV2Radios: [TropLibraryV2RadioStore.Favorite] = []
+
+    var displaysV2LibraryResults: Bool {
+        TropLibraryV2AccountIsolation.isEnabled
+            && (isShowingLibrary || selectedSectionFilter == nil)
+    }
+
     /// Each provider reports as soon as its own request finishes. Never
     /// make Audius, Qobuz, JioSaavn or add-ons wait for InnerTube.
     private enum ProviderSearchResult: Sendable {
@@ -162,8 +173,10 @@ final class SearchViewModel {
 
     var availableFilters: [String] {
         var filters = ["Library"]
-        let titles = Set(results.map(\.title))
-        filters.append(contentsOf: Self.displayOrder.filter { titles.contains($0) })
+        if !TropLibraryV2AccountIsolation.isEnabled {
+            let titles = Set(results.map(\.title))
+            filters.append(contentsOf: Self.displayOrder.filter { titles.contains($0) })
+        }
         if !audiusTracks.isEmpty { filters.append("Audius") }
         if !qobuzTracks.isEmpty { filters.append("Qobuz") }
         if !jiosaavnTracks.isEmpty { filters.append("JioSaavn") }
@@ -199,6 +212,8 @@ final class SearchViewModel {
     }
 
     var filteredResults: [SearchSection] {
+        // Never expose legacy YTItem rows through Library V2.
+        guard !TropLibraryV2AccountIsolation.isEnabled else { return [] }
         let local = librarySections
         if SearchLocalFirstPolicy.useLocalFallback(
             showingLibrary: isShowingLibrary,
@@ -348,6 +363,9 @@ final class SearchViewModel {
         localArtists = []
         localAlbums = []
         localPlaylists = []
+        localV2Recordings = []
+        localV2Playlists = []
+        localV2Radios = []
         // Never expose cached YouTube Music sections after switching to V2.
         results = requestsYouTubeCatalogue ? (resultCache[submittedQuery] ?? []) : []
         extractHero()
@@ -368,15 +386,50 @@ final class SearchViewModel {
         // artist, album or playlist. This task has its own cancellation guard.
         localFetchTask?.cancel()
         localFetchTask = Task { [weak self] in
-            let local = try? await SearchService.shared.localSearch(query: query)
-            guard let self, !Task.isCancelled,
-                  query == self.submittedQuery,
-                  let local else { return }
-            self.localSongs = local.songs
-            self.localArtists = local.artists
-            self.localAlbums = local.albums
-            self.localPlaylists = local.playlists
-            self.updateResultPhase()
+            if TropLibraryV2AccountIsolation.isEnabled {
+                // Read only Trop-owned rows. Never turn their UUIDs into
+                // YouTube video IDs or silently invent playable sources.
+                do {
+                    async let saved = TropLibraryV2Store.recordings()
+                    async let lists = TropLibraryV2Store.playlists()
+                    async let radio = TropLibraryV2RadioStore.favorites()
+                    let (recordings, playlists, radios) = try await (saved, lists, radio)
+                    guard let self, !Task.isCancelled,
+                          query == self.submittedQuery,
+                          TropLibraryV2AccountIsolation.isEnabled else { return }
+                    self.localV2Recordings = Array(recordings.filter {
+                        SearchLocalFirstPolicy.matchesV2LibraryItem(
+                            query: query, title: $0.title, subtitle: $0.artist
+                        )
+                    }.prefix(80))
+                    self.localV2Playlists = Array(playlists.filter {
+                        SearchLocalFirstPolicy.matchesV2LibraryItem(
+                            query: query, title: $0.name
+                        )
+                    }.prefix(40))
+                    self.localV2Radios = Array(radios.filter {
+                        SearchLocalFirstPolicy.matchesV2LibraryItem(
+                            query: query, title: $0.name, subtitle: $0.subtitle
+                        )
+                    }.prefix(40))
+                    self.updateResultPhase()
+                } catch {
+                    guard let self, !Task.isCancelled,
+                          query == self.submittedQuery else { return }
+                    self.error = error
+                    self.updateResultPhase()
+                }
+            } else {
+                let local = try? await SearchService.shared.localSearch(query: query)
+                guard let self, !Task.isCancelled,
+                      query == self.submittedQuery,
+                      let local else { return }
+                self.localSongs = local.songs
+                self.localArtists = local.artists
+                self.localAlbums = local.albums
+                self.localPlaylists = local.playlists
+                self.updateResultPhase()
+            }
         }
         if requestsYouTubeCatalogue {
             // Preserve the existing legacy path for users who have not
@@ -497,7 +550,9 @@ final class SearchViewModel {
         let hasContent = SearchLocalFirstPolicy.hasVisibleContent(
             hasRemoteSections: !results.isEmpty,
             hasRemoteHero: heroArtist != nil,
-            hasLocalSections: !librarySections.isEmpty,
+            hasLocalSections: !librarySections.isEmpty
+                || !localV2Recordings.isEmpty
+                || !localV2Playlists.isEmpty || !localV2Radios.isEmpty,
             hasExternalProviderTracks: !audiusTracks.isEmpty
                 || !qobuzTracks.isEmpty || !jiosaavnTracks.isEmpty
                 || !addonTracks.isEmpty
@@ -607,6 +662,9 @@ final class SearchViewModel {
         localArtists = []
         localAlbums = []
         localPlaylists = []
+        localV2Recordings = []
+        localV2Playlists = []
+        localV2Radios = []
         selectedSectionFilter = nil
         isShowingLibrary = false
         heroArtist = nil
