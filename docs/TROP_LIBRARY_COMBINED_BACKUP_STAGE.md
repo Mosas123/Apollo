@@ -19,12 +19,18 @@ It does not silently change the previous formats or move existing data.
 
 ## Transport contract
 
-- Format: `trop-library-combined-metadata`, version `1` (distinct from
-  the earlier standalone version numbers).
+- Format: `trop-library-combined-metadata`, version `2` (distinct from
+  the earlier standalone version numbers). This new internal version adds
+  provenance; version 1 was never released to users.
 - JSON with sorted keys, dates in milliseconds and SHA-256 over the canonical
   payload. This is **corruption detection, not encryption/authentication**.
-- Payload consists of full `legacy` and `libraryV2` snapshot objects. Both
-  must pass their existing allowlist/record/reference/privacy validators.
+- Payload consists of full `legacy` and `libraryV2` snapshot objects **plus**
+  `legacyMemberships` containing each original positive `playlist_song_map.id`,
+  playlist ID, song ID and position. Both library sections pass their existing
+  allowlist/record/reference/privacy validators; the new membership map must
+  correspond **exactly** to every legacy playlist entry, with no missing,
+  duplicated or forged source row IDs. The independent legacy `.tropbackup` v1
+  archive stays unchanged.
 - 40 MiB outer limit; the component 16 MiB legacy and 24 MiB V2 limits also
   apply. No downloads, audio files, playback URLs, addon manifests, cookies,
   bearer tokens, login credentials, app settings or user-private logs.
@@ -37,15 +43,21 @@ It does not silently change the previous formats or move existing data.
 ## Restore is deliberately not available
 
 The V2 legacy-import ledger stores integer `playlist_song_map.id` values
-specific to **one database**, while the PR #67 legacy snapshot captures
-playlist/song/position **without the original membership row IDs**. Therefore
-a combined archive does **not yet preserve enough provenance** to safely
-reconstruct the ledger on another device. Never replay these IDs blindly.
+specific to **one database**. The combined v2 envelope now captures the
+original row-ID-to-playlist/song/position mapping in the **same** GRDB read,
+while PR #67 standalone legacy backup v1 still lacks those IDs.
+
+**This fixes the missing-source-membership metadata, NOT the safety of
+cross-device restoration.** Imported-entry ledger tombstones may reference
+memberships already deleted from legacy. They are retained and counted as
+`ledgerEntriesWithMissingMembership` by the preview. We must design a
+stable origin identity, destination remapping and safe handling for these
+orphan/tombstone IDs before restoring. Never replay them blindly.
 
 Before any public Restore action:
 
-1. Design a stable source archive identity plus membership ID mapping with
-   explicit foreign-device behavior. Refuse ambiguous mappings, rather than
+1. Design a stable origin identity plus *destination remapping* and tombstone
+   strategy with explicit foreign-device behavior. Refuse ambiguous mappings, rather than
    silently treating foreign IDs as local rows.
 2. Preserve legitimate duplicate playlist positions (V2) while respecting
    legacy uniqueness rules; never de-duplicate across independent namespaces.
