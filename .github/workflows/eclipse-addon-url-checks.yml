@@ -1,0 +1,19 @@
+name: Eclipse Addon URL Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Core/MusicAddons/EclipseAddonURL.swift"
+      - "Trop/Core/MusicAddons/MusicAddonClient.swift"
+      - "tests/MusicAddons/EclipseAddonURLChecks.swift"
+      - "scripts/test-eclipse-addon-url.sh"
+      - ".github/workflows/eclipse-addon-url-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify once-encoded Eclipse stream and album IDs
+        run: bash scripts/test-eclipse-addon-url.sh
