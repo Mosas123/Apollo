@@ -3,8 +3,8 @@ import GRDB
 
 /// A user-visible *rehearsal*, not a recovery operation. Uses a brand-new
 /// in-memory SQLite queue created with the app's actual v1...current schema.
-/// No File Provider, CloudKit, credentials or DatabaseService.shared database
-/// handle is ever passed to the scratch database.
+/// No File Provider, CloudKit, credentials or live database handle is ever
+/// passed to the scratch database.
 enum TropLibraryCombinedRestoreRehearsal {
     enum Failure: Error, Sendable {
         case mismatchedRoundTrip
