@@ -89,6 +89,12 @@ enum TropLibraryCombinedBackupArchiveChecks {
             ],
             legacyArtistSources: [
                 .init(artistID: "legacy-artist-1", sourceChannelID: "UC-channel-source")
+            ],
+            podcastArtists: [
+                .init(artistID: "legacy-artist-1")
+            ],
+            episodePodcastNames: [
+                .init(episodeID: "episode-unsaved", podcastName: "Unsubscribed Show")
             ]
         )
     }
@@ -159,6 +165,8 @@ enum TropLibraryCombinedBackupArchiveChecks {
         precondition(recovered.library.relatedEpisodes[0].savedAt == nil)
         precondition(recovered.library.legacyAlbumSources[0].sourcePlaylistID == "OL-album-source")
         precondition(recovered.library.legacyArtistSources[0].sourceChannelID == "UC-channel-source")
+        precondition(recovered.library.podcastArtists[0].artistID == "legacy-artist-1")
+        precondition(recovered.library.episodePodcastNames[0].podcastName == "Unsubscribed Show")
 
         // Reject duplicate legacy origin row IDs even if song metadata agrees.
         let duplicated = TropLibraryCombinedBackupSnapshot(
@@ -431,6 +439,35 @@ enum TropLibraryCombinedBackupArchiveChecks {
             _ = try TropLibraryCombinedBackupArchive.encode(unownedSource)
             preconditionFailure("Orphaned artist origin must be rejected")
         } catch TropLibraryCombinedBackupError.invalidPayload {}
-        print("Combined V5 legacy provider links, podcasts and tombstones validated")
+        // No attachment of local podcast flags to an unknown artist.
+        let unknownPodcastArtist = TropLibraryCombinedBackupSnapshot(
+            legacy: original.legacy, libraryV2: original.libraryV2,
+            legacyMemberships: original.legacyMemberships,
+            originScope: original.originScope,
+            foreignTombstones: original.foreignTombstones,
+            podcastArtists: [.init(artistID: "unknown-artist")]
+        )
+        do {
+            _ = try TropLibraryCombinedBackupArchive.encode(unknownPodcastArtist)
+            preconditionFailure("Foreign podcast artist flag must fail")
+        } catch TropLibraryCombinedBackupError.invalidPayload {}
+        // No raw URLs or unowned podcast-name references.
+        let invalidPodcastName = TropLibraryCombinedBackupSnapshot(
+            legacy: original.legacy, libraryV2: original.libraryV2,
+            legacyMemberships: original.legacyMemberships,
+            originScope: original.originScope,
+            foreignTombstones: original.foreignTombstones,
+            relatedPodcasts: original.relatedPodcasts,
+            relatedEpisodes: original.relatedEpisodes,
+            podcastEpisodeMemberships: original.podcastEpisodeMemberships,
+            episodePodcastNames: [
+                .init(episodeID: "episode-unsaved", podcastName: "https://host/?token=secret")
+            ]
+        )
+        do {
+            _ = try TropLibraryCombinedBackupArchive.encode(invalidPodcastName)
+            preconditionFailure("Provider feed URL must fail")
+        } catch TropLibraryCombinedBackupError.invalidPayload {}
+        print("Combined V6 podcast classification and episode names validated")
     }
 }

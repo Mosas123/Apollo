@@ -53,6 +53,17 @@ struct TropLibraryCombinedBackupSnapshot: Codable, Equatable, Sendable {
         let sourceChannelID: String
     }
 
+    /// Positive local classification; false is the destination schema
+    /// default and does not require a remote catalogue or channel login.
+    struct LegacyPodcastArtist: Codable, Equatable, Sendable {
+        let artistID: String
+    }
+    /// A display fallback, not a required provider identity or URL.
+    struct LegacyEpisodePodcastName: Codable, Equatable, Sendable {
+        let episodeID: String
+        let podcastName: String
+    }
+
     let legacy: TropLibraryBackupSnapshot
     let libraryV2: TropLibraryV2RecoverySnapshot
     let legacyMemberships: [LegacyMembership]
@@ -63,6 +74,8 @@ struct TropLibraryCombinedBackupSnapshot: Codable, Equatable, Sendable {
     let podcastEpisodeMemberships: [PodcastEpisodeMembership]
     let legacyAlbumSources: [LegacyAlbumSource]
     let legacyArtistSources: [LegacyArtistSource]
+    let podcastArtists: [LegacyPodcastArtist]
+    let episodePodcastNames: [LegacyEpisodePodcastName]
 
     init(
         legacy: TropLibraryBackupSnapshot,
@@ -74,7 +87,9 @@ struct TropLibraryCombinedBackupSnapshot: Codable, Equatable, Sendable {
         relatedEpisodes: [RelatedEpisode] = [],
         podcastEpisodeMemberships: [PodcastEpisodeMembership] = [],
         legacyAlbumSources: [LegacyAlbumSource] = [],
-        legacyArtistSources: [LegacyArtistSource] = []
+        legacyArtistSources: [LegacyArtistSource] = [],
+        podcastArtists: [LegacyPodcastArtist] = [],
+        episodePodcastNames: [LegacyEpisodePodcastName] = []
     ) {
         self.legacy = legacy
         self.libraryV2 = libraryV2
@@ -86,6 +101,8 @@ struct TropLibraryCombinedBackupSnapshot: Codable, Equatable, Sendable {
         self.podcastEpisodeMemberships = podcastEpisodeMemberships
         self.legacyAlbumSources = legacyAlbumSources
         self.legacyArtistSources = legacyArtistSources
+        self.podcastArtists = podcastArtists
+        self.episodePodcastNames = episodePodcastNames
     }
 }
 
@@ -111,7 +128,7 @@ enum TropLibraryCombinedBackupError: Error, Equatable, Sendable {
 /// foreign device without an explicit origin/provenance mapping.
 enum TropLibraryCombinedBackupArchive {
     static let format = "trop-library-combined-metadata"
-    static let version = 5
+    static let version = 6
     static let maximumBytes = 40 * 1_024 * 1_024
 
     private static func encoder() -> JSONEncoder {
@@ -216,6 +233,22 @@ enum TropLibraryCombinedBackupArchive {
               }),
               library.legacyArtistSources.allSatisfy({
                   artistIDs.contains($0.artistID) && validLegacyID($0.sourceChannelID)
+              })
+        else { throw TropLibraryCombinedBackupError.invalidPayload }
+
+        // Local podcast classification and episode display fallbacks are
+        // owned by exported rows, not remote YouTube/provider accounts.
+        let podcastArtistIDs = library.podcastArtists.map(\.artistID)
+        let episodeNameIDs = library.episodePodcastNames.map(\.episodeID)
+        guard library.podcastArtists.count + library.episodePodcastNames.count
+                <= TropLibraryBackupArchive.maximumRecords,
+              Set(podcastArtistIDs).count == podcastArtistIDs.count,
+              Set(episodeNameIDs).count == episodeNameIDs.count,
+              podcastArtistIDs.allSatisfy(artistIDs.contains),
+              episodeNameIDs.allSatisfy(allEpisodes.contains),
+              library.episodePodcastNames.allSatisfy({
+                  !$0.podcastName.isEmpty && validText($0.podcastName)
+                      && !$0.podcastName.contains("://")
               })
         else { throw TropLibraryCombinedBackupError.invalidPayload }
 

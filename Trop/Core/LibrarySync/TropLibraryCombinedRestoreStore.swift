@@ -77,6 +77,14 @@ enum TropLibraryCombinedRestoreStore {
                     arguments: [sourceLink.sourceChannelID, sourceLink.artistID]
                 )
             }
+            // Only the local is_podcast_channel classification is restored.
+            // This neither authenticates nor starts any provider sync.
+            for artistFlag in source.podcastArtists {
+                try db.execute(
+                    sql: "UPDATE artist SET is_podcast_channel = 1 WHERE id = ?",
+                    arguments: [artistFlag.artistID]
+                )
+            }
             for list in source.legacy.playlists {
                 try db.execute(
                     sql: """
@@ -145,6 +153,16 @@ enum TropLibraryCombinedRestoreStore {
                         VALUES (?, ?, ?)
                         """,
                     arguments: [link.podcastID, link.episodeID, link.position]
+                )
+            }
+
+            // Restore validated display names only after saved and related
+            // episodes exist. A human-readable title does not require
+            // a provider session, a podcast feed URL or source credentials.
+            for name in source.episodePodcastNames {
+                try db.execute(
+                    sql: "UPDATE episode SET podcast_name = ? WHERE id = ?",
+                    arguments: [name.podcastName, name.episodeID]
                 )
             }
 

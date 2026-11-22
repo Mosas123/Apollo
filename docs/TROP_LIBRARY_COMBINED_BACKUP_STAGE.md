@@ -19,7 +19,7 @@ It does not silently change the previous formats or move existing data.
 
 ## Transport contract
 
-- Format: `trop-library-combined-metadata`, version `5` (internal, not
+- Format: `trop-library-combined-metadata`, version `6` (internal, not
   released to users). Earlier combined v1/v2 prototypes were not shipped.
   The standalone legacy v1 and standalone Library V2 v2 formats are unchanged.
 - JSON with sorted keys, dates in milliseconds and SHA-256 over the canonical
@@ -27,7 +27,11 @@ It does not silently change the previous formats or move existing data.
 - Payload consists of `legacy` and `libraryV2` snapshot objects, the original
   `legacyMemberships`, a stable installation-local UUID `originScope`, and
   `foreignTombstones` scoped to their original installation.
-  V5 additionally captures optional `legacyAlbumSources` (`album.playlist_id`)
+  V6 adds local `podcastArtists` (true `artist.is_podcast_channel`)
+  and `episodePodcastNames` (validated `episode.podcast_name`).
+  These display/classification hints survive without provider aliases
+  or auto-starting remote sync. Standalone legacy V1 remains unchanged.
+  V5 additionally captured optional `legacyAlbumSources` (`album.playlist_id`)
   and `legacyArtistSources` (`artist.channel_id`) as public source hints
   owned by bookmarked legacy albums/artists. They are NOT local playlist
   foreign keys, and V2 will not require the source provider to be enabled.
@@ -183,6 +187,15 @@ upload/video provenance, original modification dates) with strict validation
 and GRDB regression fixtures. A no-YouTube recovery must preserve local
 playlists, ordered podcast episodes and radio favorites without starting
 sync, silently discarding metadata or inserting remote credentials.
+
+**V6 local podcast metadata (22 Nov):** artist `is_podcast_channel` and
+episode `podcast_name` are now included in the internal combined transport.
+Only bookmarked artists and saved/linked episodes can own these records.
+A stale/unowned ID, duplicate or URL-shaped podcast name is rejected.
+Real GRDB fixtures use positive values for both saved and unsaved episodes,
+check exact restore/reexport with source metadata and again without any
+YouTube/provider aliases, plus the existing radio checks. This is
+**not on-device QA**; latest CI must pass before calling it verified.
 
 Before any public Restore action:
 

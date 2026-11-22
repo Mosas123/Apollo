@@ -23,6 +23,8 @@ enum TropLibraryCombinedBackupService {
         let relatedEpisodes: Int
         let legacyAlbumSources: Int
         let legacyArtistSources: Int
+        let podcastArtists: Int
+        let episodePodcastNames: Int
     }
 
     static func preview(_ data: Data) throws -> Preview {
@@ -47,7 +49,9 @@ enum TropLibraryCombinedBackupService {
             relatedPodcasts: library.relatedPodcasts.count,
             relatedEpisodes: library.relatedEpisodes.count,
             legacyAlbumSources: library.legacyAlbumSources.count,
-            legacyArtistSources: library.legacyArtistSources.count
+            legacyArtistSources: library.legacyArtistSources.count,
+            podcastArtists: library.podcastArtists.count,
+            episodePodcastNames: library.episodePodcastNames.count
         )
     }
 
@@ -156,6 +160,34 @@ enum TropLibraryCombinedBackupService {
                     artistID: row["id"], sourceChannelID: row["channel_id"]
                 )
             }
+            // Local semantic flags and human-readable podcast labels survive
+            // without a provider alias or external playlist identity.
+            let podcastArtists = try Row.fetchAll(
+                db, sql: """
+                    SELECT id FROM artist
+                    WHERE bookmarked_at IS NOT NULL AND is_podcast_channel = 1
+                    ORDER BY id
+                    """
+            ).map { row in
+                TropLibraryCombinedBackupSnapshot.LegacyPodcastArtist(
+                    artistID: row["id"]
+                )
+            }
+            let episodePodcastNames = try Row.fetchAll(
+                db, sql: """
+                    SELECT id, podcast_name FROM episode
+                    WHERE podcast_name IS NOT NULL
+                      AND (saved_at IS NOT NULL OR EXISTS (
+                          SELECT 1 FROM podcast_episode_map AS link
+                          WHERE link.episode_id = episode.id
+                      ))
+                    ORDER BY id
+                    """
+            ).map { row in
+                TropLibraryCombinedBackupSnapshot.LegacyEpisodePodcastName(
+                    episodeID: row["id"], podcastName: row["podcast_name"]
+                )
+            }
             return TropLibraryCombinedBackupSnapshot(
                 legacy: legacy, libraryV2: v2,
                 legacyMemberships: memberships, originScope: originScope,
@@ -164,7 +196,9 @@ enum TropLibraryCombinedBackupService {
                 relatedEpisodes: relatedEpisodes,
                 podcastEpisodeMemberships: podcastLinks,
                 legacyAlbumSources: albumSources,
-                legacyArtistSources: artistSources
+                legacyArtistSources: artistSources,
+                podcastArtists: podcastArtists,
+                episodePodcastNames: episodePodcastNames
             )
         }
     }

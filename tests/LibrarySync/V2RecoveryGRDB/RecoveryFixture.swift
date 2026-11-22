@@ -119,7 +119,8 @@ enum RecoveryFixture {
             try db.execute(sql: """
                 CREATE TABLE artist (
                     id TEXT PRIMARY KEY, name TEXT NOT NULL,
-                    channel_id TEXT, bookmarked_at DATETIME
+                    channel_id TEXT, bookmarked_at DATETIME,
+                    is_podcast_channel INTEGER NOT NULL DEFAULT 0
                 )
                 """)
             try db.execute(sql: """
@@ -132,7 +133,8 @@ enum RecoveryFixture {
                 CREATE TABLE episode (
                     id TEXT PRIMARY KEY, title TEXT NOT NULL,
                     podcast_id TEXT, duration INTEGER NOT NULL,
-                    is_played INTEGER NOT NULL, saved_at DATETIME
+                    podcast_name TEXT, is_played INTEGER NOT NULL,
+                    saved_at DATETIME
                 )
                 """)
             try db.execute(sql: """
@@ -193,8 +195,9 @@ enum RecoveryFixture {
             )
             try db.execute(
                 sql: """
-                    INSERT INTO artist (id, name, channel_id, bookmarked_at)
-                    VALUES ('legacy-artist', 'Saved artist', 'UC-channel-source', ?)
+                    INSERT INTO artist
+                        (id, name, channel_id, bookmarked_at, is_podcast_channel)
+                    VALUES ('legacy-artist', 'Saved artist', 'UC-channel-source', ?, 1)
                     """,
                 arguments: [now]
             )
@@ -211,11 +214,12 @@ enum RecoveryFixture {
             try db.execute(
                 sql: """
                     INSERT INTO episode
-                        (id, title, podcast_id, duration, is_played, saved_at)
+                        (id, title, podcast_id, duration,
+                         podcast_name, is_played, saved_at)
                     VALUES ('saved-episode', 'Saved Episode',
-                            'saved-podcast', 180, 1, ?),
+                            'saved-podcast', 180, 'Subscribed Show', 1, ?),
                            ('linked-episode', 'Unsaved Episode',
-                            'linked-podcast', 240, 0, NULL)
+                            'linked-podcast', 240, 'Unsubscribed Show', 0, NULL)
                     """,
                 arguments: [now]
             )
@@ -524,6 +528,9 @@ enum RecoveryFixture {
         precondition(combined.library.legacyAlbumSources[0].sourcePlaylistID == "OL-album-source")
         precondition(combined.library.legacyArtistSources.count == 1)
         precondition(combined.library.legacyArtistSources[0].sourceChannelID == "UC-channel-source")
+        precondition(combined.library.podcastArtists.count == 1)
+        precondition(combined.library.podcastArtists[0].artistID == "legacy-artist")
+        precondition(combined.library.episodePodcastNames.count == 2)
         precondition(combined.library.legacy.podcasts.count == 1)
         precondition(combined.library.legacy.episodes.count == 1)
         precondition(combined.library.relatedPodcasts.count == 1)
@@ -767,6 +774,10 @@ enum RecoveryFixture {
         precondition(
             restoredCombined.legacyArtistSources == combined.library.legacyArtistSources
         )
+        precondition(restoredCombined.podcastArtists == combined.library.podcastArtists)
+        precondition(
+            restoredCombined.episodePodcastNames == combined.library.episodePodcastNames
+        )
         precondition(restoredCombined.legacy.podcasts == combined.library.legacy.podcasts)
         precondition(restoredCombined.legacy.episodes == combined.library.legacy.episodes)
         precondition(restoredCombined.relatedPodcasts == combined.library.relatedPodcasts)
@@ -793,6 +804,10 @@ enum RecoveryFixture {
         precondition(redecoded.library.foreignTombstones == restoredCombined.foreignTombstones)
         precondition(redecoded.library.legacyAlbumSources == combined.library.legacyAlbumSources)
         precondition(redecoded.library.legacyArtistSources == combined.library.legacyArtistSources)
+        precondition(redecoded.library.podcastArtists == combined.library.podcastArtists)
+        precondition(
+            redecoded.library.episodePodcastNames == combined.library.episodePodcastNames
+        )
         precondition(
             redecoded.library.podcastEpisodeMemberships
                 == combined.library.podcastEpisodeMemberships
@@ -835,7 +850,9 @@ enum RecoveryFixture {
             foreignTombstones: combined.library.foreignTombstones,
             relatedPodcasts: combined.library.relatedPodcasts,
             relatedEpisodes: combined.library.relatedEpisodes,
-            podcastEpisodeMemberships: combined.library.podcastEpisodeMemberships
+            podcastEpisodeMemberships: combined.library.podcastEpisodeMemberships,
+            podcastArtists: combined.library.podcastArtists,
+            episodePodcastNames: combined.library.episodePodcastNames
         )
         let noProviderArchive = try TropLibraryCombinedBackupArchive.encode(
             sourceWithNoProvider
@@ -879,6 +896,11 @@ enum RecoveryFixture {
         )
         precondition(restoredWithoutProvider.relatedPodcasts == combined.library.relatedPodcasts)
         precondition(restoredWithoutProvider.relatedEpisodes == combined.library.relatedEpisodes)
+        precondition(restoredWithoutProvider.podcastArtists == combined.library.podcastArtists)
+        precondition(
+            restoredWithoutProvider.episodePodcastNames
+                == combined.library.episodePodcastNames
+        )
         let withoutProviderExport = try await TropLibraryCombinedBackupService.export()
         let exportedWithoutProvider = try TropLibraryCombinedBackupArchive.decode(
             withoutProviderExport
@@ -891,6 +913,14 @@ enum RecoveryFixture {
         precondition(
             exportedWithoutProvider.library.podcastEpisodeMemberships
                 == combined.library.podcastEpisodeMemberships
+        )
+        precondition(
+            exportedWithoutProvider.library.podcastArtists
+                == combined.library.podcastArtists
+        )
+        precondition(
+            exportedWithoutProvider.library.episodePodcastNames
+                == combined.library.episodePodcastNames
         )
         precondition(!String(decoding: withoutProviderExport, as: UTF8.self).contains("youtube"))
         print("Combined GRDB metadata roundtrip passed without YouTube/provider aliases")
