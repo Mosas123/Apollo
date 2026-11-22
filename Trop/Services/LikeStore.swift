@@ -24,6 +24,15 @@ class LikeStore: ObservableObject {
     }
 
     func refresh() async {
+        if UserDefaults.standard.bool(forKey: "trop.library.v2.previewEnabled") {
+            do {
+                let ids = try await TropLibraryV2Store.likedPlaybackIDs()
+                liked = Dictionary(ids.map { ($0, true) }, uniquingKeysWith: { first, _ in first })
+            } catch {
+                Log.sync.error("Failed to refresh V2 favorites: \(error)")
+            }
+            return
+        }
         let songs = (try? await DatabaseService.shared.fetchAllLikedSongs()) ?? []
         var dict: [String: Bool] = [:]
         for song in songs where song.liked {
@@ -41,7 +50,36 @@ class LikeStore: ObservableObject {
         liked = updated
 
         do {
-            if MusicPlaybackIdentity.isYouTube(videoId) {
+            if UserDefaults.standard.bool(forKey: "trop.library.v2.previewEnabled") {
+                // V2 is user-owned, including songs discovered through YouTube.
+                // A provider ID is only a lookup alias; never send a remote like.
+                guard let source = TropLibraryV2PlaybackCandidate.sourceReference(
+                    for: videoId
+                ) else {
+                    throw TropLibraryV2ValidationError.invalidAlias
+                }
+                if target {
+                    let artist = song.artists.isEmpty
+                        ? song.artistNamesDisplay
+                        : song.artists.map(\.name).joined(separator: ", ")
+                    try await TropLibraryV2Store.savePlaybackRecording(
+                        title: song.title, artist: artist,
+                        durationSeconds: max(0, song.duration),
+                        provider: source.provider, externalID: source.externalID,
+                        liked: true
+                    )
+                    if MusicPlaybackIdentity.isYouTube(videoId),
+                       SettingsStore.shared.autoDownloadOnLike {
+                        await DownloadManager.shared.download(song: song)
+                    }
+                } else {
+                    try await TropLibraryV2Store.setLikedForSource(
+                        provider: source.provider,
+                        externalID: source.externalID,
+                        liked: false
+                    )
+                }
+            } else if MusicPlaybackIdentity.isYouTube(videoId) {
                 // Guests and offline sessions keep their likes on this device; only
                 // mirror to YouTube Music when there is a real session.
                 let syncRemote = await CookieStore().isLoggedIn()
