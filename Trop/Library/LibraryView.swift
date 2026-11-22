@@ -534,7 +534,6 @@ struct CreatePlaylistDialog: View {
     let onCreated: () async -> Void
 
     @State private var name = ""
-    @State private var syncWithYouTube = false
     @State private var isCreating = false
     @State private var error: Error?
     @FocusState private var isFocused: Bool
@@ -564,27 +563,14 @@ struct CreatePlaylistDialog: View {
                 .padding(.horizontal, 24)
                 .padding(.bottom, 20)
 
-            // Sync toggle
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Sync playlist")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    Text("Syncs with your YouTube Music account. This cannot be changed later.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .lineLimit(2)
-                }
-
-                Spacer(minLength: 12)
-
-                Toggle("", isOn: $syncWithYouTube)
-                    .labelsHidden()
-                    .tint(settings.accentColor)
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 20)
+            // New playlists belong to Trop, not a YouTube account.
+            // iCloud sync will activate only after CloudKit migration QA.
+            Text("Saved to Trop on this device. iCloud sync will be added later.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 20)
 
             if let error {
                 HStack(spacing: 8) {
@@ -666,21 +652,19 @@ struct CreatePlaylistDialog: View {
 
     private func createPlaylist() async throws {
         let title = name.trimmingCharacters(in: .whitespaces)
-        if syncWithYouTube {
-            _ = try await SyncBridge.mutations.createPlaylist(title: title)
-        } else {
-            let id = UUID().uuidString
-            let entity = PlaylistEntity(
-                id: id,
-                browseId: nil,
-                name: title,
-                thumbnailUrl: nil,
-                isEditable: true,
-                bookmarkedAt: Date(),
-                remoteSongCount: 0
-            )
-            try await DatabaseService.shared.insert(entity)
-        }
+        let id = UUID().uuidString
+        // The existing local playlist schema is unchanged. Never create a
+        // new YouTube playlist or require an account for user-owned saves.
+        let entity = PlaylistEntity(
+            id: id,
+            browseId: nil,
+            name: title,
+            thumbnailUrl: nil,
+            isEditable: true,
+            bookmarkedAt: Date(),
+            remoteSongCount: 0
+        )
+        try await DatabaseService.shared.insert(entity)
     }
 }
 
