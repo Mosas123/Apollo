@@ -32,7 +32,8 @@ enum TropLibraryV2LocalSnapshotFinderChecks {
         )
         let located = try TropLibraryV2LocalSnapshotFinder.latest(in: root)
         precondition(located.filename == newer.lastPathComponent)
-        precondition(try TropLibraryV2RecoveryArchive.decode(located.bytes).library == empty)
+        let decoded = try TropLibraryV2RecoveryArchive.decode(located.bytes)
+        precondition(decoded.library == empty)
 
         // Unrelated files, similarly named text and directories are skipped.
         try Data("fake".utf8).write(
@@ -46,10 +47,8 @@ enum TropLibraryV2LocalSnapshotFinderChecks {
             "Trop-V2-Experimental-Snapshot-symlink.json"
         )
         try fileManager.createSymbolicLink(at: symlink, withDestinationURL: first)
-        precondition(
-            try TropLibraryV2LocalSnapshotFinder.latest(in: root).filename
-                == newer.lastPathComponent
-        )
+        let afterSymlink = try TropLibraryV2LocalSnapshotFinder.latest(in: root)
+        precondition(afterSymlink.filename == newer.lastPathComponent)
 
         // No report of success for an absent snapshot.
         try fileManager.removeItem(at: first)
