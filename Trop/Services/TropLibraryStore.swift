@@ -32,13 +32,9 @@ extension TropLibraryStore {
                 )
                 try entity.save(db)
             }
-            if !remoteIds.isEmpty {
-                let placeholders = DatabaseService.placeholders(count: remoteIds.count)
-                try db.execute(
-                    sql: "UPDATE artist SET bookmarked_at = NULL WHERE bookmarked_at IS NOT NULL AND id NOT IN (\(placeholders))",
-                    arguments: StatementArguments(Array(remoteIds))
-                )
-            }
+            // Provider results are additive during migration. An absent or
+            // partial YouTube response must never delete a Trop bookmark.
+
         }
         return remoteIds
     }
@@ -60,18 +56,9 @@ extension TropLibraryStore {
                 )
                 try entity.save(db)
             }
-            if !remoteIds.isEmpty {
-                try db.execute(sql: """
-                    DELETE FROM playlist_song_map WHERE playlist_id IN (
-                        SELECT id FROM playlist WHERE is_auto_sync = 1 AND browse_id IS NOT NULL
-                        AND browse_id NOT IN (\(DatabaseService.placeholders(count: remoteIds.count)))
-                    )
-                    """, arguments: StatementArguments(Array(remoteIds)))
-                try db.execute(sql: """
-                    DELETE FROM playlist WHERE is_auto_sync = 1 AND browse_id IS NOT NULL
-                    AND browse_id NOT IN (\(DatabaseService.placeholders(count: remoteIds.count)))
-                    """, arguments: StatementArguments(Array(remoteIds)))
-            }
+            // Provider results are additive during migration. An absent or
+            // partial YouTube response must never delete a Trop bookmark.
+
         }
         return remoteIds
     }
@@ -93,13 +80,9 @@ extension TropLibraryStore {
                 )
                 try entity.save(db)
             }
-            if !remoteIds.isEmpty {
-                let placeholders = DatabaseService.placeholders(count: remoteIds.count)
-                try db.execute(
-                    sql: "UPDATE album SET bookmarked_at = NULL WHERE bookmarked_at IS NOT NULL AND id NOT IN (\(placeholders))",
-                    arguments: StatementArguments(Array(remoteIds))
-                )
-            }
+            // Provider results are additive during migration. An absent or
+            // partial YouTube response must never delete a Trop bookmark.
+
         }
         return remoteIds
     }
@@ -117,13 +100,9 @@ extension TropLibraryStore {
                 )
                 try entity.save(db)
             }
-            if !remoteIds.isEmpty {
-                let placeholders = DatabaseService.placeholders(count: remoteIds.count)
-                try db.execute(
-                    sql: "UPDATE podcast SET subscribed_at = NULL WHERE subscribed_at IS NOT NULL AND id NOT IN (\(placeholders))",
-                    arguments: StatementArguments(Array(remoteIds))
-                )
-            }
+            // Provider results are additive during migration. An absent or
+            // partial YouTube response must never delete a Trop bookmark.
+
         }
         return remoteIds
     }
@@ -155,24 +134,11 @@ extension TropLibraryStore {
     }
 
     func unmarkStaleLikedSongs(excluding ids: Set<String>, graceCutoff: Date) async throws {
-        try await db.write { db in
-            var sql = "SELECT id FROM song WHERE liked = 1"
-            if !ids.isEmpty {
-                sql += " AND id NOT IN (\(DatabaseService.placeholders(count: ids.count)))"
-            }
-            sql += " AND modify_date < ?"
-            let staleIds = try String.fetchAll(
-                db,
-                sql: sql,
-                arguments: StatementArguments(Array(ids) + [graceCutoff])
-            )
-            for chunk in DatabaseService.chunked(staleIds) {
-                try db.execute(
-                    sql: "UPDATE song SET liked = 0 WHERE id IN (\(DatabaseService.placeholders(count: chunk.count)))",
-                    arguments: StatementArguments(chunk)
-                )
-            }
-        }
+        // Preserve the user's existing local likes while moving library
+        // ownership away from YouTube. Missing remote rows, including partial
+        // or failed syncs, must never be interpreted as local unlikes.
+        _ = ids
+        _ = graceCutoff
     }
 
     func deletePlaylistRows(playlistId: String) async throws {
