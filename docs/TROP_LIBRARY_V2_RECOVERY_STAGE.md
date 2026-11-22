@@ -12,6 +12,10 @@
 - A staged atomic **restore into completely empty V2 tables**. It refuses
   to touch a populated V2 library or an ephemeral database, and rejects
   invalid versions, checksums, IDs and referential integrity.
+- If import-ledger entries exist in the archive, restore also **rejects a
+  destination with legacy playlist memberships**. Their original INTEGER
+  identifiers are local to a device and can collide across users/devices;
+  origin-scoped lineage must be designed before a cross-device import.
 - A read-only **Settings → Experimental library → Experimental V2 Snapshot**
   Files export/verify screen (only visible while V2 preview is enabled).
   There is **no restore button** in the app.
