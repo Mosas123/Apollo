@@ -102,7 +102,11 @@ final class SponsorBlockIntegration {
         // Also wait until Now Playing has published the current stream.
         guard let source = nowPlaying.currentResult,
               source.videoId == id,
-              source.streamUrl == nowPlaying.currentStreamURL else { return }
+              source.streamUrl == nowPlaying.currentStreamURL,
+              // Video timestamps must never skip an independently resolved
+              // addon/Qobuz/FLAC master just because its queue ID is YouTube.
+              SponsorBlockSkipPolicy.allowsSource(clientName: source.clientName)
+        else { return }
         let player = PlayerController.shared
         guard player.currentVideoId == id, player.pendingVideoId == nil else { return }
         let position = nowPlaying.currentTime
@@ -114,6 +118,10 @@ final class SponsorBlockIntegration {
                 skipIntroAtStart: SponsorBlock.skipsIntroAtStart
             ) else { continue }
             skipped.insert(index)
+            Log.sponsorBlock.notice(
+                "musicOfftopic seek source=YouTube start=\(segment.start) "
+                    + "end=\(segment.end) observed=\(position)"
+            )
             player.seek(to: segment.end)
             return
         }
