@@ -50,6 +50,10 @@ struct AddonStreamQualityPolicy: Sendable {
         let lossless = stream.qualityTier.caseInsensitiveCompare("Lossless") == .orderedSame
         switch mode {
         case .cd:
+            // 16/44.1 only when the provider supplies this metadata. An
+            // unspecified stream is still provisional until audio probing.
+            if let bits = stream.bitDepth, bits != 16 { return false }
+            if let hz = stream.sampleRateHz, hz != 44_100 { return false }
             return lossless && !Self.isHiRes(stream)
         case .lossless:
             return lossless
