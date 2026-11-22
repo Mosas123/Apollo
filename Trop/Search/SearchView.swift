@@ -25,6 +25,7 @@ struct SearchView: View {
 
     @State private var pendingRoute: DetailRoute?
     @State private var playlistPickerSelection: PlaylistPickerSelection?
+    @State private var v2RadioUnavailable = false
     @State private var headerHidden = false
     @State private var headerHeight: CGFloat = 60
     @State private var searchBarHeight: CGFloat = 60
@@ -79,6 +80,11 @@ struct SearchView: View {
             .detailRouteDestinations()
             .sheet(item: $playlistPickerSelection) { selection in
                 AddSongToPlaylistSheet(song: selection.song)
+            }
+            .alert("Radio unavailable", isPresented: $v2RadioUnavailable) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("The station remains saved. Check your connection and try again.")
             }
             .onChange(of: pendingRoute) { _, route in
                 if let route {
@@ -293,6 +299,11 @@ struct SearchView: View {
                     }
                 }
 
+                // Saved Trop UUIDs are metadata, not implicit YouTube playback IDs.
+                if viewModel.displaysV2LibraryResults {
+                    v2LocalResults
+                }
+
                 if viewModel.showsAudiusResults && !viewModel.audiusTracks.isEmpty {
                     sectionHeader("Audius")
                     ForEach(viewModel.audiusTracks, id: \.id) { track in
@@ -325,6 +336,105 @@ struct SearchView: View {
         }
         .scrollIndicators(.automatic)
         .miniPlayerTracksScroll(headerHidden: $headerHidden).scrollEdgeEffectHidden(true, for: .bottom)
+    }
+
+    /// Library V2 search never converts local UUIDs into video-backed YTItems.
+    /// Only provider-scoped external search rows are directly playable.
+    @ViewBuilder
+    private var v2LocalResults: some View {
+        if !viewModel.localV2Recordings.isEmpty {
+            v2SectionHeader("Saved songs")
+            ForEach(viewModel.localV2Recordings, id: \.id) { recording in
+                HStack(spacing: 12) {
+                    Image(systemName: "music.note")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 52, height: 52)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(recording.title)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        Text(recording.artist ?? "Unknown artist")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Text("Saved metadata · playback source not yet resolved")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
+        }
+
+        if !viewModel.localV2Playlists.isEmpty {
+            v2SectionHeader("Your playlists")
+            ForEach(viewModel.localV2Playlists, id: \.id) { playlist in
+                NavigationLink {
+                    TropLibraryV2PlaylistScreen(playlist: playlist)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "music.note.list")
+                            .frame(width: 52, height: 52)
+                        Text(playlist.name).lineLimit(1)
+                        Spacer()
+                        Text("\(playlist.entryCount)")
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+
+        if !viewModel.localV2Radios.isEmpty {
+            v2SectionHeader("Saved radio stations")
+            ForEach(viewModel.localV2Radios) { station in
+                Button {
+                    Task {
+                        do {
+                            try await RadioPlaybackCoordinator.playSaved(
+                                stationUUID: station.stationUUID
+                            )
+                        } catch {
+                            v2RadioUnavailable = true
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "dot.radiowaves.left.and.right")
+                            .frame(width: 52, height: 52)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(station.name)
+                                .font(.subheadline.weight(.medium))
+                            Text(station.subtitle.isEmpty ? "Live radio · Internet required"
+                                 : station.subtitle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "play.fill")
+                    }
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func v2SectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.headline.weight(.bold))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// Play external-catalogue tracks using the provider-scoped queue adapter.
