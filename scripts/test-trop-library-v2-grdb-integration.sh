@@ -13,6 +13,8 @@ cp tests/LibrarySync/V2RecoveryGRDB/RecoveryFixture.swift \
     "$package/Sources/V2RecoveryGRDBFixture/RecoveryFixture.swift"
 cp tests/LibrarySync/V2RecoveryGRDB/LegacyImporterFixture.swift \
     "$package/Sources/V2RecoveryGRDBFixture/LegacyImporterFixture.swift"
+cp tests/LibrarySync/V2RecoveryGRDB/FreshV2ProfileFixture.swift \
+    "$package/Sources/V2RecoveryGRDBFixture/FreshV2ProfileFixture.swift"
 cp Trop/Core/LibrarySync/TropLibraryV2LegacyImporter.swift \
     "$package/Sources/V2RecoveryGRDBFixture/TropLibraryV2LegacyImporter.swift"
 cp Trop/Core/LibrarySync/TropLibraryV2MigrationDryRun.swift \
