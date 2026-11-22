@@ -359,8 +359,8 @@ enum DatabaseMigrations {
         try db.execute(sql: """
             CREATE TABLE IF NOT EXISTS trop_v2_legacy_import_entry (
                 legacy_membership_id INTEGER PRIMARY KEY NOT NULL,
-                entry_id TEXT NOT NULL UNIQUE
-                    REFERENCES trop_v2_playlist_entry(id) ON DELETE RESTRICT,
+                entry_id TEXT UNIQUE
+                    REFERENCES trop_v2_playlist_entry(id) ON DELETE SET NULL,
                 imported_at DATETIME NOT NULL
             )
             """)
@@ -368,7 +368,7 @@ enum DatabaseMigrations {
             CREATE TABLE IF NOT EXISTS trop_v2_legacy_relation (
                 id TEXT PRIMARY KEY NOT NULL,
                 owner_item_id TEXT NOT NULL
-                    REFERENCES trop_v2_item(id) ON DELETE RESTRICT,
+                    REFERENCES trop_v2_item(id) ON DELETE CASCADE,
                 link_kind TEXT NOT NULL CHECK (
                     link_kind IN ('episode_podcast', 'album_playlist')
                 ),
