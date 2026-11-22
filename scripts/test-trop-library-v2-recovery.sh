@@ -31,6 +31,19 @@ swiftc -swift-version 6 -strict-concurrency=complete \
   tests/LibrarySync/TropLibraryCombinedBackupArchiveChecks.swift \
   -o "$tmp_dir/v2-combined-archive-checks"
 "$tmp_dir/v2-combined-archive-checks"
+
+# Picker-free local combined archive discovery uses a bounded read and
+# skips directories, unrelated files and symlinks.
+swiftc -swift-version 6 -strict-concurrency=complete \
+  Trop/Core/LibrarySync/TropLibraryV2IdentityPolicy.swift \
+  Trop/Core/LibrarySync/TropLibraryBackupArchive.swift \
+  Trop/Core/LibrarySync/TropLibraryV2RecoveryArchive.swift \
+  Trop/Core/LibrarySync/TropLibraryCombinedBackupArchive.swift \
+  Trop/Core/LibrarySync/TropLibraryCombinedLocalSnapshotFinder.swift \
+  tests/LibrarySync/TropLibraryCombinedLocalSnapshotFinderChecks.swift \
+  -o "$tmp_dir/v2-combined-local-checks"
+"$tmp_dir/v2-combined-local-checks"
+
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryBackupService.swift
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryCombinedBackupService.swift
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryCombinedRestorePreflight.swift
@@ -38,6 +51,19 @@ swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryCombinedRestorePrefligh
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2RecoveryStore.swift
 swiftc -frontend -parse Trop/Settings/TropLibraryV2RecoveryView.swift
 swiftc -frontend -parse Trop/Settings/TropLibraryV2DocumentPicker.swift
+swiftc -frontend -parse Trop/Settings/TropLibraryCombinedBackupView.swift
+grep -Fq 'TropLibraryCombinedBackupView()' Trop/Settings/SettingsView.swift
+grep -Fq 'TropLibraryCombinedBackupService.export()' Trop/Settings/TropLibraryCombinedBackupView.swift
+grep -Fq 'TropLibraryCombinedBackupService.preview(bytes)' Trop/Settings/TropLibraryCombinedBackupView.swift
+grep -Fq 'TropLibraryCombinedLocalSnapshotFinder.latest()' Trop/Settings/TropLibraryCombinedBackupView.swift
+grep -Fq 'TropLibraryV2DocumentPicker(' Trop/Settings/TropLibraryCombinedBackupView.swift
+grep -Fq 'TropLibraryCombinedBackupArchive.maximumBytes + 1' Trop/Settings/TropLibraryCombinedBackupView.swift
+if grep -E 'restoreIntoEmptyLibrary|importLegacySnapshot|DELETE FROM|DROP TABLE' \
+  Trop/Settings/TropLibraryCombinedBackupView.swift \
+  Trop/Core/LibrarySync/TropLibraryCombinedLocalSnapshotFinder.swift; then
+  echo 'Combined backup UI must remain strictly read-only'
+  exit 1
+fi
 grep -Fq 'TropLibraryV2RecoveryView()' Trop/Settings/SettingsView.swift
 grep -Fq 'TropLibraryV2RecoveryStore.export()' Trop/Settings/TropLibraryV2RecoveryView.swift
 grep -Fq 'TropLibraryV2RecoveryStore.preview(data)' Trop/Settings/TropLibraryV2RecoveryView.swift
