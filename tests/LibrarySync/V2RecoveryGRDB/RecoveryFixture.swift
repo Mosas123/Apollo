@@ -238,6 +238,149 @@ enum RecoveryFixture {
         }
     }
 
+    /// Real SQLite AUTOINCREMENT assigns a different destination row ID.
+    /// The planner maps that observed ID to the source membership tuple.
+    /// An orphan ledger entry aborts a transaction without partial writes.
+    static func checkCombinedRemapping(
+        originalArchive: Data,
+        original: TropLibraryCombinedBackupSnapshot
+    ) throws {
+        let sourceRow = try {
+            guard let row = original.legacyMemberships.first else {
+                throw TropLibraryCombinedRestorePlanner.Blocker.incompleteMembershipMapping
+            }
+            return row
+        }()
+        let destination = try DatabaseQueue()
+        let actual = try destination.write { db -> TropLibraryCombinedRestorePlanner.DestinationMembership in
+            try db.execute(sql: """
+                CREATE TABLE restored_membership (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    playlist_id TEXT NOT NULL,
+                    song_id TEXT NOT NULL,
+                    position INTEGER NOT NULL
+                )
+                """)
+            // Simulate a consumed SQLite row ID with an empty destination.
+            try db.execute(
+                sql: """
+                    INSERT INTO restored_membership
+                        (id, playlist_id, song_id, position)
+                    VALUES (800, 'temp', 'temp', 0)
+                    """
+            )
+            try db.execute(sql: "DELETE FROM restored_membership")
+            try db.execute(
+                sql: """
+                    INSERT INTO restored_membership
+                        (playlist_id, song_id, position)
+                    VALUES (?, ?, ?)
+                    """,
+                arguments: [
+                    sourceRow.playlistID, sourceRow.songID, sourceRow.position
+                ]
+            )
+            let newID = db.lastInsertedRowID
+            guard let row = try Row.fetchOne(
+                db, sql: """
+                    SELECT playlist_id, song_id, position
+                    FROM restored_membership WHERE id = ?
+                    """,
+                arguments: [newID]
+            ) else {
+                throw TropLibraryCombinedRestorePlanner.Blocker.incompleteMembershipMapping
+            }
+            return .init(
+                sourceRowID: sourceRow.sourceRowID,
+                assignedRowID: newID,
+                playlistID: row["playlist_id"],
+                songID: row["song_id"],
+                position: row["position"]
+            )
+        }
+        precondition(actual.assignedRowID != sourceRow.sourceRowID)
+
+        // A complete live-row map is safe to remap; archived imported-entry
+        // tombstones still cannot be resolved without stable origin IDs.
+        let v2 = original.libraryV2
+        let safeSource = TropLibraryCombinedBackupSnapshot(
+            legacy: original.legacy,
+            libraryV2: .init(
+                items: v2.items, aliases: v2.aliases,
+                playlistEntries: v2.playlistEntries,
+                radioFavorites: v2.radioFavorites,
+                importLedger: v2.importLedger.filter {
+                    $0.legacyMembershipID == sourceRow.sourceRowID
+                },
+                legacyRelations: v2.legacyRelations,
+                omittedPrivateAliases: v2.omittedPrivateAliases
+            ),
+            legacyMemberships: original.legacyMemberships
+        )
+        let validArchive = try TropLibraryCombinedBackupArchive.encode(safeSource)
+        let plan = try TropLibraryCombinedRestorePlanner.prepare(
+            archive: validArchive, insertedMemberships: [actual]
+        )
+        precondition(
+            plan.sourceToDestinationID[sourceRow.sourceRowID]
+                == actual.assignedRowID
+        )
+        precondition(
+            plan.remappedImportLedger.first?.legacyMembershipID
+                == actual.assignedRowID
+        )
+
+        // An unresolved (source-deleted) membership in the real source
+        // archive must reject, even though the live rows were mapped.
+        do {
+            _ = try TropLibraryCombinedRestorePlanner.prepare(
+                archive: originalArchive, insertedMemberships: [actual]
+            )
+            preconditionFailure("Orphan import ledger must remain blocked")
+        } catch TropLibraryCombinedRestorePlanner.Blocker.orphanedImportTombstone {}
+
+        let rollback = try DatabaseQueue()
+        try rollback.write { db in
+            try db.execute(sql: """
+                CREATE TABLE restored_membership (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    playlist_id TEXT NOT NULL,
+                    song_id TEXT NOT NULL,
+                    position INTEGER NOT NULL
+                )
+                """)
+        }
+        do {
+            try rollback.write { db in
+                try db.execute(
+                    sql: """
+                        INSERT INTO restored_membership
+                            (playlist_id, song_id, position)
+                        VALUES (?, ?, ?)
+                        """,
+                    arguments: [
+                        sourceRow.playlistID, sourceRow.songID, sourceRow.position
+                    ]
+                )
+                let assigned = TropLibraryCombinedRestorePlanner.DestinationMembership(
+                    sourceRowID: sourceRow.sourceRowID,
+                    assignedRowID: db.lastInsertedRowID,
+                    playlistID: sourceRow.playlistID,
+                    songID: sourceRow.songID,
+                    position: sourceRow.position
+                )
+                _ = try TropLibraryCombinedRestorePlanner.prepare(
+                    archive: originalArchive, insertedMemberships: [assigned]
+                )
+            }
+            preconditionFailure("Transaction must abort for orphaned ledger")
+        } catch TropLibraryCombinedRestorePlanner.Blocker.orphanedImportTombstone {}
+        let remaining = try rollback.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM restored_membership")
+        }
+        precondition(remaining == 0, "Failed remap must rollback SQLite writes")
+    }
+
     static func main() async throws {
         guard CommandLine.arguments.count == 2 else {
             fatalError("Expected extracted v10-v12 SQL fixture path")
@@ -268,6 +411,9 @@ enum RecoveryFixture {
         precondition(combined.library.legacyMemberships[0].songID == "legacy-keep")
         precondition(!String(decoding: combinedArchive, as: UTF8.self)
             .contains("encoded-private-manifest"))
+        try checkCombinedRemapping(
+            originalArchive: combinedArchive, original: combined.library
+        )
 
         // The subsequent V2-only restore fixture starts with no legacy
         // memberships, as required by that older restore's collision guard.
