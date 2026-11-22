@@ -50,9 +50,32 @@ while PR #67 standalone legacy backup v1 still lacks those IDs.
 **This fixes the missing-source-membership metadata, NOT the safety of
 cross-device restoration.** Imported-entry ledger tombstones may reference
 memberships already deleted from legacy. They are retained and counted as
-`ledgerEntriesWithMissingMembership` by the preview. We must design a
-stable origin identity, destination remapping and safe handling for these
-orphan/tombstone IDs before restoring. Never replay them blindly.
+`ledgerEntriesWithMissingMembership` by the preview. Never replay them blindly.
+
+### Read-only destination remapping prototype
+
+`TropLibraryCombinedRestorePlanner` now validates an explicit
+**source membership → SQLite-assigned destination ID** mapping. It verifies
+the exact playlist/song/position identity, checks completeness, positive
+destination IDs, unique sources and unique destination IDs, then builds a
+**new V2 import ledger in memory** using only mapped destination IDs.
+
+It **fails closed** when a deleted source membership is still mentioned by
+the import ledger (orphan tombstone), because there is no safe destination
+identity for it yet. It also refuses missing, foreign and mismatched rows.
+The planner does **not** read/write the production DB, allocate IDs,
+create a new source origin, delete a tombstone or enable restore UI.
+
+The GRDB fixture separately tests fresh SQLite `AUTOINCREMENT`-assigned IDs
+that differ from the original source ID, verifies the remapped ledger and
+proves an orphan rejection rolls back a sandbox transaction. This test is
+not a complete legacy+V2 restore and is not on-device QA.
+
+Remaining design: an origin-scoped, stable identity for deleted membership
+tombstones, source/destination provenance and idempotent/repeat restore.
+Until that is solved, a combined backup with orphan imports is explicitly
+**blocked from full restoration**; dropping these tombstones silently is
+not acceptable.
 
 Before any public Restore action:
 
@@ -82,5 +105,8 @@ history before final integration. Do **not** merge the drafts blindly.
 formats with Swift 6 strict concurrency, checks tampering/version rejection,
 and refuses addon-private aliases. `test-trop-library-v2-grdb-integration.sh`
 builds the *actual production store files* against pinned GRDB 7.12.0,
-asserting a combined export uses exactly one database read and preserves
-both legacy and V2 rows. CI is not an on-device restore test.
+asserting a combined export uses exactly one database read, preserves
+both legacy and V2 rows, captures actual SQLite-assigned membership IDs and
+rejects orphan-ledger remapping within a rolled-back sandbox transaction.
+CI is not an on-device restore test; check the HEAD workflow result before
+calling the new fixture passed.
