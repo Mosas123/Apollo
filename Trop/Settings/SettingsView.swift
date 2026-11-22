@@ -46,6 +46,11 @@ struct SettingsView: View {
                     SettingsNavigationRow("Experimental V2 Snapshot", icon: "externaldrive") {
                         TropLibraryV2RecoveryView()
                     }
+                    SettingsNavigationRow(
+                        "Combined Metadata Snapshot", icon: "externaldrive.badge.plus"
+                    ) {
+                        TropLibraryCombinedBackupView()
+                    }
                 }
                 Text(
                     "V2 starts empty and saves locally without YouTube. "
