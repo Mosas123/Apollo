@@ -4,6 +4,7 @@ import Foundation
 /// Persist these keys rather than relying on a provider's raw ID being globally unique.
 enum MusicCatalogSource: String, Codable, Hashable, Sendable {
     case youtube
+    case musicbrainz
     case audius
     case jamendo
     case qobuz
