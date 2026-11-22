@@ -25,6 +25,19 @@ enum SearchLocalFirstPolicy {
             && hasLocalSections
     }
 
+    /// Match saved Trop-owned metadata without consulting legacy YouTube rows.
+    /// Standard containment handles case and accents in user-entered names.
+    static func matchesV2LibraryItem(
+        query: String,
+        title: String,
+        subtitle: String? = nil
+    ) -> Bool {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return false }
+        return title.localizedStandardContains(needle)
+            || (subtitle?.localizedStandardContains(needle) ?? false)
+    }
+
     static func hasVisibleContent(
         hasRemoteSections: Bool,
         hasRemoteHero: Bool,
