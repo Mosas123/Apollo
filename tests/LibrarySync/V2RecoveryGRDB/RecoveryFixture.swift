@@ -601,9 +601,10 @@ enum RecoveryFixture {
         } catch TropLibraryCombinedRestorePlanner.Blocker.orphanedImportTombstone {}
         try await DatabaseService.shared.read { db in
             for table in ["song", "playlist", "playlist_song_map", "trop_v2_item"] {
-                precondition(try Int.fetchOne(
+                let count = try Int.fetchOne(
                     db, sql: "SELECT COUNT(*) FROM \(table)"
-                ) == 0, "Orphan should rollback every table")
+                ) ?? -1
+                precondition(count == 0, "Orphan should rollback every table")
             }
         }
 
@@ -650,9 +651,10 @@ enum RecoveryFixture {
                 "trop_v2_item", "trop_v2_source_alias",
                 "trop_v2_playlist_entry"
             ] {
-                precondition(try Int.fetchOne(
+                let count = try Int.fetchOne(
                     db, sql: "SELECT COUNT(*) FROM \(table)"
-                ) == 0, "Late failure must rollback legacy and V2")
+                ) ?? -1
+                precondition(count == 0, "Late failure must rollback legacy and V2")
             }
         }
         try await DatabaseService.shared.write { db in
