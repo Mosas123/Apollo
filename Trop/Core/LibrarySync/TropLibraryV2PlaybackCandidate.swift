@@ -23,6 +23,21 @@ struct TropLibraryV2PlaybackCandidate: Sendable {
         return nil
     }
 
+    /// Preserve the explicitly tapped track's provider-scoped identity.
+    /// A search-row menu must not accidentally save the currently playing
+    /// song (or treat an Eclipse add-on ID as a YouTube video ID).
+    @MainActor
+    static func fromSong(_ song: SongItem) -> TropLibraryV2PlaybackCandidate? {
+        guard let source = sourceReference(for: song.videoId) else { return nil }
+        return TropLibraryV2PlaybackCandidate(
+            title: song.title,
+            artist: song.artistNamesDisplay,
+            durationSeconds: max(0, song.duration),
+            provider: source.provider,
+            externalID: source.externalID
+        )
+    }
+
     @MainActor
     static func current() -> TropLibraryV2PlaybackCandidate? {
         let player = NowPlaying.shared
