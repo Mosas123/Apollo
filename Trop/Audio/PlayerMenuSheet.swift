@@ -81,6 +81,16 @@ struct PlayerMenuSheet: View {
                             subtitle: "Style, size & explicit filter"
                         ) { showRadioOptions = true }
                     }
+                } else if TropLibraryV2AccountIsolation.isEnabled {
+                    // External providers (Nebula/NullBeat/Audius/Qobuz) can be
+                    // saved locally in V2 without YouTube playlist mutations.
+                    MenuCard {
+                        MenuRow(
+                            icon: "music.note.list",
+                            title: "Add to Playlist",
+                            subtitle: "Save to your Trop library"
+                        ) { showPlaylistPicker = true }
+                    }
                 }
             }
             .navigationDestination(for: Destination.self) { dest in
