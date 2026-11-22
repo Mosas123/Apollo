@@ -239,7 +239,7 @@ actor PlaybackManager {
             || stream.mimeType.lowercased().contains("eac3")
             || stream.mimeType.lowercased().contains("ec+3")
         Log.player.info(
-            "ADDON_STREAM quality=\(stream.qualityTier) mime=\(stream.mimeType) atmos=\(isAtmosStream) requested=\(atmos)"
+            "ADDON_STREAM quality=\(stream.qualityTier) mime=\(stream.mimeType) atmos=\(isAtmosStream) requested=\(policy.allowAtmos)"
         )
         resolvedSourceNames[videoId] = installation.manifest.name
 
