@@ -5,8 +5,18 @@ import Foundation
 /// It is deliberately not a restoration format exposed to the user yet.
 /// Existing .tropbackup v1 and V2 JSON archives remain independently readable.
 struct TropLibraryCombinedBackupSnapshot: Codable, Equatable, Sendable {
+    /// Origin-local row identity is preserved separately; legacy .tropbackup
+    /// V1 remains byte-compatible, and no destination ID is assumed equal.
+    struct LegacyMembership: Codable, Equatable, Sendable {
+        let sourceRowID: Int64
+        let playlistID: String
+        let songID: String
+        let position: Int
+    }
+
     let legacy: TropLibraryBackupSnapshot
     let libraryV2: TropLibraryV2RecoverySnapshot
+    let legacyMemberships: [LegacyMembership]
 }
 
 struct TropLibraryCombinedBackupEnvelope: Codable, Sendable {
@@ -31,7 +41,7 @@ enum TropLibraryCombinedBackupError: Error, Equatable, Sendable {
 /// foreign device without an explicit origin/provenance mapping.
 enum TropLibraryCombinedBackupArchive {
     static let format = "trop-library-combined-metadata"
-    static let version = 1
+    static let version = 2
     static let maximumBytes = 40 * 1_024 * 1_024
 
     private static func encoder() -> JSONEncoder {
@@ -51,16 +61,61 @@ enum TropLibraryCombinedBackupArchive {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
+    /// A playlist membership's integer row ID has meaning only in its
+    /// source database. Validate the *complete* ID↔tuple map and preserve
+    /// the stable playlist order; do not guess IDs during restoration.
+    private struct MembershipKey: Hashable {
+        let playlistID: String
+        let songID: String
+        let position: Int
+    }
+
     private static func validate(_ library: TropLibraryCombinedBackupSnapshot) throws {
-        // Both sub-archives enforce their own ID, size, row-count and alias
-        // allowlists. Reuse those validators instead of maintaining a second
-        // set of rules that could accidentally weaken privacy checks.
+        // Existing allowlists retain authority for both sub-archives.
         do {
             _ = try TropLibraryBackupArchive.encode(library: library.legacy)
             _ = try TropLibraryV2RecoveryArchive.encode(library.libraryV2)
         } catch {
             throw TropLibraryCombinedBackupError.invalidPayload
         }
+        guard library.legacyMemberships.count
+                == library.legacy.playlistEntries.count,
+              library.legacyMemberships.count <= TropLibraryBackupArchive.maximumRecords
+        else { throw TropLibraryCombinedBackupError.invalidPayload }
+
+        let ids = library.legacyMemberships.map(\.sourceRowID)
+        guard ids.allSatisfy({ $0 > 0 }),
+              Set(ids).count == ids.count else {
+            throw TropLibraryCombinedBackupError.invalidPayload
+        }
+
+        var expected: [MembershipKey: Int] = [:]
+        for entry in library.legacy.playlistEntries {
+            let key = MembershipKey(
+                playlistID: entry.playlistId,
+                songID: entry.songId,
+                position: entry.position
+            )
+            expected[key, default: 0] += 1
+        }
+        for entry in library.legacyMemberships {
+            let key = MembershipKey(
+                playlistID: entry.playlistID,
+                songID: entry.songID,
+                position: entry.position
+            )
+            guard let count = expected[key], count > 0 else {
+                throw TropLibraryCombinedBackupError.invalidPayload
+            }
+            if count == 1 { expected.removeValue(forKey: key) }
+            else { expected[key] = count - 1 }
+        }
+        guard expected.isEmpty else {
+            throw TropLibraryCombinedBackupError.invalidPayload
+        }
+        // Ledger tombstones can legitimately reference deleted origin
+        // memberships. They remain recorded but are not safe to blindly
+        // recreate on another device. The preview counts those orphans.
     }
 
     static func encode(
