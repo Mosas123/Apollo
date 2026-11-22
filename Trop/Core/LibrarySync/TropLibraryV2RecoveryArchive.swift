@@ -181,7 +181,8 @@ enum TropLibraryV2RecoveryArchive {
             guard canonical(item.id),
                   let kind = TropLibraryV2Kind(rawValue: item.kind),
                   (try? TropLibraryV2IdentityPolicy.checkedTitle(item.title)) != nil,
-                  (try? TropLibraryV2IdentityPolicy.checkedOptionalText(item.artistOrAuthor)) != nil,
+                  (item.artistOrAuthor == nil ||
+                    (try? TropLibraryV2IdentityPolicy.checkedOptionalText(item.artistOrAuthor)) != nil),
                   item.durationSeconds >= 0,
                   safeDate(item.createdAt), safeDate(item.modifiedAt),
                   item.savedAt.map(safeDate) != false,
@@ -219,7 +220,8 @@ enum TropLibraryV2RecoveryArchive {
         for radio in library.radioFavorites {
             guard canonical(radio.id), UUID(uuidString: radio.stationUUID) != nil,
                   (try? TropLibraryV2IdentityPolicy.checkedTitle(radio.name)) != nil,
-                  (try? TropLibraryV2IdentityPolicy.checkedOptionalText(radio.subtitle)) != nil,
+                  (radio.subtitle.isEmpty ||
+                    (try? TropLibraryV2IdentityPolicy.checkedOptionalText(radio.subtitle)) != nil),
                   safeDate(radio.addedAt), stationIDs.insert(radio.stationUUID).inserted
             else { throw TropLibraryV2RecoveryError.invalidData }
         }
