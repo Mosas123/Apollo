@@ -24,6 +24,14 @@ extension RecoveryFixture {
         // Duplicate an entry on purpose, with a distinct source row ID.
         try await DatabaseService.shared.write { db in
             try db.execute(sql: "DELETE FROM trop_v2_legacy_import_entry")
+            // The previous no-provider restore intentionally stripped album
+            // catalogue hints. Restore ONE harmless synthetic album relation
+            // here so the real importer exercises album + episode links.
+            // This affects only the disposable GRDB fixture, never user data.
+            try db.execute(sql: """
+                UPDATE album SET playlist_id = 'OL-album-fixture'
+                WHERE id = 'legacy-album'
+                """)
             try db.execute(sql: """
                 INSERT INTO playlist_song_map
                     (id, playlist_id, song_id, position)
