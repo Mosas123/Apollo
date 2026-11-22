@@ -141,7 +141,9 @@ struct TropLibraryV2RecoveryView: View {
         }
         .fileImporter(
             isPresented: $showImporter,
-            allowedContentTypes: [.json]
+            // Files/iCloud providers may label a valid .json as public.data.
+            // Permit generic files and validate the actual JSON envelope.
+            allowedContentTypes: [.item]
         ) { result in
             do {
                 let url = try result.get()
@@ -153,13 +155,30 @@ struct TropLibraryV2RecoveryView: View {
                 if let byteCount, byteCount > TropLibraryV2RecoveryArchive.maximumBytes {
                     throw TropLibraryV2RecoveryError.oversized
                 }
-                let data = try Data(contentsOf: url)
+
+                // Read at most the archive limit + 1 bytes, even when an
+                // external file provider supplies no reliable file size.
+                let handle = try FileHandle(forReadingFrom: url)
+                defer { try? handle.close() }
+                let data = try handle.read(
+                    upToCount: TropLibraryV2RecoveryArchive.maximumBytes + 1
+                ) ?? Data()
+                guard data.count <= TropLibraryV2RecoveryArchive.maximumBytes else {
+                    throw TropLibraryV2RecoveryError.oversized
+                }
+
                 preview = try TropLibraryV2RecoveryStore.preview(data)
                 feedback = "Archive integrity verified; nothing was restored."
                 errorMessage = nil
+            } catch TropLibraryV2RecoveryError.oversized {
+                preview = nil
+                errorMessage = "This file is too large for a V2 snapshot. Nothing was changed."
+            } catch TropLibraryV2RecoveryError.checksumMismatch {
+                preview = nil
+                errorMessage = "Snapshot checksum mismatch. Nothing was changed."
             } catch {
                 preview = nil
-                errorMessage = "Archive verification failed. Nothing was changed."
+                errorMessage = "This file is not a valid Trop V2 snapshot. Nothing was changed."
             }
         }
     }
