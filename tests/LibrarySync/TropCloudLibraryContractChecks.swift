@@ -79,9 +79,11 @@ struct TropCloudLibraryContractChecks {
             recordingID: id, position: 0, modifiedAt: now, deletedAt: nil
         )
         precondition(membership.isValidForCloud)
-        precondition(try JSONDecoder().decode(
-            TropCloudPlaylistEntry.self, from: JSONEncoder().encode(membership)
-        ) == membership)
+        let membershipData = try JSONEncoder().encode(membership)
+        let membershipRoundtrip = try JSONDecoder().decode(
+            TropCloudPlaylistEntry.self, from: membershipData
+        )
+        precondition(membershipRoundtrip == membership)
         var reordered = membership
         reordered.position = 5
         precondition(reordered.entryID == membership.entryID)
