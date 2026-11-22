@@ -118,6 +118,8 @@ final class SearchViewModel {
     var searchHistory: [SearchHistoryEntity] = []
 
     private var fetchTask: Task<Void, Never>?
+    /// Independent of YouTube's request: saved results can appear first.
+    private var localFetchTask: Task<Void, Never>?
     private var suggestionTask: Task<Void, Never>?
     private(set) var suggestions: [String] = []
     private var suggestionCache: [String: [String]] = [:]
@@ -182,8 +184,15 @@ final class SearchViewModel {
     }
 
     var filteredResults: [SearchSection] {
-        if isShowingLibrary {
-            return librarySections
+        let local = librarySections
+        if SearchLocalFirstPolicy.useLocalFallback(
+            showingLibrary: isShowingLibrary,
+            selectedFilter: selectedSectionFilter,
+            hasRemoteSections: !results.isEmpty,
+            hasRemoteHero: heroArtist != nil,
+            hasLocalSections: !local.isEmpty
+        ) {
+            return local
         }
         guard let filter = selectedSectionFilter else { return displaySections }
         return displaySections.filter { $0.title == filter }
@@ -332,7 +341,20 @@ final class SearchViewModel {
     private func fetchResults(for query: String, includeProviders: Bool) async {
         isFetching = true
         defer { isFetching = false }
-        async let localResults = try? SearchService.shared.localSearch(query: query)
+        // Do not await YouTube before publishing an already saved song,
+        // artist, album or playlist. This task has its own cancellation guard.
+        localFetchTask?.cancel()
+        localFetchTask = Task { [weak self] in
+            let local = try? await SearchService.shared.localSearch(query: query)
+            guard let self, !Task.isCancelled,
+                  query == self.submittedQuery,
+                  let local else { return }
+            self.localSongs = local.songs
+            self.localArtists = local.artists
+            self.localAlbums = local.albums
+            self.localPlaylists = local.playlists
+            self.updateResultPhase()
+        }
         var youtubeFailure: Error?
         do {
             let raw = try await SearchService.shared.search(query: query)
@@ -356,14 +378,7 @@ final class SearchViewModel {
             guard !Task.isCancelled, query == submittedQuery else { return }
             youtubeFailure = error
         }
-        let local = await localResults
         guard !Task.isCancelled, query == submittedQuery else { return }
-        if let local {
-            localSongs = local.songs
-            localArtists = local.artists
-            localAlbums = local.albums
-            localPlaylists = local.playlists
-        }
         error = youtubeFailure
         updateResultPhase()
 
@@ -433,11 +448,15 @@ final class SearchViewModel {
     }
 
     private func updateResultPhase() {
-        if results.isEmpty && heroArtist == nil && audiusTracks.isEmpty && qobuzTracks.isEmpty && jiosaavnTracks.isEmpty && addonTracks.isEmpty {
-            phase = error == nil ? .noResults : .failed
-        } else {
-            phase = .results
-        }
+        let hasContent = SearchLocalFirstPolicy.hasVisibleContent(
+            hasRemoteSections: !results.isEmpty,
+            hasRemoteHero: heroArtist != nil,
+            hasLocalSections: !librarySections.isEmpty,
+            hasExternalProviderTracks: !audiusTracks.isEmpty
+                || !qobuzTracks.isEmpty || !jiosaavnTracks.isEmpty
+                || !addonTracks.isEmpty
+        )
+        phase = hasContent ? .results : (error == nil ? .noResults : .failed)
     }
 
     /// Artist-first layout: when the top result is an artist, lift it (plus
@@ -586,6 +605,7 @@ final class SearchViewModel {
 
     private func cancelTasks() {
         fetchTask?.cancel()
+        localFetchTask?.cancel()
         suggestionTask?.cancel()
     }
 
