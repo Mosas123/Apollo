@@ -19,7 +19,7 @@ enum TropLibraryCombinedRestorePreflight {
         "downloaded_track", "speed_dial", "format",
         "trop_v2_item", "trop_v2_source_alias", "trop_v2_playlist_entry",
         "trop_v2_radio_favorite", "trop_v2_legacy_import_entry",
-        "trop_v2_legacy_relation"
+        "trop_v2_legacy_relation", "trop_v2_foreign_import_tombstone"
     ]
 
     static let requiredTables: [String] = [
@@ -27,7 +27,8 @@ enum TropLibraryCombinedRestorePreflight {
         "podcast", "episode",
         "trop_v2_item", "trop_v2_source_alias", "trop_v2_playlist_entry",
         "trop_v2_radio_favorite", "trop_v2_legacy_import_entry",
-        "trop_v2_legacy_relation"
+        "trop_v2_legacy_relation", "trop_v2_foreign_import_tombstone",
+        "trop_v2_library_origin"
     ]
 
     static func requireEmpty(_ db: Database) throws {

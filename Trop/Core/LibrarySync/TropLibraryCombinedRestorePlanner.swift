@@ -31,6 +31,7 @@ enum TropLibraryCombinedRestorePlanner {
     struct Plan: Equatable, Sendable {
         let sourceToDestinationID: [Int64: Int64]
         let remappedImportLedger: [TropLibraryV2RecoverySnapshot.ImportLedger]
+        let foreignTombstones: [TropLibraryCombinedBackupSnapshot.ForeignTombstone]
     }
 
     /// Requires a previously checked, versioned, checksum-valid combined
@@ -91,22 +92,34 @@ enum TropLibraryCombinedRestorePlanner {
             throw Blocker.incompleteMembershipMapping
         }
 
-        let ledger = try source.libraryV2.importLedger.map { row in
-            guard let destinationID = mapped[row.legacyMembershipID] else {
-                // A ledger tombstone may be legitimate, but without a stable
-                // origin-scoped tombstone key its numeric ID could collide
-                // with a different device's future legacy row. Reject here.
-                throw Blocker.orphanedImportTombstone
+        var ledger: [TropLibraryV2RecoverySnapshot.ImportLedger] = []
+        var foreign = source.foreignTombstones
+        var seen = Set(foreign.map {
+            $0.originScope + ":" + String($0.sourceMembershipID)
+        })
+        for row in source.libraryV2.importLedger {
+            if let destinationID = mapped[row.legacyMembershipID] {
+                ledger.append(.init(
+                    legacyMembershipID: destinationID,
+                    entryID: row.entryID, importedAt: row.importedAt
+                ))
+            } else {
+                // Orphans remain in their source installation's namespace.
+                // Never invent a local integer ID or discard history.
+                let key = source.originScope + ":" + String(row.legacyMembershipID)
+                guard seen.insert(key).inserted else {
+                    throw Blocker.duplicateSourceMapping
+                }
+                foreign.append(.init(
+                    originScope: source.originScope,
+                    sourceMembershipID: row.legacyMembershipID,
+                    entryID: row.entryID, importedAt: row.importedAt
+                ))
             }
-            return TropLibraryV2RecoverySnapshot.ImportLedger(
-                legacyMembershipID: destinationID,
-                entryID: row.entryID,
-                importedAt: row.importedAt
-            )
         }
         return Plan(
             sourceToDestinationID: mapped,
-            remappedImportLedger: ledger
+            remappedImportLedger: ledger, foreignTombstones: foreign
         )
     }
 }

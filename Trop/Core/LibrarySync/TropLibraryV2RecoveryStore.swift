@@ -172,6 +172,16 @@ enum TropLibraryV2RecoveryStore {
                 "trop_v2_legacy_import_entry",
                 "trop_v2_legacy_relation"
             ]
+            // Standalone V2 archives cannot represent foreign tombstone
+            // provenance; never restore over such existing history.
+            if try db.tableExists("trop_v2_foreign_import_tombstone") {
+                let count = try Int.fetchOne(
+                    db, sql: "SELECT COUNT(*) FROM trop_v2_foreign_import_tombstone"
+                ) ?? 0
+                guard count == 0 else {
+                    throw TropLibraryV2RecoveryError.existingLibrary
+                }
+            }
             for table in tables {
                 // Only fixed developer-authored table names enter this SQL.
                 let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table)") ?? 0

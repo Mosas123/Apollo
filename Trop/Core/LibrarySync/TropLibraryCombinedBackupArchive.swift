@@ -14,9 +14,18 @@ struct TropLibraryCombinedBackupSnapshot: Codable, Equatable, Sendable {
         let position: Int
     }
 
+    struct ForeignTombstone: Codable, Equatable, Sendable {
+        let originScope: String
+        let sourceMembershipID: Int64
+        let entryID: String?
+        let importedAt: Date
+    }
+
     let legacy: TropLibraryBackupSnapshot
     let libraryV2: TropLibraryV2RecoverySnapshot
     let legacyMemberships: [LegacyMembership]
+    let originScope: String
+    let foreignTombstones: [ForeignTombstone]
 }
 
 struct TropLibraryCombinedBackupEnvelope: Codable, Sendable {
@@ -41,7 +50,7 @@ enum TropLibraryCombinedBackupError: Error, Equatable, Sendable {
 /// foreign device without an explicit origin/provenance mapping.
 enum TropLibraryCombinedBackupArchive {
     static let format = "trop-library-combined-metadata"
-    static let version = 2
+    static let version = 3
     static let maximumBytes = 40 * 1_024 * 1_024
 
     private static func encoder() -> JSONEncoder {
@@ -113,9 +122,27 @@ enum TropLibraryCombinedBackupArchive {
         guard expected.isEmpty else {
             throw TropLibraryCombinedBackupError.invalidPayload
         }
-        // Ledger tombstones can legitimately reference deleted origin
-        // memberships. They remain recorded but are not safe to blindly
-        // recreate on another device. The preview counts those orphans.
+        // A stable origin UUID is persisted at installation migration time.
+        func canonicalScope(_ scope: String) -> Bool {
+            guard let uuid = UUID(uuidString: scope) else { return false }
+            return uuid.uuidString.lowercased() == scope
+        }
+        guard canonicalScope(library.originScope),
+              library.foreignTombstones.count <= TropLibraryBackupArchive.maximumRecords
+        else { throw TropLibraryCombinedBackupError.invalidPayload }
+        let entryIDs = Set(library.libraryV2.playlistEntries.map(\.id))
+        var keys = Set<String>()
+        for tombstone in library.foreignTombstones {
+            guard canonicalScope(tombstone.originScope),
+                  tombstone.sourceMembershipID > 0,
+                  tombstone.importedAt.timeIntervalSince1970.isFinite,
+                  tombstone.entryID == nil || tombstone.entryID.map(entryIDs.contains) == true
+            else { throw TropLibraryCombinedBackupError.invalidPayload }
+            let key = tombstone.originScope + ":" + String(tombstone.sourceMembershipID)
+            guard keys.insert(key).inserted else {
+                throw TropLibraryCombinedBackupError.invalidPayload
+            }
+        }
     }
 
     static func encode(

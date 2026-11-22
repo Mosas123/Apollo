@@ -13,7 +13,7 @@ enum TropLibraryCombinedRestoreStore {
 
     /// Not a complete rescue: downloaded audio, login credentials, caches,
     /// history and private addon identifiers are intentionally excluded.
-    /// Restore refuses all nonempty destinations and all orphan ledger rows.
+    /// Restore refuses occupied databases; orphan ledger history is namespaced.
     static func restoreIntoEmptyLibrary(
         _ archive: Data
     ) async throws -> TropLibraryCombinedBackupService.Preview {
@@ -194,6 +194,19 @@ enum TropLibraryCombinedRestoreStore {
                     arguments: [
                         ledger.legacyMembershipID, ledger.entryID,
                         ledger.importedAt
+                    ]
+                )
+            }
+            for tombstone in mapping.foreignTombstones {
+                try db.execute(
+                    sql: """
+                        INSERT INTO trop_v2_foreign_import_tombstone
+                            (origin_scope, source_membership_id, entry_id, imported_at)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                    arguments: [
+                        tombstone.originScope, tombstone.sourceMembershipID,
+                        tombstone.entryID, tombstone.importedAt
                     ]
                 )
             }

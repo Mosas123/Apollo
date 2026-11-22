@@ -379,4 +379,27 @@ enum DatabaseMigrations {
             """)
     }
 
+    /// Portable deleted-membership provenance, isolated from local row IDs.
+    static let v13: @Sendable (Database) throws -> Void = logged("v13-import-tombstones") { db in
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS trop_v2_library_origin (
+                singleton INTEGER PRIMARY KEY NOT NULL CHECK (singleton = 1),
+                origin_scope TEXT NOT NULL
+            )
+            """)
+        try db.execute(
+            sql: "INSERT OR IGNORE INTO trop_v2_library_origin (singleton, origin_scope) VALUES (1, ?)",
+            arguments: [UUID().uuidString.lowercased()]
+        )
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS trop_v2_foreign_import_tombstone (
+                origin_scope TEXT NOT NULL,
+                source_membership_id INTEGER NOT NULL CHECK (source_membership_id > 0),
+                entry_id TEXT,
+                imported_at DATETIME NOT NULL,
+                PRIMARY KEY (origin_scope, source_membership_id)
+            )
+            """)
+    }
+
 }

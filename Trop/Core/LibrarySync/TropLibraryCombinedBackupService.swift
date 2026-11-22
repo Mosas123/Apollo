@@ -17,6 +17,7 @@ enum TropLibraryCombinedBackupService {
         let legacyLedgerEntriesNeedingOrigin: Int
         let sourceMemberships: Int
         let ledgerEntriesWithMissingMembership: Int
+        let foreignTombstones: Int
     }
 
     static func preview(_ data: Data) throws -> Preview {
@@ -35,7 +36,8 @@ enum TropLibraryCombinedBackupService {
             sourceMemberships: library.legacyMemberships.count,
             ledgerEntriesWithMissingMembership: library.libraryV2.importLedger.filter {
                 !membershipIDs.contains($0.legacyMembershipID)
-            }.count
+            }.count,
+            foreignTombstones: library.foreignTombstones.count
         )
     }
 
@@ -44,6 +46,9 @@ enum TropLibraryCombinedBackupService {
             throw TropLibraryCombinedBackupError.temporaryDatabase
         }
         return try await DatabaseService.shared.read { db in
+            guard let originScope = try String.fetchOne(
+                db, sql: "SELECT origin_scope FROM trop_v2_library_origin WHERE singleton = 1"
+            ) else { throw TropLibraryCombinedBackupError.invalidPayload }
             let legacy = try TropLibraryBackupService.snapshot(in: db)
             let v2 = try TropLibraryV2RecoveryStore.snapshot(in: db)
             let memberships = try Row.fetchAll(
@@ -58,9 +63,23 @@ enum TropLibraryCombinedBackupService {
                     position: row["position"]
                 )
             }
+            let foreignTombstones = try Row.fetchAll(
+                db, sql: """
+                    SELECT origin_scope, source_membership_id, entry_id, imported_at
+                    FROM trop_v2_foreign_import_tombstone
+                    ORDER BY origin_scope, source_membership_id
+                    """
+            ).map { row in
+                TropLibraryCombinedBackupSnapshot.ForeignTombstone(
+                    originScope: row["origin_scope"],
+                    sourceMembershipID: row["source_membership_id"],
+                    entryID: row["entry_id"], importedAt: row["imported_at"]
+                )
+            }
             return TropLibraryCombinedBackupSnapshot(
                 legacy: legacy, libraryV2: v2,
-                legacyMemberships: memberships
+                legacyMemberships: memberships, originScope: originScope,
+                foreignTombstones: foreignTombstones
             )
         }
     }
