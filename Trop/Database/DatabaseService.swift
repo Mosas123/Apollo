@@ -155,6 +155,16 @@ extension DatabaseService {
         }
     }
 
+    /// Return a value from one atomic GRDB write, e.g. an existing
+    /// provider alias ID or a newly created Trop-owned UUID.
+    func writeReturning<T: Sendable>(
+        _ block: @escaping @Sendable (Database) throws -> T
+    ) async throws -> T {
+        try await dbPool.write { db in
+            try block(db)
+        }
+    }
+
     func read<T: Sendable>(_ block: @escaping @Sendable (Database) throws -> T) async throws -> T {
         try await dbPool.read { db in
             try block(db)
