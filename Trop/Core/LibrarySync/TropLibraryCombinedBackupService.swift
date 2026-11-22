@@ -44,6 +44,7 @@ enum TropLibraryCombinedBackupService {
     }
 
     static func export() async throws -> Data {
-        try TropLibraryCombinedBackupArchive.encode(await snapshot())
+        let library = try await snapshot()
+        return try TropLibraryCombinedBackupArchive.encode(library)
     }
 }
