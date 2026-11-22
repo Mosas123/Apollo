@@ -33,6 +33,21 @@
   Files importer remains secondary for other locations, with its behavior
   unverified on iPhone. A fixture guards discovery, ordering and size limits.
   **Do not claim the picker itself was fixed until on-device QA.**
+- **Second report with short iPhone recording:** selector still does not
+  finish selecting any file, and the dedicated local Verify button appears
+  unresponsive. The latest submitted clip shows only the Files screen;
+  the actual local button tap is not in that clip. The latter button did
+  verify inline and placed status at the bottom of a long List, making its
+  outcome easy to miss. New changes give immediate alert feedback and a
+  privacy-safe V2_LOCAL_VERIFY log for success/no-file/error.
+- **Independent UIKit path staged:** replace the SwiftUI .fileImporter
+  presentation with explicit UIDocumentPickerViewController(forOpeningContentTypes:
+  [.data], asCopy: true), a delegate callback, bounded read, and an alert.
+  This can isolate SwiftUI presentation behavior but uses the same underlying
+  Files provider, so it is **not guaranteed** to fix an OS-level picker bug.
+  No raw path, filename, source ID or archive contents are logged.
+  Inspect both routes in a single on-device IPA after CI; if delegate does
+  not fire, do not make further speculative UTType/plist changes.
 - Lossless preservation of membership UUIDs, order/duplicates and import
   tombstones for already-backed-up records.
 
