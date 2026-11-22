@@ -12,6 +12,27 @@ struct LocalFirstSearchPolicyChecks {
             libraryV2Enabled: false
         ))
 
+        // Saved V2 search uses local, provider-free title/artist matching.
+        // It never parses UUIDs as YouTube video IDs or SQL wildcards.
+        precondition(SearchLocalFirstPolicy.matchesV2LibraryItem(
+            query: "cafe", title: "Café del Mar"
+        ))
+        precondition(SearchLocalFirstPolicy.matchesV2LibraryItem(
+            query: "NUEVAYOL", title: "Otra canción", subtitle: "Nuevayol"
+        ))
+        precondition(SearchLocalFirstPolicy.matchesV2LibraryItem(
+            query: "%", title: "100% música"
+        ))
+        precondition(!SearchLocalFirstPolicy.matchesV2LibraryItem(
+            query: "_", title: "Sin guiones"
+        ))
+        precondition(!SearchLocalFirstPolicy.matchesV2LibraryItem(
+            query: "   ", title: "Saved"
+        ))
+        precondition(!SearchLocalFirstPolicy.matchesV2LibraryItem(
+            query: "video", title: "Pure audio", subtitle: nil
+        ))
+
         // A slow/stuck YouTube request must not hide existing saved items.
         precondition(SearchLocalFirstPolicy.useLocalFallback(
             showingLibrary: false, selectedFilter: nil,
