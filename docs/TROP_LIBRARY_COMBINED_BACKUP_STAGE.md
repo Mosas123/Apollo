@@ -164,7 +164,7 @@ selected field's round trip under real migrations.
 | `song.liked`, `song.in_library`, `song.create_date` | Local favorite/library membership and original creation date | Already covered by legacy V1 metadata; keep |
 | `song.total_play_time` | Locally accumulated listening time, preserved by `SongEntity.merging` | Valuable user state; **currently missing** from archive. Decide whether listening history belongs in a separate opt-in backup before exporting |
 | `song.is_uploaded` | Legacy upload-origin flag, preserved on merges | Preserve as historical provenance only; do not claim uploaded media remains playable |
-| `song.is_video` | Audio/video media-type hint, preserved on merges | Candidate for optional portable metadata; no playback entitlement implied |
+| `song.is_video` | **Legacy YouTube video-classification flag**, preserved on old song rows | **Do NOT migrate as a V2 media type or feature.** Music-only catalogue: inspect this flag only while classifying old rows, and never automatically expose videos as recordings |
 | `song.modify_date` | Legacy modification date | Candidate to preserve for sorting/conflict semantics; currently synthesized as `createdAt` during combined restore |
 | `artist.is_podcast_channel` | Distinguishes a podcast channel; sync deliberately retains existing value | **High-priority safe field** for a future combined format; do not turn it into a required remote channel login |
 | `album.is_uploaded` | Legacy upload provenance retained by album sync | Preserve optional origin semantics, not file bytes |
@@ -183,7 +183,8 @@ playlist memberships, podcast/episode links, foreign tombstones and radio
 favorites. **Nothing above changes the standalone legacy V1 or V2-only V2
 archives.** The next implementation slice should be the clearly local and
 privacy-safe fields (`artist.is_podcast_channel`, `episode.podcast_name`,
-upload/video provenance, original modification dates) with strict validation
+upload-origin provenance and original modification dates), explicitly **excluding**
+video-catalogue behavior, with strict validation
 and GRDB regression fixtures. A no-YouTube recovery must preserve local
 playlists, ordered podcast episodes and radio favorites without starting
 sync, silently discarding metadata or inserting remote credentials.
@@ -196,6 +197,35 @@ Real GRDB fixtures use positive values for both saved and unsaved episodes,
 check exact restore/reexport with source metadata and again without any
 YouTube/provider aliases, plus the existing radio checks. This is
 **not on-device QA**; latest CI must pass before calling it verified.
+
+## Music-only catalogue policy — user decision (22 Nov 2026)
+
+**ApoloEngine / Trop are becoming a music-first, Trop-owned catalogue, NOT
+a YouTube Music or video catalogue.** The target library represents music
+recordings with Trop-native identities, artists, albums and playlists.
+Radio stations and podcasts/episodes remain separate native sections.
+There is **no video browsing, video playback or video media type** in the
+target catalogue. YouTube IDs and old `song.is_video` values cannot turn a
+video into a first-class V2 library item or become required for music access.
+
+For safe migration, **legacy rows are not necessarily pure videos just
+because their original YouTube source was video-backed**. Separate
+classification from preservation:
+
+- Migrate verified music recordings as audio-first, provider-independent
+  entries, preserving user likes and ordered playlist references.
+- Put genuinely video-only or ambiguous legacy rows into an explicit,
+  read-only migration report / unresolved queue until confidently matched
+  with an audio recording. Do not auto-convert them into music, and **never
+  silently delete a liked row or playlist membership**.
+- Keep old video-only provenance confined to the legacy migration reader
+  if necessary for that classification. **Do not add `is_video` to the
+  V2 portable archive, new catalogue model, playback routing or UI.**
+- A future YouTube Music removal must not prevent export, restoration,
+  playlist editing, radio favourites or podcast access. Independent music
+  source resolution and actual playback need separate on-device QA.
+- No change here alters the existing archive, deletes user data, merges
+  drafts or enables experimental restore.
 
 Before any public Restore action:
 
