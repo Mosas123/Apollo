@@ -12,6 +12,8 @@ struct HomeScreenView: View {
     @ObservedObject private var router = AppRouter.shared
     @State private var viewModel = HomeViewModel()
     private let accountState = AccountSheetState.shared
+    @AppStorage("trop.library.v2.previewEnabled")
+    private var libraryV2PreviewEnabled = false
 
     @State private var pendingRoute: DetailRoute?
     @State private var headerOffset: CGFloat = 0
@@ -65,17 +67,21 @@ struct HomeScreenView: View {
                 }
             }
             .onChange(of: accountState.isLoggedIn) { _, loggedIn in
+                guard !libraryV2PreviewEnabled else { return }
                 viewModel.handleSessionChange(loggedIn: loggedIn)
             }
             .task {
-                await viewModel.restoreSession()
-                await accountState.restoreSession()
-                await accountState.fetchAccountInfo()
+                // Library V2 never needs YouTube account state merely to
+                // browse Home. The music catalogue remains available to guests.
+                if !libraryV2PreviewEnabled {
+                    await viewModel.restoreSession()
+                    await accountState.restoreSession()
+                    await accountState.fetchAccountInfo()
+                }
                 viewModel.loadHomeData()
                 await reloadSpeedDial()
-                // Trigger library sync in background
-                Task {
-                    await SyncBridge.checkAndSyncIfStale()
+                if !libraryV2PreviewEnabled {
+                    Task { await SyncBridge.checkAndSyncIfStale() }
                 }
             }
             .task(id: viewModel.homeSections.count) {
@@ -139,7 +145,9 @@ struct HomeScreenView: View {
         .refreshable {
             await viewModel.refresh()
             await reloadSpeedDial()
-            await SyncBridge.checkAndSyncIfStale()
+            if !libraryV2PreviewEnabled {
+                await SyncBridge.checkAndSyncIfStale()
+            }
         }
         .onChange(of: settings.hideExplicit) { _, _ in
             viewModel.syncSettings()
