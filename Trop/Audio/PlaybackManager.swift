@@ -232,6 +232,12 @@ actor PlaybackManager {
         resolvedSourceNames[videoId] = installation.manifest.name
 
         if case .youtube(let youTubeId) = stream.kind {
+            // A saved V2 add-on alias must not silently turn into an
+            // InnerTube-dependent playback path. Direct audio URLs remain
+            // available; explicit optional YouTube audio needs its own gate.
+            guard !TropLibraryV2AccountIsolation.isEnabled else {
+                throw MusicCatalogError.unavailableTrack
+            }
             var request = StreamResolveRequest.playback(videoId: youTubeId)
             request.options.audioQuality = SettingsStore.shared.audioQuality
             let resolved = try await StreamFallback.resolveFirstValid(
@@ -812,6 +818,9 @@ actor PlaybackManager {
     /// Boundary-only upgrade: warm this track (for replays) and the next one
     /// so it *starts* in the better source. Never swaps mid-track.
     private func scheduleUpgradePrefetch(videoId: String) {
+        // Provider-scoped tracks must never be rematched by the legacy
+        // YouTube-keyed upgrade cache or metadata prefetch.
+        guard !MusicPlaybackIdentity.isExternal(videoId) else { return }
         Task {
             let upgradesEnabled = SettingsStore.shared.upgradeDuringPlayback
             // With mid-track swaps on, warm the current track first so the swap
