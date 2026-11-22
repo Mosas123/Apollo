@@ -84,7 +84,7 @@ enum RecoveryFixture {
     static func createSchema(from path: String) async throws {
         let ddlText = try String(contentsOfFile: path, encoding: .utf8)
         let statements = ddlText.components(separatedBy: "\n--V2DDL--\n")
-        precondition(statements.count == 10, "Must use actual v10-v12 schema")
+        precondition(statements.count == 12, "Must use actual v10-v13 schema")
         try await DatabaseService.shared.write { db in
             try db.execute(sql: "PRAGMA foreign_keys = ON")
             // Legacy tables contain only the production columns used by
@@ -156,6 +156,14 @@ enum RecoveryFixture {
             for statement in statements {
                 try db.execute(sql: statement)
             }
+            // v13's migration seeds a persistent per-installation UUID.
+            try db.execute(
+                sql: """
+                    INSERT INTO trop_v2_library_origin (singleton, origin_scope)
+                    VALUES (1, ?)
+                    """,
+                arguments: ["a0000000-0000-4000-8000-000000000099"]
+            )
         }
     }
 
@@ -316,7 +324,9 @@ enum RecoveryFixture {
                 legacyRelations: v2.legacyRelations,
                 omittedPrivateAliases: v2.omittedPrivateAliases
             ),
-            legacyMemberships: original.legacyMemberships
+            legacyMemberships: original.legacyMemberships,
+            originScope: original.originScope,
+            foreignTombstones: original.foreignTombstones
         )
         let validArchive = try TropLibraryCombinedBackupArchive.encode(safeSource)
         let plan = try TropLibraryCombinedRestorePlanner.prepare(
@@ -331,14 +341,13 @@ enum RecoveryFixture {
                 == actual.assignedRowID
         )
 
-        // An unresolved (source-deleted) membership in the real source
-        // archive must reject, even though the live rows were mapped.
-        do {
-            _ = try TropLibraryCombinedRestorePlanner.prepare(
-                archive: originalArchive, insertedMemberships: [actual]
-            )
-            preconditionFailure("Orphan import ledger must remain blocked")
-        } catch TropLibraryCombinedRestorePlanner.Blocker.orphanedImportTombstone {}
+        // Orphan history is isolated by origin, never assigned local IDs.
+        let quarantined = try TropLibraryCombinedRestorePlanner.prepare(
+            archive: originalArchive, insertedMemberships: [actual]
+        )
+        precondition(quarantined.foreignTombstones.count == 1)
+        precondition(quarantined.foreignTombstones[0].sourceMembershipID == 12)
+        precondition(quarantined.foreignTombstones[0].originScope == original.originScope)
 
         let rollback = try DatabaseQueue()
         try rollback.write { db in
@@ -373,9 +382,10 @@ enum RecoveryFixture {
                 _ = try TropLibraryCombinedRestorePlanner.prepare(
                     archive: originalArchive, insertedMemberships: [assigned]
                 )
+                throw TropLibraryCombinedRestorePlanner.Blocker.wrongMembershipIdentity
             }
-            preconditionFailure("Transaction must abort for orphaned ledger")
-        } catch TropLibraryCombinedRestorePlanner.Blocker.orphanedImportTombstone {}
+            preconditionFailure("Injected transaction must roll back")
+        } catch TropLibraryCombinedRestorePlanner.Blocker.wrongMembershipIdentity {}
         let remaining = try rollback.read { db in
             try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM restored_membership")
         }
@@ -579,9 +589,8 @@ enum RecoveryFixture {
         }
         print("Real GRDB V2 export/restore, rollback, private alias redaction and collision checks passed")
 
-        // Internal combined restore against the disposable GRDB fixture.
-        // An unresolved source ledger ID must cause a FULL rollback,
-        // including rows in the legacy tables inserted earlier.
+        // Internal combined restore against a disposable GRDB fixture.
+        // A failed tombstone insert must roll back legacy and V2 together.
         try await DatabaseService.shared.write { db in
             for table in [
                 "trop_v2_legacy_import_entry", "trop_v2_playlist_entry",
@@ -593,12 +602,29 @@ enum RecoveryFixture {
                 try db.execute(sql: "DELETE FROM \(table)")
             }
         }
+        // The destination has its OWN installation origin, not the source's.
+        try await DatabaseService.shared.write { db in
+            try db.execute(
+                sql: "UPDATE trop_v2_library_origin SET origin_scope = ? WHERE singleton = 1",
+                arguments: ["b0000000-0000-4000-8000-000000000099"]
+            )
+            try db.execute(sql: """
+                CREATE TRIGGER fixture_fail_combined_tombstone
+                BEFORE INSERT ON trop_v2_foreign_import_tombstone
+                BEGIN SELECT RAISE(ABORT, 'foreign-tombstone-injected'); END
+                """)
+        }
         do {
             _ = try await TropLibraryCombinedRestoreStore.restoreIntoEmptyLibrary(
                 combinedArchive
             )
-            preconditionFailure("Orphan import ledger must abort combined restore")
-        } catch TropLibraryCombinedRestorePlanner.Blocker.orphanedImportTombstone {}
+            preconditionFailure("Failed tombstone insert must abort restore")
+        } catch {
+            // Fixture-only injected SQLite error, check full rollback below.
+        }
+        try await DatabaseService.shared.write { db in
+            try db.execute(sql: "DROP TRIGGER fixture_fail_combined_tombstone")
+        }
         try await DatabaseService.shared.read { db in
             for table in ["song", "playlist", "playlist_song_map", "trop_v2_item"] {
                 let count = try Int.fetchOne(
@@ -662,7 +688,7 @@ enum RecoveryFixture {
         }
 
         let summary = try await TropLibraryCombinedRestoreStore.restoreIntoEmptyLibrary(
-            safeArchive
+            combinedArchive
         )
         precondition(summary.legacyTracks == 1 && summary.v2Playlists == 1)
         let restoredCombined = try await TropLibraryCombinedBackupService.snapshot()
@@ -672,6 +698,13 @@ enum RecoveryFixture {
         precondition(restoredCombined.libraryV2.items.count == 3)
         precondition(restoredCombined.libraryV2.playlistEntries.count == 2)
         precondition(restoredCombined.libraryV2.importLedger.count == 1)
+        precondition(restoredCombined.foreignTombstones.count == 1)
+        precondition(restoredCombined.foreignTombstones[0].sourceMembershipID == 12)
+        precondition(restoredCombined.foreignTombstones[0].originScope == combined.library.originScope)
+        precondition(restoredCombined.originScope != combined.library.originScope)
+        let reexported = try await TropLibraryCombinedBackupService.export()
+        let redecoded = try TropLibraryCombinedBackupArchive.decode(reexported)
+        precondition(redecoded.library.foreignTombstones == restoredCombined.foreignTombstones)
         precondition(
             restoredCombined.libraryV2.importLedger[0].legacyMembershipID
                 == restoredCombined.legacyMemberships[0].sourceRowID
@@ -680,7 +713,7 @@ enum RecoveryFixture {
         // Repeated restores must fail closed without changing existing rows.
         do {
             _ = try await TropLibraryCombinedRestoreStore.restoreIntoEmptyLibrary(
-                safeArchive
+                combinedArchive
             )
             preconditionFailure("Combined restore must not overwrite user data")
         } catch TropLibraryCombinedRestorePreflight.Blocker.occupiedDestination {}
