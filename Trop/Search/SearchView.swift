@@ -25,7 +25,8 @@ struct SearchView: View {
 
     @State private var pendingRoute: DetailRoute?
     @State private var playlistPickerSelection: PlaylistPickerSelection?
-    @State private var v2RadioUnavailable = false
+    @State private var v2PlaybackMessage: String?
+    @State private var isStartingV2Playback = false
     @State private var headerHidden = false
     @State private var headerHeight: CGFloat = 60
     @State private var searchBarHeight: CGFloat = 60
@@ -81,10 +82,13 @@ struct SearchView: View {
             .sheet(item: $playlistPickerSelection) { selection in
                 AddSongToPlaylistSheet(song: selection.song)
             }
-            .alert("Radio unavailable", isPresented: $v2RadioUnavailable) {
+            .alert("Audio unavailable", isPresented: Binding(
+                get: { v2PlaybackMessage != nil },
+                set: { if !$0 { v2PlaybackMessage = nil } }
+            )) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("The station remains saved. Check your connection and try again.")
+                Text(v2PlaybackMessage ?? "Your library remains saved.")
             }
             .onChange(of: pendingRoute) { _, route in
                 if let route {
@@ -345,27 +349,33 @@ struct SearchView: View {
         if !viewModel.localV2Recordings.isEmpty {
             v2SectionHeader("Saved songs")
             ForEach(viewModel.localV2Recordings, id: \.id) { recording in
-                HStack(spacing: 12) {
-                    Image(systemName: "music.note")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 52, height: 52)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(recording.title)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                        Text(recording.artist ?? "Unknown artist")
-                            .font(.caption)
+                Button {
+                    Task { await playSavedV2Recording(recording) }
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "music.note")
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                        Text("Saved metadata · playback source not yet resolved")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .frame(width: 52, height: 52)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(recording.title)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            Text(recording.artist ?? "Unknown artist")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Image(systemName: "play.fill")
+                            .foregroundStyle(settings.accentColor)
                     }
-                    Spacer()
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .contentShape(Rectangle())
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .buttonStyle(.plain)
+                .disabled(isStartingV2Playback)
             }
         }
 
@@ -400,7 +410,7 @@ struct SearchView: View {
                                 stationUUID: station.stationUUID
                             )
                         } catch {
-                            v2RadioUnavailable = true
+                            v2PlaybackMessage = "The station remains saved. Check your connection and try again."
                         }
                     }
                 } label: {
@@ -424,6 +434,24 @@ struct SearchView: View {
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+
+    @MainActor
+    private func playSavedV2Recording(
+        _ recording: TropLibraryV2Store.RecordingSummary
+    ) async {
+        guard !isStartingV2Playback else { return }
+        isStartingV2Playback = true
+        defer { isStartingV2Playback = false }
+        do {
+            try await TropLibraryV2PlaybackRouter.playSaved(recording)
+        } catch is CancellationError {
+            return
+        } catch let error as TropLibraryV2PlaybackSourceError {
+            v2PlaybackMessage = error.localizedDescription
+        } catch {
+            v2PlaybackMessage = "Could not start this source. The saved song was not changed."
         }
     }
 
