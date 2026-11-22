@@ -13,6 +13,14 @@ swiftc -swift-version 6 -strict-concurrency=complete \
 "$tmp_dir/v2-recovery-archive-checks"
 
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2RecoveryStore.swift
+swiftc -frontend -parse Trop/Settings/TropLibraryV2RecoveryView.swift
+grep -Fq 'TropLibraryV2RecoveryView()' Trop/Settings/SettingsView.swift
+grep -Fq 'TropLibraryV2RecoveryStore.export()' Trop/Settings/TropLibraryV2RecoveryView.swift
+grep -Fq 'TropLibraryV2RecoveryStore.preview(data)' Trop/Settings/TropLibraryV2RecoveryView.swift
+if grep -E 'restoreIntoEmptyLibrary|DELETE FROM|DROP TABLE' Trop/Settings/TropLibraryV2RecoveryView.swift; then
+  echo "Recovery view must remain read-only"
+  exit 1
+fi
 
 python3 - <<'PY'
 from pathlib import Path
