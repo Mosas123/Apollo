@@ -525,6 +525,19 @@ enum RecoveryFixture {
         let readsAfter = await DatabaseService.shared.readCount
         precondition(readsAfter == readsBefore + 1, "Combined export must use one read")
         let combined = try TropLibraryCombinedBackupArchive.decode(combinedArchive)
+        // An archive containing both legacy and V2, podcast links, and
+        // foreign-orphan import history must also survive a real full-schema
+        // isolated-memory rehearsal without changing this fixture's source.
+        let mixedBeforeRehearsal = try await TropLibraryCombinedBackupService.snapshot()
+        let mixedRehearsal = try TropLibraryCombinedRestoreRehearsal.rehearse(
+            combinedArchive
+        )
+        precondition(mixedRehearsal.legacyTracks == 1)
+        precondition(mixedRehearsal.v2Recordings == 1)
+        precondition(mixedRehearsal.v2PlaylistEntries == 2)
+        let mixedAfterRehearsal = try await TropLibraryCombinedBackupService.snapshot()
+        precondition(mixedAfterRehearsal == mixedBeforeRehearsal,
+                     "Isolated rehearsal modified the original mixed library")
         precondition(combined.library.legacy.tracks.count == 1)
         precondition(combined.library.legacy.tracks[0].title == "Legacy song preserved")
         precondition(combined.library.legacy.playlists.count == 1)
