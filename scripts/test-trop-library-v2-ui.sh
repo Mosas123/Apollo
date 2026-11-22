@@ -50,7 +50,7 @@ grep -Fq 'TropLibraryV2PlaybackRouter.playSaved(recording)' \
   Trop/Library/TropLibraryV2Screen.swift
 grep -Fq 'TropLibraryV2PlaybackRouter.playPlaylist(tracks, startingAt: index)' \
   Trop/Library/TropLibraryV2Screen.swift
-grep -Fq 'TropLibraryV2PlaybackSourcePolicy.playbackKey(for: aliases)' \
+grep -Fq 'TropLibraryV2PlaybackSourcePolicy.playbackKey(' \
   Trop/Core/LibrarySync/TropLibraryV2PlaybackRouter.swift
 grep -Fq 'sourceAliases(forRecordingID' \
   Trop/Core/LibrarySync/TropLibraryV2Store.swift
