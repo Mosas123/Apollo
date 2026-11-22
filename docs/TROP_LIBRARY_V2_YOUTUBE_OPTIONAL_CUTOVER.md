@@ -89,7 +89,11 @@ The existing YouTube Home/Explore feeds remain temporarily in legacy
 mode for safe migration. Both models have V2 gates in addition to view
 routing, and both skip the old YouTube session bootstrap in V2. Explicit
 user data, like states, local files and legacy account data are left
-untouched. The UI still needs on-device QA after Xcode CI succeeds.
+untouched. Home's old **offline-downloads-only** CI policy is replaced by
+a stronger policy: V2 metadata may be displayed locally but must NEVER be
+played using an unresolved YouTube ID; only the separate DownloadsView
+may play verified file URLs. The UI still needs on-device QA after Xcode
+CI succeeds.
 
 ## Coupled implementation order — no extra user-facing IPA churn
 

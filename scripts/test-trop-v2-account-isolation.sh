@@ -31,13 +31,15 @@ for f in \
   Trop/Home/HomeViewModel.swift; do
   grep -Fq 'TropLibraryV2AccountIsolation.isEnabled' "$f"
 done
-grep -Fq 'if !libraryV2PreviewEnabled {' Trop/Home/HomeScreenView.swift
+grep -Fq 'if libraryV2PreviewEnabled {' Trop/Home/HomeScreenView.swift
+grep -Fq 'viewModel.stopForLibraryV2()' Trop/Home/HomeScreenView.swift
+grep -Fq 'guard !TropLibraryV2AccountIsolation.isEnabled else {' Trop/Home/HomeViewModel.swift
 grep -Fq 'await viewModel.restoreSession()' Trop/Home/HomeScreenView.swift
 grep -Fq 'await accountState.restoreSession()' Trop/Home/HomeScreenView.swift
 grep -Fq 'await SyncBridge.checkAndSyncIfStale()' Trop/Home/HomeScreenView.swift
 
-# Provider-side music discovery must remain accessible; this PR does not
-# disable Home catalog browsing or music resolution and transport.
+# Provider-side legacy discovery remains during migration, but V2 Home
+# must not call it. The independent audio-provider search stays available.
 grep -Fq 'InnerTubeClient.tropShared.browse(browseId: "FEmusic_home")' \
   Trop/Home/HomeViewModel.swift
 grep -Fq 'PlaybackManager.shared.startQueueObserver()' Trop/ContentView.swift
