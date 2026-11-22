@@ -78,15 +78,19 @@ struct AddonStreamQualityPolicy: Sendable {
     static func stremio(
         requested quality: AddonStreamQuality,
         preferAtmos: Bool,
-        allowHiRes: Bool
+        allowHiRes: Bool,
+        requireLossless: Bool
     ) -> Self {
+        // "quality=lossless" is a provider request hint, not the user's
+        // quality mode. Auto may still accept High if a provider has no FLAC.
+        let mode: MusicQualityMode = requireLossless ? .lossless : .auto
         switch quality {
         case .max:
-            return .init(mode: .auto, preferHiRes: allowHiRes, preferAtmos: preferAtmos)
+            return .init(mode: mode, preferHiRes: allowHiRes, preferAtmos: preferAtmos)
         case .hires:
-            return .init(mode: .lossless, preferHiRes: true, preferAtmos: preferAtmos)
+            return .init(mode: mode, preferHiRes: true, preferAtmos: preferAtmos)
         case .lossless:
-            return .init(mode: .cd, preferHiRes: false, preferAtmos: false)
+            return .init(mode: mode, preferHiRes: false, preferAtmos: false)
         case .high:
             return .init(mode: .high, preferHiRes: false, preferAtmos: false)
         }
