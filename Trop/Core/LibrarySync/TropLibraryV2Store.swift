@@ -341,4 +341,62 @@ enum TropLibraryV2Store {
         }
     }
 
+
+    /// The player heart needs an alias lookup rather than a legacy video ID
+    /// primary key. Unliking never deletes the item or its playlist entries.
+    static func setLikedForSource(
+        provider: String,
+        externalID: String,
+        liked: Bool
+    ) async throws {
+        let alias = try TropLibraryV2SourceAlias(
+            provider: provider, externalID: externalID
+        )
+        let now = Date()
+        let likedAt: Date? = liked ? now : nil
+        try await DatabaseService.shared.write { db in
+            guard let itemID = try String.fetchOne(
+                db,
+                sql: """
+                    SELECT item_id FROM trop_v2_source_alias
+                    WHERE kind = 'recording' AND provider = ?
+                      AND source_scope = ? AND external_id = ?
+                    """,
+                arguments: [alias.provider, alias.scope, alias.externalID]
+            ) else {
+                // A song never liked in V2 has nothing to unlike.
+                if !liked { return }
+                throw TropLibraryV2ValidationError.missingItem
+            }
+            try db.execute(
+                sql: """
+                    UPDATE trop_v2_item SET liked_at = ?, modified_at = ?
+                    WHERE id = ? AND kind = 'recording'
+                    """,
+                arguments: [likedAt, now, itemID]
+            )
+        }
+    }
+
+    static func likedPlaybackIDs() async throws -> [String] {
+        try await DatabaseService.shared.read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT alias.provider, alias.external_id
+                    FROM trop_v2_item AS item
+                    JOIN trop_v2_source_alias AS alias ON alias.item_id = item.id
+                    WHERE item.kind = 'recording' AND item.liked_at IS NOT NULL
+                    ORDER BY item.modified_at DESC
+                    """
+            )
+            return rows.map { row in
+                let provider: String = row["provider"]
+                let externalID: String = row["external_id"]
+                return provider == "youtube"
+                    ? externalID : "\(provider):\(externalID)"
+            }
+        }
+    }
+
 }
