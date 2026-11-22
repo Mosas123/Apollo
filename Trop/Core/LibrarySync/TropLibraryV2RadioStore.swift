@@ -12,15 +12,8 @@ enum TropLibraryV2RadioStore {
         let subtitle: String
     }
 
-    static func canonicalStationUUID(_ value: String) throws -> String {
-        guard let uuid = UUID(uuidString: value) else {
-            throw TropLibraryV2ValidationError.invalidIdentifier
-        }
-        return uuid.uuidString.lowercased()
-    }
-
     static func save(station: RadioStation) async throws {
-        let stationUUID = try canonicalStationUUID(station.stationuuid)
+        let stationUUID = try RadioBrowser.canonicalStationUUID(station.stationuuid)
         let name = try TropLibraryV2IdentityPolicy.checkedTitle(station.name)
         let subtitle = try TropLibraryV2IdentityPolicy.checkedOptionalText(station.subtitle) ?? ""
         let id = TropLibraryV2IdentityPolicy.newID()
@@ -41,7 +34,7 @@ enum TropLibraryV2RadioStore {
     }
 
     static func remove(stationUUID rawUUID: String) async throws {
-        let stationUUID = try canonicalStationUUID(rawUUID)
+        let stationUUID = try RadioBrowser.canonicalStationUUID(rawUUID)
         try await DatabaseService.shared.write { db in
             try db.execute(
                 sql: "DELETE FROM trop_v2_radio_favorite WHERE station_uuid = ?",
