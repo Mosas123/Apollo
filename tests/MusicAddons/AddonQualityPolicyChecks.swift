@@ -104,21 +104,32 @@ struct AddonQualityPolicyChecks {
         // Stremio offers multiple URLs in a single response: toggling Dolby
         // cannot implicitly turn on Hi-Res, even for quality=max.
         let stremioAtmosOnly = AddonStreamQualityPolicy.stremio(
-            requested: .max, preferAtmos: true, allowHiRes: false
+            requested: .max, preferAtmos: true, allowHiRes: false,
+            requireLossless: true
         )
         precondition(stremioAtmosOnly.accepts(atmos))
         precondition(!stremioAtmosOnly.accepts(hiRes))
         let stremioCD = AddonStreamQualityPolicy.stremio(
-            requested: .lossless, preferAtmos: true, allowHiRes: true
+            requested: .lossless, preferAtmos: true, allowHiRes: true,
+            requireLossless: true
         )
         precondition(stremioCD.accepts(cd))
         precondition(!stremioCD.accepts(hiRes))
         precondition(!stremioCD.accepts(atmos))
         let stremioHigh = AddonStreamQualityPolicy.stremio(
-            requested: .high, preferAtmos: true, allowHiRes: true
+            requested: .high, preferAtmos: true, allowHiRes: true,
+            requireLossless: false
         )
         precondition(!stremioHigh.accepts(cd))
         precondition(stremioHigh.accepts(high))
+
+        // Auto may fall back to High; Best FLAC only accepts FLAC.
+        let stremioAuto = AddonStreamQualityPolicy.stremio(
+            requested: .lossless, preferAtmos: false, allowHiRes: false,
+            requireLossless: false
+        )
+        precondition(stremioAuto.accepts(high) && stremioAuto.accepts(cd))
+        precondition(!stremioAuto.accepts(hiRes) && !stremioAuto.accepts(atmos))
 
         print("Independent Hi-Res / Dolby addon quality policy checks passed")
     }
