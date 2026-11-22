@@ -7,6 +7,10 @@ import GRDB
 extension RecoveryFixture {
     static func checkFreshV2ProfileCombinedRoundTrip() async throws {
         let playlistID = "c0000000-0000-4000-8000-00000000ffff"
+        // A real iPhone records Date values with fractional milliseconds.
+        // Unlike the former whole-second fixture this reproduces precision
+        // changes between GRDB's SQLite dates and archive JSON.
+        let recordedAt = now.addingTimeInterval(0.123456)
 
         @Sendable func stableID(_ sequence: Int) -> String {
             "c0000000-0000-4000-8000-" + String(format: "%012x", sequence)
@@ -43,10 +47,10 @@ extension RecoveryFixture {
                     """, arguments: [
                         stableID(index),
                         "Synthetic Recording \(index)",
-                        now,
-                        index <= 12 ? now : nil,
-                        now,
-                        now
+                        recordedAt,
+                        index <= 12 ? recordedAt : nil,
+                        recordedAt,
+                        recordedAt
                     ])
             }
             try db.execute(sql: """
@@ -54,7 +58,7 @@ extension RecoveryFixture {
                     (id, kind, title, duration_seconds, saved_at,
                      created_at, modified_at)
                 VALUES (?, 'playlist', 'Synthetic Playlist', 0, ?, ?, ?)
-                """, arguments: [playlistID, now, now, now])
+                """, arguments: [playlistID, recordedAt, recordedAt, recordedAt])
 
             for position in 0..<10 {
                 // Intentionally duplicate several recording references; the
@@ -66,7 +70,7 @@ extension RecoveryFixture {
                     VALUES (?, ?, ?, ?, ?)
                     """, arguments: [
                         stableID(position + 101), playlistID,
-                        recordingID, position, now
+                        recordingID, position, recordedAt
                     ])
             }
         }
@@ -138,10 +142,18 @@ extension RecoveryFixture {
         precondition(restoredSummary == summary)
         let restored = try await TropLibraryCombinedBackupService.snapshot()
         precondition(restored.legacy == source.legacy)
-        precondition(restored.libraryV2.items == source.libraryV2.items)
+        let archivedSource = try TropLibraryCombinedBackupArchive.decode(encoded).library
         precondition(
-            restored.libraryV2.playlistEntries
-                == source.libraryV2.playlistEntries,
+            TropLibraryCombinedRestoreRehearsal.sameArchiveMetadata(
+                restored.libraryV2.items, archivedSource.libraryV2.items
+            ),
+            "Real-world subsecond dates must survive archive-level roundtrip"
+        )
+        precondition(
+            TropLibraryCombinedRestoreRehearsal.sameArchiveMetadata(
+                restored.libraryV2.playlistEntries,
+                archivedSource.libraryV2.playlistEntries
+            ),
             "Playlist occurrences or order changed across recovery"
         )
         precondition(restored.libraryV2.aliases.isEmpty)
@@ -149,10 +161,16 @@ extension RecoveryFixture {
         precondition(restored.libraryV2.playlistEntries.count == 10)
         let afterExport = try await TropLibraryCombinedBackupService.export()
         let after = try TropLibraryCombinedBackupArchive.decode(afterExport)
-        precondition(after.library.libraryV2.items == source.libraryV2.items)
         precondition(
-            after.library.libraryV2.playlistEntries
-                == source.libraryV2.playlistEntries
+            TropLibraryCombinedRestoreRehearsal.sameArchiveMetadata(
+                after.library.libraryV2.items, archivedSource.libraryV2.items
+            )
+        )
+        precondition(
+            TropLibraryCombinedRestoreRehearsal.sameArchiveMetadata(
+                after.library.libraryV2.playlistEntries,
+                archivedSource.libraryV2.playlistEntries
+            )
         )
 
         // A second restore on the occupied DB must fail closed and leave the
