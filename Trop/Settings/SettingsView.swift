@@ -10,10 +10,14 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(SettingsStore.self) private var settings
     @Bindable private var accountState = AccountSheetState.shared
+    @AppStorage("trop.library.v2.previewEnabled")
+    private var libraryV2PreviewEnabled = false
 
     var body: some View {
         List {
-            accountSection
+            if !libraryV2PreviewEnabled {
+                accountSection
+            }
 
             Section {
                 SettingsNavigationRow("Appearance", icon: "paintpalette.fill") {
@@ -34,6 +38,17 @@ struct SettingsView: View {
                 SettingsNavigationRow("Downloads", icon: "arrow.down.circle.fill") {
                     DownloadSettingsView()
                 }
+            }
+
+            Section("Experimental library") {
+                Toggle("Use Trop Library V2", isOn: $libraryV2PreviewEnabled)
+                Text(
+                    "V2 starts empty and saves locally without YouTube. "
+                        + "Your old library remains untouched. The player heart "
+                        + "and catalogue pages are not migrated yet."
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             }
 
             Section {
@@ -65,6 +80,8 @@ struct SettingsView: View {
         .miniPlayerTracksScroll()
         .loginSheet(state: accountState)
         .task {
+            // Library V2 needs no YouTube login, polling or account badge.
+            guard !libraryV2PreviewEnabled else { return }
             await accountState.restoreSession()
             await accountState.fetchAccountInfo()
         }
