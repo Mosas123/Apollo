@@ -381,10 +381,69 @@ enum RecoveryFixture {
         precondition(remaining == 0, "Failed remap must rollback SQLite writes")
     }
 
+    /// Preflight is read-only and must reject preexisting user data and
+    /// partially migrated schemas without touching any source rows.
+    static func checkCombinedRestorePreflight() throws {
+        let missing = try DatabaseQueue()
+        do {
+            try missing.read { db in
+                try TropLibraryCombinedRestorePreflight.requireEmpty(db)
+            }
+            preconditionFailure("Missing schema must be rejected")
+        } catch TropLibraryCombinedRestorePreflight.Blocker.missingSchema(let name) {
+            precondition(name == "song")
+        }
+
+        let clean = try DatabaseQueue()
+        try clean.write { db in
+            for table in TropLibraryCombinedRestorePreflight.requiredTables {
+                try db.execute(sql: "CREATE TABLE \(table) (id INTEGER PRIMARY KEY)")
+            }
+        }
+        try clean.read { db in
+            try TropLibraryCombinedRestorePreflight.requireEmpty(db)
+        }
+
+        // A downloaded audio record counts as nonempty even when the
+        // visible music/playlist tables are all empty.
+        try clean.write { db in
+            try db.execute(
+                sql: "CREATE TABLE downloaded_track (id INTEGER PRIMARY KEY)"
+            )
+            try db.execute(sql: "INSERT INTO downloaded_track (id) VALUES (7)")
+        }
+        do {
+            try clean.read { db in
+                try TropLibraryCombinedRestorePreflight.requireEmpty(db)
+            }
+            preconditionFailure("Downloaded data must block full restoration")
+        } catch TropLibraryCombinedRestorePreflight.Blocker.occupiedDestination(let name) {
+            precondition(name == "downloaded_track")
+        }
+
+        try clean.write { db in
+            try db.execute(sql: "DELETE FROM downloaded_track WHERE id = 7")
+            try db.execute(sql: "INSERT INTO song (id) VALUES (11)")
+        }
+        do {
+            try clean.read { db in
+                try TropLibraryCombinedRestorePreflight.requireEmpty(db)
+            }
+            preconditionFailure("Legacy music must block overwrite")
+        } catch TropLibraryCombinedRestorePreflight.Blocker.occupiedDestination(let name) {
+            precondition(name == "song")
+        }
+        let original = try clean.read { db in
+            try Int.fetchOne(db, sql: "SELECT id FROM song LIMIT 1")
+        }
+        precondition(original == 11, "Preflight must never mutate legacy data")
+    }
+
     static func main() async throws {
         guard CommandLine.arguments.count == 2 else {
             fatalError("Expected extracted v10-v12 SQL fixture path")
         }
+        try checkCombinedRestorePreflight()
         try await createSchema(from: CommandLine.arguments[1])
         try await createSource()
 
