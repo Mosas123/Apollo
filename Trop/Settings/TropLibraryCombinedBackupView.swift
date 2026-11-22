@@ -9,6 +9,7 @@ struct TropLibraryCombinedBackupView: View {
     @State private var showPicker = false
     @State private var isPreparing = false
     @State private var isVerifying = false
+    @State private var isRehearsing = false
     @State private var preview: TropLibraryCombinedBackupService.Preview?
     @State private var statusMessage: String?
     @State private var alertMessage = ""
@@ -69,6 +70,28 @@ struct TropLibraryCombinedBackupView: View {
                     "Local verification reads On My iPhone → Thrum, without opening "
                         + "the Files picker. Other locations use the system document "
                         + "picker, which still needs on-device QA."
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+
+            Section("Recovery rehearsal · safe test") {
+                Button {
+                    Task { await rehearseLocalArchive() }
+                } label: {
+                    Label(
+                        isRehearsing
+                            ? "Testing in memory…"
+                            : "Test latest saved copy in isolated memory",
+                        systemImage: "checkmark.shield"
+                    )
+                }
+                .disabled(isPreparing || isVerifying || isRehearsing)
+                Text(
+                    "This creates a temporary SQLite database in memory, "
+                        + "rebuilds the saved metadata, and checks the results. "
+                        + "It NEVER restores into your actual library. "
+                        + "Keep your original installation and backup."
                 )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -193,6 +216,38 @@ struct TropLibraryCombinedBackupView: View {
             failed("No combined file was found in On My iPhone → Thrum.")
         } catch {
             failed("The combined file could not be verified. Nothing was restored.")
+        }
+    }
+
+    @MainActor
+    private func rehearseLocalArchive() async {
+        guard !isRehearsing else { return }
+        isRehearsing = true
+        defer { isRehearsing = false }
+        do {
+            let result = try await Task.detached(priority: .userInitiated) {
+                let found = try TropLibraryCombinedLocalSnapshotFinder.latest()
+                return try TropLibraryCombinedRestoreRehearsal.rehearse(found.bytes)
+            }.value
+            showMessage(
+                "Isolated recovery rehearsal PASSED. Rebuilt "
+                    + "\(result.v2Recordings) V2 recordings, "
+                    + "\(result.v2Playlists) V2 playlists and "
+                    + "\(result.v2PlaylistEntries) playlist entries. "
+                    + "The actual library was not modified."
+            )
+            Log.libraryView.info("COMBINED_REHEARSAL succeeded in isolated memory")
+        } catch TropLibraryCombinedLocalSnapshotFinder.LookupError.noSnapshot {
+            showMessage(
+                "No combined metadata file was found in On My iPhone → Thrum. "
+                    + "Nothing changed in your library."
+            )
+        } catch {
+            showMessage(
+                "Isolated recovery rehearsal could not finish. "
+                    + "Your actual library was not modified."
+            )
+            Log.libraryView.warning("COMBINED_REHEARSAL failed in isolated memory")
         }
     }
 
