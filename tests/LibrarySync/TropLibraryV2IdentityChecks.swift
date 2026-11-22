@@ -12,8 +12,10 @@ enum TropLibraryV2IdentityChecks {
 
         let name = try TropLibraryV2IdentityPolicy.checkedTitle("  My playlist  ")
         assert(name == "My playlist")
-        assert(try TropLibraryV2IdentityPolicy.checkedOptionalText("  Artist ") == "Artist")
-        assert(try TropLibraryV2IdentityPolicy.checkedOptionalText(" ") == nil)
+        let artist = try TropLibraryV2IdentityPolicy.checkedOptionalText("  Artist ")
+        let emptyArtist = try TropLibraryV2IdentityPolicy.checkedOptionalText(" ")
+        assert(artist == "Artist")
+        assert(emptyArtist == nil)
 
         do {
             _ = try TropLibraryV2IdentityPolicy.checkedTitle("   ")
