@@ -5,6 +5,7 @@ on:
     paths:
       - "Trop/Audio/PlayerMenuSheet.swift"
       - "Trop/Components/SongMenuSheet.swift"
+      - "Trop/Search/SearchView.swift"
       - "Trop/Core/LibrarySync/TropLibraryV2Store.swift"
       - "Trop/Core/LibrarySync/TropLibraryV2PlaybackCandidate.swift"
       - "Trop/Core/MusicSources/MusicCatalog.swift"
