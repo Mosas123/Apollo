@@ -56,6 +56,9 @@ struct ContentView: View {
         .onChange(of: settings.showExploreTab) { _, shown in
             if !shown, selectedTab == 4 { selectedTab = 0 }
         }
+        .onChange(of: libraryV2PreviewEnabled) { _, _ in
+            Task { await LikeStore.shared.refresh() }
+        }
         .onChange(of: selectedTab) { _, newValue in
             AppRouter.shared.selectedTabIndex = newValue
         }
