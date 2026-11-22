@@ -43,8 +43,10 @@ struct TropLibraryCombinedLocalSnapshotStoreChecks {
             TropLibraryCombinedLocalSnapshotFinder.filenamePrefix
         ))
         precondition(first.pathExtension == "json")
-        precondition(try Data(contentsOf: first) == archive)
-        precondition(try Data(contentsOf: second) == archive)
+        let firstBytes = try Data(contentsOf: first)
+        let secondBytes = try Data(contentsOf: second)
+        precondition(firstBytes == archive)
+        precondition(secondBytes == archive)
 
         do {
             _ = try TropLibraryCombinedLocalSnapshotStore.saveVerified(
