@@ -82,6 +82,18 @@ extension RecoveryFixture {
         precondition(summary.v2PlaylistEntries == 10)
         precondition(summary.omittedPrivateAliases == 0)
         precondition(source.libraryV2.aliases.isEmpty)
+
+        // Rehearse using the SAME v1...v13 production migration sequence
+        // inside a brand-new, private in-memory SQLite database.
+        let rehearsal = try TropLibraryCombinedRestoreRehearsal.rehearse(encoded)
+        precondition(rehearsal.legacyTracks == 0)
+        precondition(rehearsal.v2Recordings == 24)
+        precondition(rehearsal.v2Playlists == 1)
+        precondition(rehearsal.v2PlaylistEntries == 10)
+        let liveFixtureAfterRehearsal =
+            try await TropLibraryCombinedBackupService.snapshot()
+        precondition(liveFixtureAfterRehearsal == source,
+                     "In-memory rehearsal mutated the source database")
         precondition(
             source.libraryV2.playlistEntries.map(\.position) == Array(0..<10),
             "Original playlist order is not stable"
