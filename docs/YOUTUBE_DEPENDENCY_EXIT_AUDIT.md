@@ -45,6 +45,14 @@ TropLibraryStore.applyArtistSync, applyPlaylistSync and unmarkStaleLikedSongs re
 
 Private iPhone logs repeatedly show accountInfo requests even before any selected song, and HTTP 400 INVALID_ARGUMENT from InnerTube while non-YouTube providers play. AccountSheetHost.fetchAccountInfo and LibraryView triggers are real call paths. Avoid logging account names, login token lengths, playback tracking URLs and Last.fm API keys in future diagnostics.
 
+## Additional source/codec and licensing caveat
+
+The initial identity for the problematic NUEVAYoL album selection is the YouTube **official music video** (video ID KU5V5WZVcVE), while SOURCE_FIRST picked an **addon** marked quality=addon-atmos. PlaybackManager maps a provider-declared quality tier to that badge. It does **not** independently establish whether the actual resource is E-AC3/JOC, AAC, HLS or another codec. A YouTube video identity and an Atmos-branded stream are not evidence of the *studio master*.
+
+The existing JioSaavnClient.swift uses a nonpublic api.php endpoint, decrypts a media URL, and sets a synthetic X-Forwarded-For value. Before treating it as a replacement production music provider, evaluate provider API permission, regional restrictions and source security. Likewise, MusicBrainz core CC0 data does not automatically permit unrestricted commercial use of its hosted API, and image rights must be reviewed separately. **Availability in a developer build does not imply distribution rights.**
+
+For native audio drift see [ApoloEngine PR #28](https://github.com/Mosas123/ApoloEngine/pull/28), which reads AVPlayer rate/time and access-log metrics without logging signed URLs.
+
 ## Safe release plan
 
 1. Preserve old song, album, artist, podcast and playlist IDs as **reversible aliases**, introduce own Trop UUIDs and verify mapping against actual studio recordings. Never delete legacy rows first.
