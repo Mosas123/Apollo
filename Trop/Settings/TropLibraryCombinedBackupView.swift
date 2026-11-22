@@ -42,7 +42,7 @@ struct TropLibraryCombinedBackupView: View {
                 Text(
                     "You choose the destination in Files. Keep Trop installed and "
                         + "do not rely on this experimental file as your only backup: "
-                        + "there is no user-facing restore yet."
+                        + "restore is allowed only into a completely empty library."
                 )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
