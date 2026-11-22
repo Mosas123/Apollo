@@ -45,7 +45,7 @@ enum TropLibraryCombinedRestoreRehearsal {
     /// Date using binary floating-point equality can report a false mismatch
     /// after a valid roundtrip on a real device. Compare ALL Codable fields,
     /// but canonically round dates to the archive's millisecond resolution.
-    private static func sameArchiveMetadata<T: Encodable>(
+    static func sameArchiveMetadata<T: Encodable>(
         _ original: T, _ recovered: T
     ) -> Bool {
         let encoder = JSONEncoder()
