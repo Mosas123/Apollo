@@ -6,6 +6,7 @@ import SwiftUI
 struct TropLibraryV2Screen: View {
     @State private var recordings: [TropLibraryV2Store.RecordingSummary] = []
     @State private var playlists: [TropLibraryV2Store.PlaylistSummary] = []
+    @State private var savedRadios: [TropLibraryV2RadioStore.Favorite] = []
     @State private var isLoading = true
     @State private var isSaving = false
     @State private var showCreatePlaylist = false
@@ -51,6 +52,20 @@ struct TropLibraryV2Screen: View {
                                 Text("\(playlist.entryCount)")
                                     .foregroundStyle(.secondary)
                             }
+                        }
+                    }
+                }
+
+                Section("Saved radio stations") {
+                    if savedRadios.isEmpty {
+                        Text("Save stations with the heart button in Radio.")
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(savedRadios) { radio in
+                        Button {
+                            Task { await playSavedRadio(radio.stationUUID) }
+                        } label: {
+                            Label(radio.name, systemImage: "dot.radiowaves.left.and.right")
                         }
                     }
                 }
@@ -107,6 +122,11 @@ struct TropLibraryV2Screen: View {
             ) { _ in
                 Task { await refresh() }
             }
+            .onReceive(
+                NotificationCenter.default.publisher(for: Notification.Name("trop.radioFavoritesChanged"))
+            ) { _ in
+                Task { await refresh() }
+            }
             .alert("Create playlist", isPresented: $showCreatePlaylist) {
                 TextField("Playlist name", text: $newPlaylistName)
                 Button("Create") {
@@ -147,8 +167,10 @@ struct TropLibraryV2Screen: View {
         do {
             async let saved = TropLibraryV2Store.recordings()
             async let lists = TropLibraryV2Store.playlists()
+            async let radios = TropLibraryV2RadioStore.favorites()
             recordings = try await saved
             playlists = try await lists
+            savedRadios = try await radios
             feedback = nil
         } catch {
             feedback = "Could not read the local library. Nothing was deleted."
@@ -170,6 +192,16 @@ struct TropLibraryV2Screen: View {
             await refresh()
         } catch {
             feedback = "This recording could not be saved. Your library was not replaced."
+        }
+    }
+
+    @MainActor
+    private func playSavedRadio(_ stationUUID: String) async {
+        do {
+            try await RadioPlaybackCoordinator.playSaved(stationUUID: stationUUID)
+            feedback = nil
+        } catch {
+            feedback = "This station is unavailable right now. It remains saved."
         }
     }
 
