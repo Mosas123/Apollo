@@ -227,6 +227,14 @@ classification from preservation:
 - No change here alters the existing archive, deletes user data, merges
   drafts or enables experimental restore.
 
+**Parallel requirement — optional YouTube provider:** Library V2 and
+the de-YouTube cutover are one coordinated migration, not separate user
+installations. The audited source-of-truth, explicit blockers, compatibility
+rules and acceptance gates are in
+[`TROP_LIBRARY_V2_YOUTUBE_OPTIONAL_CUTOVER.md`](TROP_LIBRARY_V2_YOUTUBE_OPTIONAL_CUTOVER.md).
+Do not remove legacy YouTube support before verified backup/import, and
+do not introduce a video catalogue or rely on YouTube for library identity.
+
 Before any public Restore action:
 
 1. Validate V13 origin identity and foreign-ID mapping on fresh/upgraded
