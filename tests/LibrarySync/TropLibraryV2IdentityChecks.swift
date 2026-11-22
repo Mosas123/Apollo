@@ -79,19 +79,23 @@ enum TropLibraryV2IdentityChecks {
         let accountScoped = try TropLibraryV2SourceAlias(
             provider: "qobuz", scope: "account_1", externalID: "123"
         )
-        assert(try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+        let resolvedSource0 = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
             for: [youtube, mb, audius]
-        ) == "audius:D7KyD")
-        assert(try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+        )
+        assert(resolvedSource0 == "audius:D7KyD")
+        let resolvedSource1 = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
             for: [audius, audius]
-        ) == "audius:D7KyD")
-        assert(try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+        )
+        assert(resolvedSource1 == "audius:D7KyD")
+        let resolvedSource2 = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
             for: [addon]
-        ) == "addon:install:movie:id")
+        )
+        assert(resolvedSource2 == "addon:install:movie:id")
 
-        assert(try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+        let resolvedSource3 = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
             for: [qobuz], requiresLossless: true
-        ) == "qobuz:123")
+        )
+        assert(resolvedSource3 == "qobuz:123")
         do {
             _ = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
                 for: [audius], requiresLossless: true
