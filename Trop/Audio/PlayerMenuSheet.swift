@@ -356,53 +356,80 @@ struct PlayerMenuSheet: View {
 
 // MARK: - Add to Playlist Picker
 
-/// Lets the user pick which playlist to add `song` to, or create a new one.
+/// Shared by the full player and SongMenuSheet. V2 edits live exclusively in
+/// Trop's local database; the legacy list stays intact when V2 is disabled.
 struct AddSongToPlaylistSheet: View {
     let song: SongItem
     @Environment(\.dismiss) private var dismiss
 
-    @State private var playlists: [PlaylistEntity] = []
+    private struct PickerPlaylist: Identifiable {
+        let id: String
+        let name: String
+        let count: Int?
+    }
+
+    // Capture the mode when the sheet opens; an in-flight add must never
+    // change from a local V2 write to a legacy/remote mutation.
+    @State private var useLibraryV2 = TropLibraryV2AccountIsolation.isEnabled
+    @State private var playlists: [PickerPlaylist] = []
     @State private var isLoading = true
     @State private var addedTo: Set<String> = []
+    @State private var pendingIDs: Set<String> = []
     @State private var showNewPlaylistAlert = false
     @State private var newPlaylistTitle = ""
     @State private var isCreating = false
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
-            Group {
-                if isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if playlists.isEmpty {
-                    ContentUnavailableView(
-                        "No Playlists",
-                        systemImage: "music.note.list",
-                        description: Text("Create one below to start collecting songs.")
-                    )
-                } else {
-                    List(playlists, id: \.id) { playlist in
-                        Button {
-                            addTo(playlist)
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(playlist.name)
-                                        .foregroundStyle(.primary)
-                                    if let count = playlist.remoteSongCount {
-                                        Text(AppStrings.songs(count))
-                                            .font(.footnote)
-                                            .foregroundStyle(.secondary)
+            VStack(spacing: 0) {
+                Group {
+                    if isLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if playlists.isEmpty {
+                        ContentUnavailableView(
+                            "No Playlists",
+                            systemImage: "music.note.list",
+                            description: Text("Create one below to start collecting songs.")
+                        )
+                    } else {
+                        List(playlists) { playlist in
+                            Button {
+                                addTo(playlist)
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(playlist.name)
+                                            .foregroundStyle(.primary)
+                                        if let count = playlist.count {
+                                            Text(AppStrings.songs(count))
+                                                .font(.footnote)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    Spacer()
+                                    if pendingIDs.contains(playlist.id) {
+                                        ProgressView()
+                                    } else if addedTo.contains(playlist.id) {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(.green)
                                     }
                                 }
-                                Spacer()
-                                if addedTo.contains(playlist.id) {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(.green)
-                                }
                             }
+                            .disabled(
+                                pendingIDs.contains(playlist.id)
+                                    || addedTo.contains(playlist.id) || isCreating
+                            )
                         }
                     }
+                }
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity)
+                        .padding(12)
                 }
             }
             .navigationTitle("Add to Playlist")
@@ -414,10 +441,12 @@ struct AddSongToPlaylistSheet: View {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         newPlaylistTitle = ""
+                        errorMessage = nil
                         showNewPlaylistAlert = true
                     } label: {
                         Image(systemName: "plus")
                     }
+                    .disabled(isCreating)
                     .accessibilityLabel("New playlist")
                 }
             }
@@ -436,35 +465,90 @@ struct AddSongToPlaylistSheet: View {
         .appSheetChrome()
     }
 
+    @MainActor
     private func loadPlaylists() async {
-        playlists = (try? await DatabaseService.shared.fetchPlaylists(limit: 100)) ?? []
+        do {
+            if useLibraryV2 {
+                playlists = try await TropLibraryV2Store.playlists().map { playlist in
+                    PickerPlaylist(
+                        id: playlist.id, name: playlist.name, count: playlist.entryCount
+                    )
+                }
+            } else {
+                let legacy = try await DatabaseService.shared.fetchPlaylists(limit: 100)
+                playlists = legacy.map { playlist in
+                    PickerPlaylist(
+                        id: playlist.id, name: playlist.name,
+                        count: playlist.remoteSongCount
+                    )
+                }
+            }
+            errorMessage = nil
+        } catch {
+            errorMessage = "Could not load playlists. Nothing was changed."
+        }
         isLoading = false
     }
 
-    private func addTo(_ playlist: PlaylistEntity) {
-        guard !addedTo.contains(playlist.id) else { return }
-        Task {
+    private func addTo(_ playlist: PickerPlaylist) {
+        guard !addedTo.contains(playlist.id), !pendingIDs.contains(playlist.id),
+              !isCreating else { return }
+        pendingIDs.insert(playlist.id)
+        errorMessage = nil
+        Task { @MainActor in
+            defer { pendingIDs.remove(playlist.id) }
             do {
-                try await SyncBridge.mutations.addToPlaylist(playlistId: playlist.id, songId: song.videoId)
+                if useLibraryV2 {
+                    guard let candidate = TropLibraryV2PlaybackCandidate.fromSong(song) else {
+                        errorMessage = "This song cannot be saved to a local playlist."
+                        return
+                    }
+                    try await TropLibraryV2Store.saveToPlaylist(
+                        candidate, destination: .existing(playlist.id)
+                    )
+                } else {
+                    try await SyncBridge.mutations.addToPlaylist(
+                        playlistId: playlist.id, songId: song.videoId
+                    )
+                }
                 addedTo.insert(playlist.id)
+                if useLibraryV2 { await loadPlaylists() }
             } catch {
-                addedTo.remove(playlist.id)
+                errorMessage = "Could not add this song. Please try again."
             }
         }
     }
 
+    @MainActor
     private func createAndAdd() async {
         let title = newPlaylistTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, !isCreating else { return }
         isCreating = true
+        errorMessage = nil
         defer { isCreating = false }
         do {
-            let playlistId = try await SyncBridge.mutations.createPlaylist(title: title)
-            try await SyncBridge.mutations.addToPlaylist(playlistId: playlistId, songId: song.videoId)
+            let playlistID: String
+            if useLibraryV2 {
+                guard let candidate = TropLibraryV2PlaybackCandidate.fromSong(song) else {
+                    errorMessage = "This song cannot be saved to a local playlist."
+                    return
+                }
+                playlistID = try await TropLibraryV2Store.saveToPlaylist(
+                    candidate, destination: .create(title)
+                )
+            } else {
+                playlistID = try await SyncBridge.mutations.createPlaylist(title: title)
+                try await SyncBridge.mutations.addToPlaylist(
+                    playlistId: playlistID, songId: song.videoId
+                )
+            }
             await loadPlaylists()
-            addedTo.insert(playlistId)
+            addedTo.insert(playlistID)
+            newPlaylistTitle = ""
         } catch {
-            // Leave the sheet open so the user can retry.
+            // Do not show a false success: V2 uses one all-or-nothing local
+            // transaction, legacy errors preserve its existing behavior.
+            errorMessage = "Could not create and add this song. Please try again."
         }
     }
 }
