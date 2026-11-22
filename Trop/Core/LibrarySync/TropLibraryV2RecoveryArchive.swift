@@ -182,7 +182,7 @@ enum TropLibraryV2RecoveryArchive {
             guard canonical(item.id),
                   let kind = TropLibraryV2Kind(rawValue: item.kind),
                   (try? TropLibraryV2IdentityPolicy.checkedTitle(item.title)) != nil,
-                  (item.artistOrAuthor == nil ||
+                  (item.artistOrAuthor == nil || item.artistOrAuthor == "" ||
                     (try? TropLibraryV2IdentityPolicy.checkedOptionalText(item.artistOrAuthor)) != nil),
                   item.durationSeconds >= 0,
                   safeDate(item.createdAt), safeDate(item.modifiedAt),
