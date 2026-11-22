@@ -210,4 +210,135 @@ enum TropLibraryV2Store {
             }
         }
     }
+
+    struct RecordingSummary: Equatable, Sendable {
+        let id: String
+        let title: String
+        let artist: String?
+        let isLiked: Bool
+    }
+
+    struct PlaylistTrack: Equatable, Sendable {
+        let id: String
+        let recordingID: String
+        let title: String
+        let artist: String?
+        let position: Int
+    }
+
+    /// A single user-initiated local transaction. Import/provider IDs are
+    /// only a scoped lookup alias; saving never calls the remote provider.
+    /// Repeated taps reuse the same recording, preventing duplicate likes.
+    @discardableResult
+    static func savePlaybackRecording(
+        title rawTitle: String,
+        artist rawArtist: String?,
+        durationSeconds: Int,
+        provider: String,
+        externalID: String,
+        liked: Bool
+    ) async throws -> String {
+        let title = try TropLibraryV2IdentityPolicy.checkedTitle(rawTitle)
+        let artist = try TropLibraryV2IdentityPolicy.checkedOptionalText(rawArtist)
+        guard durationSeconds >= 0 else {
+            throw TropLibraryV2ValidationError.invalidIdentifier
+        }
+        let alias = try TropLibraryV2SourceAlias(
+            provider: provider, externalID: externalID
+        )
+        let newID = TropLibraryV2IdentityPolicy.newID()
+        let aliasID = TropLibraryV2IdentityPolicy.newID()
+        let now = Date()
+        return try await DatabaseService.shared.writeReturning { db in
+            if let existingID = try String.fetchOne(
+                db,
+                sql: """
+                    SELECT item_id FROM trop_v2_source_alias
+                    WHERE kind = 'recording' AND provider = ?
+                      AND source_scope = ? AND external_id = ?
+                    """,
+                arguments: [alias.provider, alias.scope, alias.externalID]
+            ) {
+                if liked {
+                    try db.execute(
+                        sql: """
+                            UPDATE trop_v2_item
+                            SET liked_at = COALESCE(liked_at, ?),
+                                saved_at = COALESCE(saved_at, ?),
+                                modified_at = ?
+                            WHERE id = ? AND kind = 'recording'
+                            """,
+                        arguments: [now, now, now, existingID]
+                    )
+                }
+                return existingID
+            }
+            let likedAt: Date? = liked ? now : nil
+            try db.execute(
+                sql: """
+                    INSERT INTO trop_v2_item (
+                        id, kind, title, artist_or_author, duration_seconds,
+                        saved_at, liked_at, created_at, modified_at
+                    ) VALUES (?, 'recording', ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                arguments: [newID, title, artist, durationSeconds, now, likedAt, now, now]
+            )
+            try db.execute(
+                sql: """
+                    INSERT INTO trop_v2_source_alias (
+                        id, item_id, kind, provider, source_scope, external_id
+                    ) VALUES (?, ?, 'recording', ?, ?, ?)
+                    """,
+                arguments: [aliasID, newID, alias.provider, alias.scope, alias.externalID]
+            )
+            return newID
+        }
+    }
+
+    static func recordings() async throws -> [RecordingSummary] {
+        try await DatabaseService.shared.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT id, title, artist_or_author,
+                           (liked_at IS NOT NULL) AS is_liked
+                    FROM trop_v2_item
+                    WHERE kind = 'recording' AND saved_at IS NOT NULL
+                    ORDER BY saved_at DESC, id
+                    """
+            ).map { row in
+                RecordingSummary(
+                    id: row["id"], title: row["title"],
+                    artist: row["artist_or_author"],
+                    isLiked: row["is_liked"]
+                )
+            }
+        }
+    }
+
+    static func playlistTracks(_ rawPlaylistID: String) async throws -> [PlaylistTrack] {
+        let id = try TropLibraryV2IdentityPolicy.checkedID(rawPlaylistID)
+        return try await DatabaseService.shared.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT entry.id, entry.recording_id, entry.position,
+                           recording.title, recording.artist_or_author
+                    FROM trop_v2_playlist_entry AS entry
+                    JOIN trop_v2_item AS recording
+                      ON recording.id = entry.recording_id
+                    WHERE entry.playlist_id = ?
+                    ORDER BY entry.position, entry.created_at, entry.id
+                    """,
+                arguments: [id]
+            ).map { row in
+                PlaylistTrack(
+                    id: row["id"], recordingID: row["recording_id"],
+                    title: row["title"], artist: row["artist_or_author"],
+                    position: row["position"]
+                )
+            }
+        }
+    }
+
 }
