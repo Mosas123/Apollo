@@ -6,6 +6,7 @@ from pathlib import Path
 import sqlite3
 
 source = Path("Trop/Core/LibrarySync/TropLibraryMigrationPreview.swift").read_text()
+dry_run = Path("Trop/Core/LibrarySync/TropLibraryV2MigrationDryRun.swift").read_text()
 view = Path("Trop/Settings/TropLibraryMigrationPreviewView.swift").read_text()
 settings = Path("Trop/Settings/SettingsView.swift").read_text()
 
@@ -13,6 +14,14 @@ assert "DatabaseService.shared.read" in source, "Inventory must be read-only"
 for forbidden in ("dbPool.write", "DatabaseService.shared.write", "db.execute(",
                   "CKContainer.", "deleteAll", "DROP TABLE", "DELETE FROM", "UPDATE song"):
     assert forbidden not in source, f"Read-only migration preflight contains {forbidden}"
+assert "DatabaseService.shared.read" in dry_run
+assert "static func scan(in db: Database)" in dry_run
+assert "TropLibraryV2MigrationDryRun.load()" in view
+assert "Import blocked until conflicts are resolved" in view
+assert "Nothing was imported" in view
+for forbidden in ("DatabaseService.shared.write", "db.execute(", "DELETE FROM",
+                  "DROP TABLE", "InnerTubeClient", "SyncBridge", "CKContainer."):
+    assert forbidden not in dry_run, f"Dry-run forecast must not write or call providers: {forbidden}"
 assert "TropLibraryMigrationPreviewView()" in settings
 assert "No changes were made" in view
 assert "Live iCloud syncing is not enabled yet" in view
