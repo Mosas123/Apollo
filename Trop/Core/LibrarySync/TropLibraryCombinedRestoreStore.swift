@@ -20,6 +20,17 @@ enum TropLibraryCombinedRestoreStore {
         guard DatabaseService.shared.usesPersistentStore else {
             throw Blocker.temporaryDatabase
         }
+        return try await DatabaseService.shared.writeReturning { db in
+            try restoreInTransaction(archive, in: db)
+        }
+    }
+
+    /// The same actual SQL path can run against a separate in-memory queue.
+    /// Caller owns the one GRDB write transaction and the destination DB;
+    /// NEVER pass the shared live DB from an experimental UI rehearsal.
+    static func restoreInTransaction(
+        _ archive: Data, in db: Database
+    ) throws -> TropLibraryCombinedBackupService.Preview {
         let source = try TropLibraryCombinedBackupArchive.decode(archive).library
         let preview = try TropLibraryCombinedBackupService.preview(archive)
         let trackIDs = Set(source.legacy.tracks.map(\.id))
@@ -30,10 +41,9 @@ enum TropLibraryCombinedRestoreStore {
             throw Blocker.unresolvedLegacyMembership
         }
 
-        try await DatabaseService.shared.write { db in
-            // Must be checked INSIDE this exact transaction. Never truncate,
-            // reset, merge into, or overwrite a user's existing database.
-            try TropLibraryCombinedRestorePreflight.requireEmpty(db)
+        // Must be checked INSIDE this exact transaction. Never truncate,
+        // reset, merge into, or overwrite a user's existing database.
+        try TropLibraryCombinedRestorePreflight.requireEmpty(db)
 
             for item in source.legacy.tracks {
                 try db.execute(
@@ -291,7 +301,6 @@ enum TropLibraryCombinedRestoreStore {
                     ]
                 )
             }
-        }
         return preview
     }
 }
