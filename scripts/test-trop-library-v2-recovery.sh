@@ -46,6 +46,7 @@ def new_db():
     db.execute("INSERT INTO song VALUES ('legacy-song', 'Preserve me')")
     for query in queries:
         db.execute(query)
+    db.commit()
     return db
 
 source = new_db()
