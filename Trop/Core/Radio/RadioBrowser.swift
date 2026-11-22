@@ -97,10 +97,18 @@ enum RadioBrowserError: LocalizedError {
 enum RadioBrowser {
     private static let host = "https://de1.api.radio-browser.info"
 
+    /// Validate a provider station identity without depending on GRDB.
+    static func canonicalStationUUID(_ value: String) throws -> String {
+        guard let uuid = UUID(uuidString: value) else {
+            throw RadioBrowserError.stationUnavailable
+        }
+        return uuid.uuidString.lowercased()
+    }
+
     /// Always resolve a saved station's *current* stream before playback.
     /// Store its UUID, never a URL that may expire or change ownership.
     static func station(uuid rawUUID: String) async throws -> RadioStation {
-        let uuid = try TropLibraryV2RadioStore.canonicalStationUUID(rawUUID)
+        let uuid = try canonicalStationUUID(rawUUID)
         guard let url = URL(string: "\(host)/json/stations/byuuid/\(uuid)") else {
             throw RadioBrowserError.stationUnavailable
         }
