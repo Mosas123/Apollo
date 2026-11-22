@@ -17,6 +17,12 @@ swiftc -frontend -parse Trop/Settings/TropLibraryV2RecoveryView.swift
 grep -Fq 'TropLibraryV2RecoveryView()' Trop/Settings/SettingsView.swift
 grep -Fq 'TropLibraryV2RecoveryStore.export()' Trop/Settings/TropLibraryV2RecoveryView.swift
 grep -Fq 'TropLibraryV2RecoveryStore.preview(data)' Trop/Settings/TropLibraryV2RecoveryView.swift
+# The Files picker must accept a JSON document classified as generic
+# public.data by a third-party provider; strict verification is content-based.
+grep -Fq 'allowedContentTypes: [.item]' Trop/Settings/TropLibraryV2RecoveryView.swift
+grep -Fq 'FileHandle(forReadingFrom: url)' Trop/Settings/TropLibraryV2RecoveryView.swift
+grep -Fq 'TropLibraryV2RecoveryArchive.maximumBytes + 1' Trop/Settings/TropLibraryV2RecoveryView.swift
+grep -Fq 'checksumMismatch' Trop/Settings/TropLibraryV2RecoveryView.swift
 if grep -E 'restoreIntoEmptyLibrary|DELETE FROM|DROP TABLE' Trop/Settings/TropLibraryV2RecoveryView.swift; then
   echo "Recovery view must remain read-only"
   exit 1
