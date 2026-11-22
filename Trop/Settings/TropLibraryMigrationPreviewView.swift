@@ -4,6 +4,8 @@ import SwiftUI
 /// Only aggregate counts are displayed; no track titles or credentials.
 struct TropLibraryMigrationPreviewView: View {
     @State private var preview: TropLibraryMigrationPreview?
+    @State private var dryRun: TropLibraryV2MigrationDryRun.Report?
+    @State private var dryRunError: String?
     @State private var errorMessage: String?
     @State private var isLoading = false
 
@@ -44,6 +46,54 @@ struct TropLibraryMigrationPreviewView: View {
                 .disabled(isLoading)
             }
 
+            Section("Migration dry-run · no changes") {
+                if let dryRun {
+                    LabeledContent("New Trop items", value: "\(dryRun.newItems)")
+                    LabeledContent("Already imported items", value: "\(dryRun.reusedItems)")
+                    LabeledContent("New playlist entries", value: "\(dryRun.newEntries)")
+                    LabeledContent("Already imported entries", value: "\(dryRun.existingEntries)")
+                    LabeledContent(
+                        "User-removed entries kept removed",
+                        value: "\(dryRun.userRemovedEntries)"
+                    )
+                    if dryRun.hasBlockers {
+                        Label("Import blocked until conflicts are resolved", systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                        LabeledContent(
+                            "Unresolved playlist entries",
+                            value: "\(dryRun.unresolvedMemberships)"
+                        )
+                        LabeledContent("Invalid source items", value: "\(dryRun.invalidItems)")
+                        LabeledContent(
+                            "Conflicting source aliases",
+                            value: "\(dryRun.conflictingAliases)"
+                        )
+                        LabeledContent(
+                            "Conflicting relationships",
+                            value: "\(dryRun.conflictingRelations)"
+                        )
+                        LabeledContent(
+                            "Broken import history",
+                            value: "\(dryRun.brokenLedgerEntries)"
+                        )
+                    } else {
+                        Label("No structural blockers found in this snapshot", systemImage: "checkmark.shield")
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(
+                        "This is an estimate from a single read of the local database. "
+                            + "It does not import anything, verify a restorable backup, "
+                            + "or guarantee that saved songs have playable audio."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                } else if let dryRunError {
+                    Text(dryRunError).foregroundStyle(.secondary)
+                } else if isLoading {
+                    ProgressView("Checking migration")
+                }
+            }
+
             if let preview {
                 Section("Items needing extra care") {
                     LabeledContent(
@@ -81,6 +131,13 @@ struct TropLibraryMigrationPreviewView: View {
         do {
             preview = try await TropLibraryMigrationPreview.load()
             errorMessage = nil
+            do {
+                dryRun = try await TropLibraryV2MigrationDryRun.load()
+                dryRunError = nil
+            } catch {
+                dryRun = nil
+                dryRunError = "The dry-run check is unavailable. Nothing was imported."
+            }
         } catch {
             errorMessage = "Could not read the local library. No changes were made."
         }
