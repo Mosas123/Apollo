@@ -28,11 +28,9 @@ enum TropLibraryV2RecoveryStore {
 
     /// Fetches six V2 tables from one consistent GRDB read transaction.
     /// No legacy account tokens, files, stream URLs, caches or history.
-    static func snapshot() async throws -> TropLibraryV2RecoverySnapshot {
-        guard DatabaseService.shared.usesPersistentStore else {
-            throw TropLibraryV2RecoveryError.temporaryDatabase
-        }
-        return try await DatabaseService.shared.read { db in
+    /// Runs in the *caller's* GRDB read transaction. Combined archives
+    /// reuse this to ensure legacy and V2 represent the same instant.
+    static func snapshot(in db: Database) throws -> TropLibraryV2RecoverySnapshot {
             let items = try Row.fetchAll(
                 db,
                 sql: """
@@ -140,6 +138,14 @@ enum TropLibraryV2RecoveryStore {
             )
             try TropLibraryV2RecoveryArchive.validate(snapshot)
             return snapshot
+    }
+
+    static func snapshot() async throws -> TropLibraryV2RecoverySnapshot {
+        guard DatabaseService.shared.usesPersistentStore else {
+            throw TropLibraryV2RecoveryError.temporaryDatabase
+        }
+        return try await DatabaseService.shared.read { db in
+            try snapshot(in: db)
         }
     }
 
