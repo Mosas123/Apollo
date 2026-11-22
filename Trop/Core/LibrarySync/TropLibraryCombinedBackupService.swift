@@ -60,6 +60,13 @@ enum TropLibraryCombinedBackupService {
             throw TropLibraryCombinedBackupError.temporaryDatabase
         }
         return try await DatabaseService.shared.read { db in
+            try snapshot(in: db)
+        }
+    }
+
+    /// Snapshot the exact GRDB connection supplied by the caller, allowing
+    /// an isolated in-memory restore rehearsal without reading live data.
+    static func snapshot(in db: Database) throws -> TropLibraryCombinedBackupSnapshot {
             guard let originScope = try String.fetchOne(
                 db, sql: "SELECT origin_scope FROM trop_v2_library_origin WHERE singleton = 1"
             ) else { throw TropLibraryCombinedBackupError.invalidPayload }
@@ -200,7 +207,6 @@ enum TropLibraryCombinedBackupService {
                 podcastArtists: podcastArtists,
                 episodePodcastNames: episodePodcastNames
             )
-        }
     }
 
     static func export() async throws -> Data {
