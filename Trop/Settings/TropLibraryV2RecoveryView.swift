@@ -88,6 +88,7 @@ struct TropLibraryV2RecoveryView: View {
 
             Section("Verify from another location") {
                 Button {
+                    Log.libraryView.info("V2_FILE_IMPORTER open requested")
                     showImporter = true
                 } label: {
                     Label("Inspect V2 snapshot from Files", systemImage: "checkmark.shield")
@@ -165,6 +166,7 @@ struct TropLibraryV2RecoveryView: View {
             // Permit generic files and validate the actual JSON envelope.
             allowedContentTypes: [.item]
         ) { result in
+            Log.libraryView.info("V2_FILE_IMPORTER completion delivered")
             do {
                 let url = try result.get()
                 let access = url.startAccessingSecurityScopedResource()
@@ -188,15 +190,19 @@ struct TropLibraryV2RecoveryView: View {
                 }
 
                 preview = try TropLibraryV2RecoveryStore.preview(data)
+                Log.libraryView.info("V2_FILE_IMPORTER integrity verified")
                 feedback = "Archive integrity verified; nothing was restored."
                 errorMessage = nil
             } catch TropLibraryV2RecoveryError.oversized {
+                Log.libraryView.warning("V2_FILE_IMPORTER oversized document")
                 preview = nil
                 errorMessage = "This file is too large for a V2 snapshot. Nothing was changed."
             } catch TropLibraryV2RecoveryError.checksumMismatch {
+                Log.libraryView.warning("V2_FILE_IMPORTER checksum mismatch")
                 preview = nil
                 errorMessage = "Snapshot checksum mismatch. Nothing was changed."
             } catch {
+                Log.libraryView.warning("V2_FILE_IMPORTER validation or picker failed")
                 preview = nil
                 errorMessage = "This file is not a valid Trop V2 snapshot. Nothing was changed."
             }
