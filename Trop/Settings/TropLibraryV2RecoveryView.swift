@@ -31,6 +31,8 @@ struct TropLibraryV2RecoveryView: View {
     @State private var showImporter = false
     @State private var isPreparing = false
     @State private var isInspectingLocal = false
+    @State private var localVerificationAlert = false
+    @State private var localVerificationMessage = ""
     @State private var preview: TropLibraryV2RecoveryStore.Preview?
     @State private var feedback: String?
     @State private var errorMessage: String?
@@ -69,6 +71,9 @@ struct TropLibraryV2RecoveryView: View {
 
             Section("Verify saved file without picker") {
                 Button {
+                    Log.libraryView.info("V2_LOCAL_VERIFY button pressed")
+                    feedback = "Checking the most recent V2 snapshot in Thrum…"
+                    errorMessage = nil
                     Task { await inspectLocalSnapshot() }
                 } label: {
                     Label(
@@ -78,9 +83,9 @@ struct TropLibraryV2RecoveryView: View {
                 }
                 .disabled(isInspectingLocal)
                 Text(
-                    "For snapshots saved in Files → On My iPhone → Thrum. "
-                        + "Reads the newest Trop V2 snapshot directly from this "
-                        + "app's Documents folder; does not import or change data."
+                    "This checks the newest V2 snapshot immediately and shows a result. "
+                        + "It does not open another screen. The file must be in "
+                        + "Files → On My iPhone → Thrum."
                 )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -144,6 +149,11 @@ struct TropLibraryV2RecoveryView: View {
             }
         }
         .navigationTitle("V2 Snapshot")
+        .alert("V2 snapshot verification", isPresented: $localVerificationAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(localVerificationMessage)
+        }
         .navigationBarTitleDisplayMode(.inline)
         .miniPlayerTracksScroll()
         .fileExporter(
@@ -219,18 +229,36 @@ struct TropLibraryV2RecoveryView: View {
                 try TropLibraryV2LocalSnapshotFinder.latest()
             }.value
             preview = try TropLibraryV2RecoveryStore.preview(found.bytes)
-            feedback = "Archive integrity verified from the app folder. Nothing was restored."
+            let message = "Archive integrity verified from Thrum. " 
+                + "\(preview?.recordings ?? 0) recordings, "
+                + "\(preview?.playlists ?? 0) playlists, "
+                + "\(preview?.entries ?? 0) playlist entries, "
+                + "\(preview?.radioFavorites ?? 0) radio favorites. "
+                + "Nothing was restored."
+            Log.libraryView.info("V2_LOCAL_VERIFY completed successfully")
+            feedback = message
             errorMessage = nil
+            localVerificationMessage = message
+            localVerificationAlert = true
         } catch TropLibraryV2LocalSnapshotFinder.LookupError.noSnapshot {
             preview = nil
             errorMessage = "No exported V2 snapshot was found in the app folder. "
                 + "Save it under On My iPhone → Thrum and try again."
+            Log.libraryView.warning("V2_LOCAL_VERIFY no matching snapshot")
+            localVerificationMessage = errorMessage ?? "No snapshot found"
+            localVerificationAlert = true
         } catch TropLibraryV2RecoveryError.checksumMismatch {
             preview = nil
             errorMessage = "The saved snapshot checksum does not match. Nothing was changed."
+            Log.libraryView.warning("V2_LOCAL_VERIFY checksum mismatch")
+            localVerificationMessage = errorMessage ?? "Verification failed"
+            localVerificationAlert = true
         } catch {
             preview = nil
             errorMessage = "Could not verify the saved snapshot. Nothing was changed."
+            Log.libraryView.warning("V2_LOCAL_VERIFY failed")
+            localVerificationMessage = errorMessage ?? "Verification failed"
+            localVerificationAlert = true
         }
     }
 
