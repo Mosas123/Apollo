@@ -209,7 +209,9 @@ struct TropLibraryCombinedRestoreView: View {
                 "The archive could not be prepared or this library is no longer "
                     + "empty. Nothing was restored."
             )
-            await checkEligibility()
+            // Rechecking is an explicit user action after the file-read
+            // state ends. The final write always repeats the empty guard.
+            isEligible = false
         }
     }
 
