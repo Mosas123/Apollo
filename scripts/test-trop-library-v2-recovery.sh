@@ -12,6 +12,15 @@ swiftc -swift-version 6 -strict-concurrency=complete \
   -o "$tmp_dir/v2-recovery-archive-checks"
 "$tmp_dir/v2-recovery-archive-checks"
 
+# The app Files folder has a picker-free, read-only snapshot verification path.
+swiftc -swift-version 6 -strict-concurrency=complete \
+  Trop/Core/LibrarySync/TropLibraryV2IdentityPolicy.swift \
+  Trop/Core/LibrarySync/TropLibraryV2RecoveryArchive.swift \
+  Trop/Core/LibrarySync/TropLibraryV2LocalSnapshotFinder.swift \
+  tests/LibrarySync/TropLibraryV2LocalSnapshotFinderChecks.swift \
+  -o "$tmp_dir/v2-local-snapshot-checks"
+"$tmp_dir/v2-local-snapshot-checks"
+
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2RecoveryStore.swift
 swiftc -frontend -parse Trop/Settings/TropLibraryV2RecoveryView.swift
 grep -Fq 'TropLibraryV2RecoveryView()' Trop/Settings/SettingsView.swift
@@ -23,6 +32,8 @@ grep -Fq 'allowedContentTypes: [.item]' Trop/Settings/TropLibraryV2RecoveryView.
 grep -Fq 'FileHandle(forReadingFrom: url)' Trop/Settings/TropLibraryV2RecoveryView.swift
 grep -Fq 'TropLibraryV2RecoveryArchive.maximumBytes + 1' Trop/Settings/TropLibraryV2RecoveryView.swift
 grep -Fq 'checksumMismatch' Trop/Settings/TropLibraryV2RecoveryView.swift
+grep -Fq 'TropLibraryV2LocalSnapshotFinder.latest()' Trop/Settings/TropLibraryV2RecoveryView.swift
+grep -Fq 'TropLibraryV2RecoveryStore.preview(found.bytes)' Trop/Settings/TropLibraryV2RecoveryView.swift
 if grep -E 'restoreIntoEmptyLibrary|DELETE FROM|DROP TABLE' Trop/Settings/TropLibraryV2RecoveryView.swift; then
   echo "Recovery view must remain read-only"
   exit 1
