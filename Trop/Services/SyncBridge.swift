@@ -24,12 +24,14 @@ enum SyncBridge {
     }
 
     static func checkAndSyncIfStale() async {
+        guard !TropLibraryV2AccountIsolation.isEnabled else { return }
         await incremental.checkAndSyncIfStale(options: options) {
             await LikeStore.shared.refresh()
         }
     }
 
     static func forceFullSync() async {
+        guard !TropLibraryV2AccountIsolation.isEnabled else { return }
         await incremental.forceFullSync(options: options) {
             await LikeStore.shared.refresh()
         }
