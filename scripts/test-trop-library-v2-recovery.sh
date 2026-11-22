@@ -42,6 +42,7 @@ queries += re.findall(r'try db\.execute\(sql: """(.*?)"""\)', part12, re.S)
 assert len(queries) == 10
 assert 'guard DatabaseService.shared.usesPersistentStore' in store
 assert 'throw TropLibraryV2RecoveryError.existingLibrary' in store
+assert 'throw TropLibraryV2RecoveryError.legacySourceConflict' in store
 assert 'try await DatabaseService.shared.write { db in' in store
 assert 'TropLibraryV2RecoveryArchive.decode(archive)' in store
 assert 'isPortableAlias' in store and 'omitted += 1' in store
@@ -51,6 +52,7 @@ def new_db():
     db = sqlite3.connect(":memory:")
     db.execute("PRAGMA foreign_keys=ON")
     db.execute("CREATE TABLE song (id TEXT PRIMARY KEY, title TEXT)")
+    db.execute("CREATE TABLE playlist_song_map (id INTEGER PRIMARY KEY, playlist_id TEXT, song_id TEXT, position INTEGER)")
     db.execute("INSERT INTO song VALUES ('legacy-song', 'Preserve me')")
     for query in queries:
         db.execute(query)
@@ -128,6 +130,15 @@ assert restored.execute("SELECT title FROM song").fetchone() == ("Preserve me",)
 
 # A restore into a populated DB is prohibited; no overwrite or data loss.
 assert restored.execute("SELECT COUNT(*) FROM trop_v2_item").fetchone()[0] == 2
+
+# Ledger row IDs are only local to an origin DB. Cross-profile restores
+# must refuse to treat coincidentally equal integer IDs as imported already.
+foreign = new_db()
+foreign.execute("""INSERT INTO playlist_song_map
+    (id, playlist_id, song_id, position)
+    VALUES (1, 'different-playlist', 'different-song', 0)""")
+foreign_count = foreign.execute("SELECT COUNT(*) FROM playlist_song_map").fetchone()[0]
+assert foreign_count == 1 and len(dump["trop_v2_legacy_import_entry"]) > 0
 
 # A broken link must roll back the *entire* destination transaction.
 broken = new_db()
