@@ -23,19 +23,24 @@ swiftc -swift-version 6 -strict-concurrency=complete \
 
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2RecoveryStore.swift
 swiftc -frontend -parse Trop/Settings/TropLibraryV2RecoveryView.swift
+swiftc -frontend -parse Trop/Settings/TropLibraryV2DocumentPicker.swift
 grep -Fq 'TropLibraryV2RecoveryView()' Trop/Settings/SettingsView.swift
 grep -Fq 'TropLibraryV2RecoveryStore.export()' Trop/Settings/TropLibraryV2RecoveryView.swift
 grep -Fq 'TropLibraryV2RecoveryStore.preview(data)' Trop/Settings/TropLibraryV2RecoveryView.swift
 # The Files picker must accept a JSON document classified as generic
 # public.data by a third-party provider; strict verification is content-based.
-grep -Fq 'allowedContentTypes: [.item]' Trop/Settings/TropLibraryV2RecoveryView.swift
+grep -Fq 'TropLibraryV2DocumentPicker(' Trop/Settings/TropLibraryV2RecoveryView.swift
+grep -Fq 'UIDocumentPickerViewController(' Trop/Settings/TropLibraryV2DocumentPicker.swift
+grep -Fq 'asCopy: true' Trop/Settings/TropLibraryV2DocumentPicker.swift
+grep -Fq 'didPickDocumentsAt urls' Trop/Settings/TropLibraryV2DocumentPicker.swift
 grep -Fq 'FileHandle(forReadingFrom: url)' Trop/Settings/TropLibraryV2RecoveryView.swift
 grep -Fq 'TropLibraryV2RecoveryArchive.maximumBytes + 1' Trop/Settings/TropLibraryV2RecoveryView.swift
 grep -Fq 'checksumMismatch' Trop/Settings/TropLibraryV2RecoveryView.swift
 grep -Fq 'TropLibraryV2LocalSnapshotFinder.latest()' Trop/Settings/TropLibraryV2RecoveryView.swift
 grep -Fq 'TropLibraryV2RecoveryStore.preview(found.bytes)' Trop/Settings/TropLibraryV2RecoveryView.swift
 grep -Fq 'V2_FILE_IMPORTER open requested' Trop/Settings/TropLibraryV2RecoveryView.swift
-grep -Fq 'V2_FILE_IMPORTER completion delivered' Trop/Settings/TropLibraryV2RecoveryView.swift
+grep -Fq 'V2_FILE_IMPORTER UIKit delegate received selection' Trop/Settings/TropLibraryV2DocumentPicker.swift
+grep -Fq 'localVerificationAlert = true' Trop/Settings/TropLibraryV2RecoveryView.swift
 python3 - <<'PLIST_CHECK'
 import plistlib
 from pathlib import Path
