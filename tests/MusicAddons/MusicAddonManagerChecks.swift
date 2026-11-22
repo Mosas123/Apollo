@@ -37,6 +37,49 @@ struct MusicAddonManagerChecks {
         precondition(stremioRegistry.installations[0].manifest.protocolKind == .stremio)
         precondition(!stremioRegistry.installations[0].isEnabled)
 
+        // NullBeat-style Eclipse manifests declare an Atmos toggle with
+        // JSON boolean default. This is a public protocol-shaped fixture,
+        // not a request to any configured account or private addon endpoint.
+        let nullbeatStyle = Data("""
+        {
+          "id":"com.nullbeat.addon.example","name":"NullBeat-like Music",
+          "version":"1.0.2","description":"Synthetic parser regression",
+          "resources":["search","stream","settings","catalog","isrc"],
+          "types":["track","album","artist","playlist"],
+          "settings":[
+            {"key":"quality","type":"select","default":"max",
+             "options":[{"value":"max","label":"MAX"},{"value":"lossless","label":"CD"}]},
+            {"key":"atmos","type":"toggle","default":true},
+            {"key":"retries","type":"number","default":3},
+            {"key":"ratio","type":"number","default":1.5}
+          ],
+          "catalogs":[{"type":"track","id":"top_tracks","name":"Top"}]
+        }
+        """.utf8)
+        let nullbeatPackage = try MusicAddonPackage.parse(nullbeatStyle, from: beta)
+        precondition(nullbeatPackage.manifest.protocolKind == .stremio)
+        precondition(nullbeatPackage.manifest.capabilities.contains(.search))
+        precondition(nullbeatPackage.manifest.capabilities.contains(.stream))
+        let settings = nullbeatPackage.manifest.stremio?.settings ?? []
+        precondition(settings.first(where: { $0.key == "quality" })?.default == "max")
+        precondition(settings.first(where: { $0.key == "atmos" })?.default == "true")
+        precondition(settings.first(where: { $0.key == "retries" })?.default == "3")
+        precondition(settings.first(where: { $0.key == "ratio" })?.default == "1.5")
+        let persisted = try JSONEncoder().encode(nullbeatPackage.manifest)
+        let restoredStremio = try JSONDecoder().decode(MusicAddonManifest.self, from: persisted)
+        precondition(restoredStremio.stremio?.settings == settings)
+
+        let disabledAtmos = Data(
+            String(decoding: nullbeatStyle, as: UTF8.self)
+                .replacingOccurrences(of: "\"default\":true", with: "\"default\":false")
+                .utf8
+        )
+        let disabledPackage = try MusicAddonPackage.parse(disabledAtmos, from: beta)
+        precondition(
+            disabledPackage.manifest.stremio?.settings?
+                .first(where: { $0.key == "atmos" })?.default == "false"
+        )
+
         // Native Trop manifests remain installable.
         var registry = MusicAddonRegistry()
         try registry.install(data: first, from: alpha)
