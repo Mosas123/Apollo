@@ -34,6 +34,20 @@ grep -Fq 'TropLibraryV2RecoveryArchive.maximumBytes + 1' Trop/Settings/TropLibra
 grep -Fq 'checksumMismatch' Trop/Settings/TropLibraryV2RecoveryView.swift
 grep -Fq 'TropLibraryV2LocalSnapshotFinder.latest()' Trop/Settings/TropLibraryV2RecoveryView.swift
 grep -Fq 'TropLibraryV2RecoveryStore.preview(found.bytes)' Trop/Settings/TropLibraryV2RecoveryView.swift
+grep -Fq 'V2_FILE_IMPORTER open requested' Trop/Settings/TropLibraryV2RecoveryView.swift
+grep -Fq 'V2_FILE_IMPORTER completion delivered' Trop/Settings/TropLibraryV2RecoveryView.swift
+python3 - <<'PLIST_CHECK'
+import plistlib
+from pathlib import Path
+
+info = plistlib.loads(Path("Trop/Resources/Info.plist").read_bytes())
+assert info["UIFileSharingEnabled"] is True
+assert info["LSSupportsOpeningDocumentsInPlace"] is True
+assert not info.get("UISupportsDocumentBrowser", False), (
+    "Thrum is not a UIDocumentBrowser app; the Files importer is a modal picker"
+)
+print("Thrum Files app / picker Info.plist configuration passed")
+PLIST_CHECK
 if grep -E 'restoreIntoEmptyLibrary|DELETE FROM|DROP TABLE' Trop/Settings/TropLibraryV2RecoveryView.swift; then
   echo "Recovery view must remain read-only"
   exit 1
