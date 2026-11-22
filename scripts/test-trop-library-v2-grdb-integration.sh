@@ -18,6 +18,13 @@ cp Trop/Core/LibrarySync/TropLibraryV2RecoveryArchive.swift \
 cp Trop/Core/LibrarySync/TropLibraryV2RecoveryStore.swift \
     "$package/Sources/V2RecoveryGRDBFixture/TropLibraryV2RecoveryStore.swift"
 
+# Compile the exact same legacy+V2 combined-store code as the application.
+for name in TropLibraryBackupArchive TropLibraryBackupService \
+            TropLibraryCombinedBackupArchive TropLibraryCombinedBackupService; do
+    cp "Trop/Core/LibrarySync/$name.swift" \
+        "$package/Sources/V2RecoveryGRDBFixture/$name.swift"
+done
+
 # Extract the real v10, v11 and v12 SQL statements rather than retyping or
 # approximating the migration schema in a hand-maintained test fixture.
 python3 - "$package/v2.sql" <<'PY'
