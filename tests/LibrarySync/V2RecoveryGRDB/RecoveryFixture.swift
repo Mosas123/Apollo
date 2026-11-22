@@ -160,6 +160,11 @@ enum RecoveryFixture {
 
     static func createSource() async throws {
         try await DatabaseService.shared.write { db in
+            try db.execute(sql: """
+                INSERT INTO playlist_song_map
+                    (id, playlist_id, song_id, position)
+                VALUES (11, 'old-playlist', 'legacy-keep', 0)
+                """)
             for (id, kind, title, author) in [
                 (recording, "recording", "Una Canción", "Artista"),
                 (playlist, "playlist", "Mi Playlist", ""),
@@ -256,6 +261,11 @@ enum RecoveryFixture {
         let combinedSummary = try TropLibraryCombinedBackupService.preview(combinedArchive)
         precondition(combinedSummary.legacyTracks == 1 && combinedSummary.v2Playlists == 1)
         precondition(combinedSummary.legacyLedgerEntriesNeedingOrigin == 2)
+        precondition(combinedSummary.sourceMemberships == 1)
+        precondition(combinedSummary.ledgerEntriesWithMissingMembership == 1)
+        precondition(combined.library.legacyMemberships.count == 1)
+        precondition(combined.library.legacyMemberships[0].sourceRowID == 11)
+        precondition(combined.library.legacyMemberships[0].songID == "legacy-keep")
         precondition(!String(decoding: combinedArchive, as: UTF8.self)
             .contains("encoded-private-manifest"))
 
