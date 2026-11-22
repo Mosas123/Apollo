@@ -20,6 +20,13 @@ restorable backup, complete playback experience or safe migration on an iPhone.
   signed streaming URLs, raw paths or automatic CloudKit writes.
 - [ ] Verify Swift importer itself with a dedicated GRDB/in-memory integration
   fixture (not just schema-level SQLite test and Nightly compilation).
+  **Implementation staged on PR #80:** the exact production importer is now
+  compiled with pinned GRDB in the recovery fixture and exercised against a
+  disposable restored database: duplicate memberships, stable Trop UUIDs,
+  existing V2 preservation, repeated imports, user-edited title/like state,
+  user-deleted membership tombstones, and rollback on a malformed legacy item.
+  Keep unchecked until the newest CI passes. Production-scheme and iPhone
+  migration QA are separate gates.
 - [ ] Prove large-library performance, memory and cancellation with fixture data.
 
 ## Stage 2: complete local V2 user experience (HARD GATE)
