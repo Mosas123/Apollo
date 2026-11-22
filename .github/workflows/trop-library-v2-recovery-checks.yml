@@ -8,6 +8,8 @@ on:
       - "Trop/Core/LibrarySync/TropLibraryBackupService.swift"
       - "Trop/Core/LibrarySync/TropLibraryCombinedBackupArchive.swift"
       - "Trop/Core/LibrarySync/TropLibraryCombinedBackupService.swift"
+      - "Trop/Core/LibrarySync/TropLibraryCombinedRestorePlanner.swift"
+      - "Trop/Core/LibrarySync/TropLibraryCombinedRestorePreflight.swift"
       - "tests/LibrarySync/TropLibraryCombinedBackupArchiveChecks.swift"
       - "Trop/Core/LibrarySync/TropLibraryV2RecoveryStore.swift"
       - "Trop/Core/LibrarySync/TropLibraryV2IdentityPolicy.swift"
