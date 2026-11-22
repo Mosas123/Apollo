@@ -73,6 +73,26 @@ if grep -Fq 'restoreIntoEmptyLibrary(' \
 fi
 
 swiftc -frontend -parse Trop/Settings/TropLibraryCombinedBackupView.swift
+swiftc -frontend -parse Trop/Settings/TropLibraryCombinedRestoreView.swift
+grep -Fq 'TropLibraryCombinedRestoreView()' \
+  Trop/Settings/TropLibraryCombinedBackupView.swift
+grep -Fq 'TropLibraryCombinedRestorePreflight.requireEmpty(db)' \
+  Trop/Settings/TropLibraryCombinedRestoreView.swift
+grep -Fq 'TropLibraryCombinedRestoreStore' \
+  Trop/Settings/TropLibraryCombinedRestoreView.swift
+grep -Fq '.restoreIntoEmptyLibrary(archive)' \
+  Trop/Settings/TropLibraryCombinedRestoreView.swift
+grep -Fq 'Button("Restore metadata", role: .destructive)' \
+  Trop/Settings/TropLibraryCombinedRestoreView.swift
+grep -Fq 'data.count <= maximum' \
+  Trop/Settings/TropLibraryCombinedRestoreView.swift
+grep -Fq 'guard DatabaseService.shared.usesPersistentStore' \
+  Trop/Settings/TropLibraryCombinedRestoreView.swift
+if grep -E 'DELETE FROM|DROP TABLE|removeItem|SyncBridge|InnerTube' \
+  Trop/Settings/TropLibraryCombinedRestoreView.swift; then
+  echo 'Empty-only restore UI must never wipe data, mutate remote accounts or synchronize'
+  exit 1
+fi
 grep -Fq 'TropLibraryCombinedBackupView()' Trop/Settings/SettingsView.swift
 grep -Fq 'TropLibraryCombinedBackupService.export()' Trop/Settings/TropLibraryCombinedBackupView.swift
 grep -Fq 'TropLibraryCombinedBackupService.preview(bytes)' Trop/Settings/TropLibraryCombinedBackupView.swift
