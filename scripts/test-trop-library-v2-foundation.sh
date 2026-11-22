@@ -20,7 +20,8 @@ import sqlite3
 migrations = Path("Trop/Database/DatabaseMigrations.swift").read_text()
 part = migrations.split("static let v10:", 1)
 assert len(part) == 2, "Missing v10 schema"
-queries = re.findall(r'try db\.execute\(sql: """(.*?)"""\)', part[1], re.S)
+v10_only = part[1].split("static let v11:", 1)[0]
+queries = re.findall(r'try db\.execute\(sql: """(.*?)"""\)', v10_only, re.S)
 assert len(queries) == 6, f"Expected 6 additive schema statements: {len(queries)}"
 assert 'registerMigration("v10", migrate: DatabaseMigrations.v10)' in Path(
     "Trop/Database/DatabaseService.swift"
