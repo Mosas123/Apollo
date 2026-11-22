@@ -30,6 +30,7 @@ struct TropLibraryV2RecoveryView: View {
     @State private var showExporter = false
     @State private var showImporter = false
     @State private var isPreparing = false
+    @State private var isInspectingLocal = false
     @State private var preview: TropLibraryV2RecoveryStore.Preview?
     @State private var feedback: String?
     @State private var errorMessage: String?
@@ -66,7 +67,26 @@ struct TropLibraryV2RecoveryView: View {
                 .foregroundStyle(.secondary)
             }
 
-            Section("Verify") {
+            Section("Verify saved file without picker") {
+                Button {
+                    Task { await inspectLocalSnapshot() }
+                } label: {
+                    Label(
+                        isInspectingLocal ? "Checking saved file…" : "Verify snapshot in Trop app folder",
+                        systemImage: "checkmark.shield"
+                    )
+                }
+                .disabled(isInspectingLocal)
+                Text(
+                    "For snapshots saved in Files → On My iPhone → Thrum. "
+                        + "Reads the newest Trop V2 snapshot directly from this "
+                        + "app's Documents folder; does not import or change data."
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+
+            Section("Verify from another location") {
                 Button {
                     showImporter = true
                 } label: {
@@ -180,6 +200,31 @@ struct TropLibraryV2RecoveryView: View {
                 preview = nil
                 errorMessage = "This file is not a valid Trop V2 snapshot. Nothing was changed."
             }
+        }
+    }
+
+    @MainActor
+    private func inspectLocalSnapshot() async {
+        guard !isInspectingLocal else { return }
+        isInspectingLocal = true
+        defer { isInspectingLocal = false }
+        do {
+            let found = try await Task.detached(priority: .userInitiated) {
+                try TropLibraryV2LocalSnapshotFinder.latest()
+            }.value
+            preview = try TropLibraryV2RecoveryStore.preview(found.bytes)
+            feedback = "Archive integrity verified from the app folder. Nothing was restored."
+            errorMessage = nil
+        } catch TropLibraryV2LocalSnapshotFinder.LookupError.noSnapshot {
+            preview = nil
+            errorMessage = "No exported V2 snapshot was found in the app folder. "
+                + "Save it under On My iPhone → Thrum and try again."
+        } catch TropLibraryV2RecoveryError.checksumMismatch {
+            preview = nil
+            errorMessage = "The saved snapshot checksum does not match. Nothing was changed."
+        } catch {
+            preview = nil
+            errorMessage = "Could not verify the saved snapshot. Nothing was changed."
         }
     }
 
