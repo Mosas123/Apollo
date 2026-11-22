@@ -37,7 +37,8 @@ enum TropLibraryCombinedRestorePreflight {
             }
         }
 
-        for table in protectedTables where try db.tableExists(table) {
+        for table in protectedTables {
+            guard try db.tableExists(table) else { continue }
             let occupied = try Int.fetchOne(
                 db, sql: "SELECT 1 FROM \(table) LIMIT 1"
             ) != nil
