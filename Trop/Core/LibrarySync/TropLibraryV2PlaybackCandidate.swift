@@ -9,25 +9,27 @@ struct TropLibraryV2PlaybackCandidate: Sendable {
     let provider: String
     let externalID: String
 
+    static func sourceReference(for playbackID: String) -> (
+        provider: String, externalID: String
+    )? {
+        if let catalogue = MusicCatalogID(storageKey: playbackID) {
+            return (catalogue.source.rawValue, catalogue.rawValue)
+        }
+        if MusicPlaybackIdentity.isYouTube(playbackID) {
+            return ("youtube", playbackID)
+        }
+        // Live radio, podcast transient IDs, or unsupported providers must
+        // not be mistaken for a canonical recording.
+        return nil
+    }
+
     @MainActor
     static func current() -> TropLibraryV2PlaybackCandidate? {
         let player = NowPlaying.shared
         guard let playbackID = player.videoId, !playbackID.isEmpty else {
             return nil
         }
-        let provider: String
-        let externalID: String
-        if let catalogue = MusicCatalogID(storageKey: playbackID) {
-            provider = catalogue.source.rawValue
-            externalID = catalogue.rawValue
-        } else if MusicPlaybackIdentity.isYouTube(playbackID) {
-            provider = "youtube"
-            externalID = playbackID
-        } else {
-            // A live radio station or a transient identifier is not proof of
-            // a stable recording identity; reject it instead of guessing.
-            return nil
-        }
+        guard let source = sourceReference(for: playbackID) else { return nil }
         let duration = player.duration.isFinite
             ? max(0, Int(min(player.duration, Double(Int.max / 2))))
             : 0
@@ -35,8 +37,8 @@ struct TropLibraryV2PlaybackCandidate: Sendable {
             title: player.displayTitle,
             artist: player.displayArtist,
             durationSeconds: duration,
-            provider: provider,
-            externalID: externalID
+            provider: source.provider,
+            externalID: source.externalID
         )
     }
 
