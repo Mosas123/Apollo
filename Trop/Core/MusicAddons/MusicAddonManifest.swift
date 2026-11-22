@@ -91,6 +91,18 @@ struct StremioDescriptor: Codable, Sendable, Equatable {
     /// the declared content type is the only way to tell them apart.
     var contentType: String? = nil
     var settings: [Setting]? = nil
+
+    /// Eclipse offers direct /search and /resolve resources. A manifest may
+    /// advertise these alongside browse catalogs; Stremio's search= catalog
+    /// extra must not override the explicit Eclipse resource contract.
+    var usesEclipseRouting: Bool {
+        let names = Set(resources.map { $0.name.lowercased() })
+        return !names.isDisjoint(with: ["search", "resolve", "isrc"])
+    }
+
+    func offers(_ resource: String) -> Bool {
+        resources.contains { $0.name.caseInsensitiveCompare(resource) == .orderedSame }
+    }
 }
 
 /// Audio tiers an addon says it can serve. The manifest settings are the only
