@@ -242,12 +242,22 @@ struct TropLibraryCombinedBackupView: View {
                 "No combined metadata file was found in On My iPhone → Thrum. "
                     + "Nothing changed in your library."
             )
+        } catch let issue as TropLibraryCombinedRestoreRehearsal.Failure {
+            showMessage(
+                "Isolated recovery rehearsal stopped at "
+                    + issue.diagnosticCode
+                    + ". Your actual library was not modified. "
+                    + "Keep your backup and report this diagnostic code."
+            )
+            Log.libraryView.warning(
+                "COMBINED_REHEARSAL stopped: \(issue.diagnosticCode)"
+            )
         } catch {
             showMessage(
-                "Isolated recovery rehearsal could not finish. "
+                "Isolated recovery rehearsal stopped at FILE_READ. "
                     + "Your actual library was not modified."
             )
-            Log.libraryView.warning("COMBINED_REHEARSAL failed in isolated memory")
+            Log.libraryView.warning("COMBINED_REHEARSAL stopped at FILE_READ")
         }
     }
 
