@@ -1,0 +1,23 @@
+name: Trop Library V2 Playlist Picker Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Audio/PlayerMenuSheet.swift"
+      - "Trop/Components/SongMenuSheet.swift"
+      - "Trop/Core/LibrarySync/TropLibraryV2Store.swift"
+      - "Trop/Core/LibrarySync/TropLibraryV2PlaybackCandidate.swift"
+      - "Trop/Core/MusicSources/MusicCatalog.swift"
+      - "Trop/Core/LibrarySync/TropLibraryV2IdentityPolicy.swift"
+      - "tests/LibrarySync/TropLibraryV2PlaylistPickerChecks.swift"
+      - "scripts/test-trop-library-v2-playlist-picker.sh"
+      - ".github/workflows/trop-library-v2-playlist-picker-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify source-scoped local V2 playlist picker
+        run: bash scripts/test-trop-library-v2-playlist-picker.sh
