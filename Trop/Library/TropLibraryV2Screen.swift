@@ -130,7 +130,7 @@ struct TropLibraryV2Screen: View {
                 Task { await setLiked(recording: recording, liked: !recording.isLiked) }
             } label: {
                 Image(systemName: recording.isLiked ? "heart.fill" : "heart")
-                    .foregroundStyle(recording.isLiked ? .red : .secondary)
+                    .foregroundStyle(recording.isLiked ? Color.red : Color.secondary)
             }
             .buttonStyle(.borderless)
             .accessibilityLabel(recording.isLiked ? "Unlike song" : "Like song")
