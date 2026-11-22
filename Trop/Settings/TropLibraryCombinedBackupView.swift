@@ -97,6 +97,23 @@ struct TropLibraryCombinedBackupView: View {
                 .foregroundStyle(.secondary)
             }
 
+            Section("Restore to a fresh library") {
+                NavigationLink {
+                    TropLibraryCombinedRestoreView()
+                } label: {
+                    Label("Restore metadata from Files", systemImage: "arrow.uturn.backward.circle")
+                }
+                .disabled(isPreparing || isVerifying || isRehearsing)
+                Text(
+                    "Only a completely empty installation is eligible. "
+                        + "Existing songs, playlists, downloads and history "
+                        + "block restoration. Never erase your current library "
+                        + "just to enable this experimental action."
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+
             if let preview {
                 Section("Verified archive contents") {
                     LabeledContent("Legacy recordings", value: "\(preview.legacyTracks)")
