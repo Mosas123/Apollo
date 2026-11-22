@@ -122,6 +122,14 @@ struct SongMenuSheet: View {
                     }
                 } else {
                     MenuCard {
+                        if TropLibraryV2AccountIsolation.isEnabled {
+                            MenuRow(
+                                icon: "music.note.list",
+                                title: "Add to Playlist",
+                                subtitle: "Save to your Trop library"
+                            ) { showPlaylistPicker = true }
+                            Divider()
+                        }
                         MenuRow(icon: "text.insert", title: "Play Next") { playNext() }
                         Divider()
                         MenuRow(icon: "list.bullet", title: "Add to Queue") { addToQueue() }
