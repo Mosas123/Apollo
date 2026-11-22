@@ -468,7 +468,9 @@ actor MusicAddonClient {
             || (bitDepth ?? 0) >= 24 || (sampleRate ?? 0) > 48_000
         let size = root["size"] as? Int
         let haystack = format + " " + quality
-        if haystack.contains("atmos") {
+        if haystack.contains("atmos") || haystack.contains("eac3")
+            || haystack.contains("e-ac-3") || haystack.contains("ec-3")
+            || haystack.contains("dolby") {
             return AddonStream(
                 kind: .url(streamURL),
                 mimeType: "audio/mp4",
@@ -637,6 +639,11 @@ actor MusicAddonClient {
     private static func quality(from text: String, url: URL) -> (tier: String, mime: String, bitrate: Int) {
         let ext = url.pathExtension.lowercased()
         let haystack = (text + " " + url.absoluteString.lowercased())
+        if haystack.contains("atmos") || haystack.contains("eac3")
+            || haystack.contains("e-ac-3") || haystack.contains("ec-3")
+            || haystack.contains("dolby") {
+            return ("Atmos", "audio/mp4", 768_000)
+        }
         if ext == "flac" || haystack.contains("flac") || haystack.contains("lossless") {
             return ("Lossless", "audio/flac", 0)
         }
