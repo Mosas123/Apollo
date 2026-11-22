@@ -97,8 +97,13 @@ enum AddonSourceResolver {
             preferAtmos: preferAtmos,
             preferHiRes: preferHiRes
         )
+        let policy = AddonStreamQualityPolicy(
+            mode: requireCD ? .cd : .lossless,
+            preferHiRes: preferHiRes, preferAtmos: preferAtmos
+        )
         if let cached = await AddonMatchCache.shared.get(cacheKey),
-           Self.verified(cached.track, for: criteria) {
+           Self.verified(cached.track, for: criteria),
+           policy.accepts(cached.stream) {
             return cached
         }
 
@@ -431,29 +436,23 @@ enum AddonSourceResolver {
     ) async -> (Match, Int)? where C.Element == AddonTrack {
         var best: (Match, Int)?
         for track in tracks {
-            let streamQuality: AddonStreamQuality = preferAtmos
-                ? .max
-                : (requireCD ? .lossless : (preferHiRes ? .hires : .lossless))
+            let policy = AddonStreamQualityPolicy(
+                mode: requireCD ? .cd : .lossless,
+                preferHiRes: preferHiRes, preferAtmos: preferAtmos
+            )
             guard let stream = try? await client.resolveStream(
                       type: track.type,
                       id: track.id,
-                      preferAtmos: preferAtmos,
-                      quality: streamQuality
+                      preferAtmos: policy.allowAtmos,
+                      quality: policy.requestedQuality,
+                      allowHiRes: policy.allowHiRes
                   ),
-                  !stream.isEncrypted else { continue }
-            if stream.qualityTier == "Atmos", !preferAtmos { continue }
-            if requireCD, stream.isHiRes { continue }
-            let rank: Int
-            switch stream.qualityTier {
-            case "Lossless": rank = 3
-            case "Atmos": rank = preferAtmos ? 4 : 2
-            case "High": rank = 2
-            default: rank = 1
-            }
+                  !stream.isEncrypted, policy.accepts(stream) else { continue }
+            let rank = policy.rank(stream)
             if best == nil || rank > best!.1 {
                 best = (Match(track: track, stream: stream), rank)
             }
-            if rank == (preferAtmos ? 4 : 3) { break }
+            if rank == (preferAtmos ? 5 : (preferHiRes ? 4 : 3)) { break }
         }
         return best
     }
