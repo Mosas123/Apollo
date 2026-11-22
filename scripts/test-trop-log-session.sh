@@ -17,17 +17,18 @@ public enum SwiftyTubeLog {
 }
 SWIFT
 
-swiftc -swift-version 6 -emit-module -module-name SwiftyTube \
+swiftc -swift-version 6 -emit-library -emit-module -module-name SwiftyTube \
   "$temp_dir/SwiftyTube.swift" \
-  -emit-module-path "$temp_dir/SwiftyTube.swiftmodule"
+  -emit-module-path "$temp_dir/SwiftyTube.swiftmodule" \
+  -o "$temp_dir/libSwiftyTube.dylib"
 
 swiftc -swift-version 6 -strict-concurrency=complete -parse-as-library \
-  -I "$temp_dir" Trop/Utilities/Log.swift \
-  tests/Logging/FileLogLaunchChecks.swift \
+  -I "$temp_dir" -L "$temp_dir" -lSwiftyTube \
+  Trop/Utilities/Log.swift tests/Logging/FileLogLaunchChecks.swift \
   -o "$temp_dir/file-log-launch-checks"
 
-"$temp_dir/file-log-launch-checks" --explicit
-"$temp_dir/file-log-launch-checks" --implicit
+DYLD_LIBRARY_PATH="$temp_dir" "$temp_dir/file-log-launch-checks" --explicit
+DYLD_LIBRARY_PATH="$temp_dir" "$temp_dir/file-log-launch-checks" --implicit
 
 # Ensure startup owns the reset, not scenePhase or foreground notifications.
 grep -Fq 'FileLog.shared.beginNewLaunch()' Trop/TropApp.swift
