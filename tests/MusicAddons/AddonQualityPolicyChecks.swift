@@ -25,6 +25,14 @@ struct AddonStream: Sendable {
 struct AddonQualityPolicyChecks {
     static func main() {
         let cd = AddonStream(qualityTier: "Lossless", mimeType: "audio/flac")
+        let exactCD = AddonStream(
+            qualityTier: "Lossless", mimeType: "audio/flac",
+            bitDepth: 16, sampleRateHz: 44_100
+        )
+        let notCD = AddonStream(
+            qualityTier: "Lossless", mimeType: "audio/flac",
+            bitDepth: 16, sampleRateHz: 48_000
+        )
         let hiRes = AddonStream(
             qualityTier: "Lossless", mimeType: "audio/flac", isHiRes: true,
             bitDepth: 24, sampleRateHz: 96_000
@@ -86,6 +94,8 @@ struct AddonQualityPolicyChecks {
         precondition(!cdOnly.allowHiRes && !cdOnly.allowAtmos)
         precondition(cdOnly.requestedQuality == .lossless)
         precondition(cdOnly.accepts(cd))
+        precondition(cdOnly.accepts(exactCD))
+        precondition(!cdOnly.accepts(notCD))
         for forbidden in [hiRes, metadataHiRes, highRateHiRes, atmos, eac3, high] {
             precondition(!cdOnly.accepts(forbidden), "CD mode leaked an incompatible stream")
         }
