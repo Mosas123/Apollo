@@ -5,6 +5,21 @@ cd "$(dirname "$0")/.."
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
+# Real local Documents writer, compiled unchanged in strict Swift 6.
+# Two saves must not overwrite one another; invalid archives are rejected.
+swiftc -swift-version 6 -strict-concurrency=complete \
+  Trop/Core/LibrarySync/TropLibraryCombinedLocalSnapshotStore.swift \
+  tests/LibrarySync/TropLibraryCombinedLocalSnapshotStoreChecks.swift \
+  -o "$tmp_dir/v2-combined-local-save-checks"
+"$tmp_dir/v2-combined-local-save-checks"
+swiftc -frontend -parse Trop/Settings/TropLibraryCombinedBackupView.swift
+grep -Fq 'TropLibraryCombinedLocalSnapshotStore.saveVerified(data)' \
+  Trop/Settings/TropLibraryCombinedBackupView.swift
+grep -Fq 'private func exportLatestLocal() async' \
+  Trop/Settings/TropLibraryCombinedBackupView.swift
+grep -Fq 'private func saveLocalCopy() async' \
+  Trop/Settings/TropLibraryCombinedBackupView.swift
+
 swiftc -swift-version 6 -strict-concurrency=complete \
   Trop/Core/LibrarySync/TropLibraryV2IdentityPolicy.swift \
   Trop/Core/LibrarySync/TropLibraryV2RecoveryArchive.swift \
