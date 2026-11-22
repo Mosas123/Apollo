@@ -13,6 +13,8 @@ actor DatabaseService {
     nonisolated static let shared = DatabaseService()
 
     let dbPool: DatabasePool
+    /// False when disk setup failed and the app is using ephemeral recovery storage.
+    nonisolated let usesPersistentStore: Bool
 
     init() {
         var pool: DatabasePool?
@@ -31,8 +33,10 @@ actor DatabaseService {
 
         if let pool {
             dbPool = pool
+            usesPersistentStore = true
         } else {
             dbPool = Self.makeFallbackPool()
+            usesPersistentStore = false
         }
     }
 
