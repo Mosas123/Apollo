@@ -420,14 +420,16 @@ actor MusicAddonClient {
         id: String,
         preferAtmos: Bool = false,
         quality: AddonStreamQuality = .max,
-        allowHiRes: Bool = false
+        allowHiRes: Bool = false,
+        requireLossless: Bool = false
     ) async throws -> AddonStream {
         if eclipseMode {
             return try await eclipseStream(id: id, preferAtmos: preferAtmos, quality: quality)
         }
         return try await stremioStream(
             type: type, id: id, preferAtmos: preferAtmos,
-            quality: quality, allowHiRes: allowHiRes
+            quality: quality, allowHiRes: allowHiRes,
+            requireLossless: requireLossless
         )
     }
 
@@ -524,7 +526,8 @@ actor MusicAddonClient {
         id: String,
         preferAtmos: Bool,
         quality: AddonStreamQuality,
-        allowHiRes: Bool
+        allowHiRes: Bool,
+        requireLossless: Bool
     ) async throws -> AddonStream {
         guard isMusicItemType(type) else {
             throw MusicAddonClientError.noStream
@@ -540,7 +543,8 @@ actor MusicAddonClient {
             throw MusicAddonClientError.noStream
         }
         let policy = AddonStreamQualityPolicy.stremio(
-            requested: quality, preferAtmos: preferAtmos, allowHiRes: allowHiRes
+            requested: quality, preferAtmos: preferAtmos,
+            allowHiRes: allowHiRes, requireLossless: requireLossless
         )
         var best: (AddonStream, Int)?
         for stream in streams {
