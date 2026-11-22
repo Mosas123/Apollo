@@ -19,6 +19,14 @@ grep -Fq 'TropLibraryV2Store.appendRecording(' \
   Trop/Library/TropLibraryV2Screen.swift
 grep -Fq 'TropLibraryV2Store.setLiked(' \
   Trop/Library/TropLibraryV2Screen.swift
+grep -Fq 'TropLibraryV2Store.savePlaybackRecording(' \
+  Trop/Services/LikeStore.swift
+grep -Fq 'TropLibraryV2Store.setLikedForSource(' \
+  Trop/Services/LikeStore.swift
+grep -Fq 'TropLibraryV2Store.likedPlaybackIDs()' \
+  Trop/Services/LikeStore.swift
+grep -Fq 'onChange(of: libraryV2PreviewEnabled)' \
+  Trop/ContentView.swift
 if grep -vE '^[[:space:]]*//' Trop/Library/TropLibraryV2Screen.swift \
   | grep -E 'SyncBridge|CookieStore|InnerTube|remoteMutation'; then
   echo 'V2 Library UI unexpectedly uses legacy account mutations'
