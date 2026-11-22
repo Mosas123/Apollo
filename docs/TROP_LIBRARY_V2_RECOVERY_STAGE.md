@@ -19,6 +19,20 @@
 - A read-only **Settings → Experimental library → Experimental V2 Snapshot**
   Files export/verify screen (only visible while V2 preview is enabled).
   There is **no restore button** in the app.
+- **iPhone beta #567 UI defect reproduced on video (22 Nov 2026):** selecting
+  the exported JSON or even a log in the SwiftUI Files importer located at
+  **On My iPhone → Thrum** highlights the row but does not complete file selection.
+  Neither JSON corruption nor any data-loss event was observed. A permissive
+  picker content type alone did not fix this; underlying iOS/FileProvider
+  cause remains unconfirmed.
+- **Picker-free verification fallback (next IPA):** read the newest
+  `Trop-V2-Experimental-Snapshot*.json` directly from the app's own Documents
+  directory (the Files/Thrum folder visible in the user's recording). Skip
+  symlinks/directories, cap reads at 24 MiB + 1, then run existing format,
+  schema and SHA-256 checks. This is a separate read-only route; the system
+  Files importer remains secondary for other locations, with its behavior
+  unverified on iPhone. A fixture guards discovery, ordering and size limits.
+  **Do not claim the picker itself was fixed until on-device QA.**
 - Lossless preservation of membership UUIDs, order/duplicates and import
   tombstones for already-backed-up records.
 
