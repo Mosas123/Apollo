@@ -94,7 +94,8 @@ enum RecoveryFixture {
                     id TEXT PRIMARY KEY, title TEXT NOT NULL, artist_name TEXT,
                     album_name TEXT, duration INTEGER NOT NULL,
                     liked INTEGER NOT NULL, in_library DATETIME,
-                    is_episode INTEGER NOT NULL, create_date DATETIME NOT NULL
+                    is_episode INTEGER NOT NULL, create_date DATETIME NOT NULL,
+                    modify_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """)
             try db.execute(sql: """
@@ -577,5 +578,114 @@ enum RecoveryFixture {
             precondition(title == "Legacy song preserved")
         }
         print("Real GRDB V2 export/restore, rollback, private alias redaction and collision checks passed")
+
+        // Internal combined restore against the disposable GRDB fixture.
+        // An unresolved source ledger ID must cause a FULL rollback,
+        // including rows in the legacy tables inserted earlier.
+        try await DatabaseService.shared.write { db in
+            for table in [
+                "trop_v2_legacy_import_entry", "trop_v2_playlist_entry",
+                "trop_v2_source_alias", "trop_v2_legacy_relation",
+                "trop_v2_radio_favorite", "trop_v2_item",
+                "playlist_song_map", "song", "album", "artist",
+                "playlist", "podcast", "episode"
+            ] {
+                try db.execute(sql: "DELETE FROM \(table)")
+            }
+        }
+        do {
+            _ = try await TropLibraryCombinedRestoreStore.restoreIntoEmptyLibrary(
+                combinedArchive
+            )
+            preconditionFailure("Orphan import ledger must abort combined restore")
+        } catch TropLibraryCombinedRestorePlanner.Blocker.orphanedImportTombstone {}
+        try await DatabaseService.shared.read { db in
+            for table in ["song", "playlist", "playlist_song_map", "trop_v2_item"] {
+                precondition(try Int.fetchOne(
+                    db, sql: "SELECT COUNT(*) FROM \(table)"
+                ) == 0, "Orphan should rollback every table")
+            }
+        }
+
+        // Synthetic safe fixture: every source import row has a corresponding
+        // live source membership. This is NOT permission to delete user
+        // tombstones; production archives with orphans remain rejected.
+        let sourceV2 = combined.library.libraryV2
+        let safeSource = TropLibraryCombinedBackupSnapshot(
+            legacy: combined.library.legacy,
+            libraryV2: .init(
+                items: sourceV2.items, aliases: sourceV2.aliases,
+                playlistEntries: sourceV2.playlistEntries,
+                radioFavorites: sourceV2.radioFavorites,
+                importLedger: sourceV2.importLedger.filter {
+                    $0.legacyMembershipID == 11
+                },
+                legacyRelations: sourceV2.legacyRelations,
+                omittedPrivateAliases: sourceV2.omittedPrivateAliases
+            ),
+            legacyMemberships: combined.library.legacyMemberships
+        )
+        let safeArchive = try TropLibraryCombinedBackupArchive.encode(safeSource)
+
+        // Force a failure AFTER the legacy rows and V2 items have been
+        // inserted, proving rollback from a real SQLite constraint trigger.
+        try await DatabaseService.shared.write { db in
+            try db.execute(sql: """
+                CREATE TRIGGER fixture_fail_combined_radio
+                BEFORE INSERT ON trop_v2_radio_favorite
+                BEGIN SELECT RAISE(ABORT, 'combined-rollback'); END
+                """)
+        }
+        do {
+            _ = try await TropLibraryCombinedRestoreStore.restoreIntoEmptyLibrary(
+                safeArchive
+            )
+            preconditionFailure("Late SQLite failure must rollback combined restore")
+        } catch {
+            // Trigger failure is expected, but check no transaction survived.
+        }
+        try await DatabaseService.shared.read { db in
+            for table in [
+                "song", "playlist", "playlist_song_map",
+                "trop_v2_item", "trop_v2_source_alias",
+                "trop_v2_playlist_entry"
+            ] {
+                precondition(try Int.fetchOne(
+                    db, sql: "SELECT COUNT(*) FROM \(table)"
+                ) == 0, "Late failure must rollback legacy and V2")
+            }
+        }
+        try await DatabaseService.shared.write { db in
+            try db.execute(sql: "DROP TRIGGER fixture_fail_combined_radio")
+        }
+
+        let summary = try await TropLibraryCombinedRestoreStore.restoreIntoEmptyLibrary(
+            safeArchive
+        )
+        precondition(summary.legacyTracks == 1 && summary.v2Playlists == 1)
+        let restoredCombined = try await TropLibraryCombinedBackupService.snapshot()
+        precondition(restoredCombined.legacy.tracks.count == 1)
+        precondition(restoredCombined.legacy.playlists.count == 1)
+        precondition(restoredCombined.legacyMemberships.count == 1)
+        precondition(restoredCombined.libraryV2.items.count == 3)
+        precondition(restoredCombined.libraryV2.playlistEntries.count == 2)
+        precondition(restoredCombined.libraryV2.importLedger.count == 1)
+        precondition(
+            restoredCombined.libraryV2.importLedger[0].legacyMembershipID
+                == restoredCombined.legacyMemberships[0].sourceRowID
+        )
+
+        // Repeated restores must fail closed without changing existing rows.
+        do {
+            _ = try await TropLibraryCombinedRestoreStore.restoreIntoEmptyLibrary(
+                safeArchive
+            )
+            preconditionFailure("Combined restore must not overwrite user data")
+        } catch TropLibraryCombinedRestorePreflight.Blocker.occupiedDestination {}
+        let afterRepeat = try await TropLibraryCombinedBackupService.snapshot()
+        precondition(afterRepeat.legacy.tracks == restoredCombined.legacy.tracks)
+        precondition(afterRepeat.libraryV2.items == restoredCombined.libraryV2.items)
+        print("Combined GRDB restore, remapping, rollback, and overwrite checks passed")
+
     }
 }

@@ -16,7 +16,7 @@ enum TropLibraryCombinedRestorePreflight {
     static let protectedTables: [String] = [
         "song", "album", "artist", "playlist", "playlist_song_map",
         "podcast", "episode", "podcast_episode_map", "event", "play_count",
-        "downloaded_track", "speed_dial",
+        "downloaded_track", "speed_dial", "format",
         "trop_v2_item", "trop_v2_source_alias", "trop_v2_playlist_entry",
         "trop_v2_radio_favorite", "trop_v2_legacy_import_entry",
         "trop_v2_legacy_relation"

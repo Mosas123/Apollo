@@ -10,6 +10,7 @@ on:
       - "Trop/Core/LibrarySync/TropLibraryCombinedBackupService.swift"
       - "Trop/Core/LibrarySync/TropLibraryCombinedRestorePlanner.swift"
       - "Trop/Core/LibrarySync/TropLibraryCombinedRestorePreflight.swift"
+      - "Trop/Core/LibrarySync/TropLibraryCombinedRestoreStore.swift"
       - "tests/LibrarySync/TropLibraryCombinedBackupArchiveChecks.swift"
       - "Trop/Core/LibrarySync/TropLibraryV2RecoveryStore.swift"
       - "Trop/Core/LibrarySync/TropLibraryV2IdentityPolicy.swift"

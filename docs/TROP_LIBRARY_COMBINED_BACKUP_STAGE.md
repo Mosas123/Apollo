@@ -85,6 +85,21 @@ Until that is solved, a combined backup with orphan imports is explicitly
 **blocked from full restoration**; dropping these tombstones silently is
 not acceptable.
 
+### Internal sandbox restore implementation
+
+The experimental TropLibraryCombinedRestoreStore now composes the existing
+empty-destination preflight, legacy metadata insertion, SQLite-assigned
+membership IDs, fail-closed ledger remapping, and all six V2 metadata tables
+in ONE GRDB write transaction. This entry point is **not connected to UI**;
+it never deletes or overwrites a nonempty installation. The GRDB fixture
+exercises orphan-ledger rejection, injected late SQL failure with both sets
+of rows rolled back, a safe fixture round trip, and repeat-restore refusal.
+
+**Limits:** it cannot restore an archive with orphan import tombstones, user
+audio, history, downloaded file paths, tokens, or private addon aliases.
+Legacy episode/artist/album relations beyond the existing allowlisted metadata
+and migrations still need deeper restore audits before user release.
+
 Before any public Restore action:
 
 1. Design a stable origin identity plus *destination remapping* and tombstone
@@ -92,9 +107,9 @@ Before any public Restore action:
    silently treating foreign IDs as local rows.
 2. Preserve legitimate duplicate playlist positions (V2) while respecting
    legacy uniqueness rules; never de-duplicate across independent namespaces.
-3. Implement one all-or-nothing **legacy+V2** GRDB restore into a verified
-   empty *test* target. Forbid overwrites on an installed library and prove
-   rollback after injected errors.
+3. Validate the internal all-or-nothing **legacy+V2** GRDB restore against
+   actual production schemas and isolated targets. Forbid overwrites on an
+   installed library, repeat restores and verify injected-error rollback.
 4. Verify data from legacy podcast/episode/album/artist relationships and
    ensure no private manifests, login tokens or signed stream URLs leak.
 5. Add repeat restore, corrupted archive, large-file, interrupted operation,
