@@ -11,7 +11,8 @@ import OSLog
 /// Appends log lines to Documents/log.txt (exposed as Trop/log.txt in the
 /// Files app) so issues that only show up on-device can be diagnosed without
 /// attaching to Xcode. Users can share this file when reporting bugs. The
-/// log starts empty once per app process launch and rotates at ~1 MB.
+/// log starts empty once per app process launch, retains one prior session in
+/// log.previous.txt for crash recovery, and rotates at ~1 MB.
 final class FileLog: @unchecked Sendable {
     static let shared = FileLog()
 
@@ -46,11 +47,20 @@ final class FileLog: @unchecked Sendable {
 
     /// Runs only on the serial file queue. Close the writer before atomically
     /// replacing the previous process's log, then reopen on first append.
+    /// Keep at most one previous session so a crash remains diagnosable after
+    /// relaunch without mixing old messages into the fresh log.
     /// Never append to stale log data if the reset failed.
     private func prepareLaunchFileIfNeeded(_ url: URL) -> Bool {
         guard !launchPrepared else { return true }
         try? handle?.close()
         handle = nil
+
+        if let oldLog = try? Data(contentsOf: url), !oldLog.isEmpty {
+            let previousURL = url.deletingLastPathComponent()
+                .appendingPathComponent("log.previous.txt")
+            // A backup failure must not prevent this launch from starting.
+            try? oldLog.write(to: previousURL, options: .atomic)
+        }
         do {
             try Data().write(to: url, options: .atomic)
             currentSize = 0
