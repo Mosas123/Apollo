@@ -93,7 +93,8 @@ extension RecoveryFixture {
             )
             guard let row else { preconditionFailure("Migrated recording disappeared") }
             let title: String = row["title"]
-            let isUnliked: Bool = row["liked_at"] == nil
+            let likedAt: Date? = row["liked_at"]
+            let isUnliked = likedAt == nil
             precondition(title == "User chose a new title" && isUnliked)
         }
 
