@@ -3,6 +3,15 @@ import Foundation
 @main
 struct LocalFirstSearchPolicyChecks {
     static func main() {
+        // V2 does not use YouTube Music for catalogues or typeahead. The
+        // independent YouTube audio resolver remains a separate concern.
+        precondition(!SearchLocalFirstPolicy.requestYouTubeCatalogue(
+            libraryV2Enabled: true
+        ))
+        precondition(SearchLocalFirstPolicy.requestYouTubeCatalogue(
+            libraryV2Enabled: false
+        ))
+
         // A slow/stuck YouTube request must not hide existing saved items.
         precondition(SearchLocalFirstPolicy.useLocalFallback(
             showingLibrary: false, selectedFilter: nil,

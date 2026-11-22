@@ -50,6 +50,26 @@ passes isolated GRDB tests. The code inventory above shows that Home, search
 and existing playback flows are **not yet independently provider-neutral**.
 Do not describe the YouTube dependency removal as completed.
 
+## First implementation slice — provider-independent search (22 Nov 2026)
+
+Under **Library V2 preview mode**, SearchViewModel now refuses to query
+InnerTube for the YouTube Music catalogue or typeahead suggestions, and it
+does not reuse cached legacy YouTube search sections. Explicit searches
+launch **Audius, Qobuz (if configured), JioSaavn and enabled music add-ons
+concurrently**. Each provider publishes its audio results as soon as it
+finishes rather than waiting for YouTube or the slowest other source.
+Cancellation and current-query guards prevent old provider results
+from contaminating a newer search. The legacy search behavior stays
+available behind the old-library mode solely for a safe migration period.
+
+This is **not** the final provider-neutral catalogue. Local search still
+uses legacy song/album/artist rows, Home/Explore are still sourced from
+InnerTube, and playback/queue routes still contain YouTube assumptions.
+No new YouTube audio-discovery API or persistent music metadata index was
+implemented in this slice. Test the provider-only mode and incremental
+arrival on an iPhone **after** CI and a consolidated QA candidate, not
+with a series of user installs.
+
 ## Coupled implementation order — no extra user-facing IPA churn
 
 1. **Safety baseline:** finish PR #80 restore validations, portable backup,

@@ -72,6 +72,21 @@ final class SearchViewModel {
     private(set) var jiosaavnTracks: [MusicCatalogTrack] = []
     private(set) var addonTracks: [MusicCatalogTrack] = []
 
+    /// Each provider reports as soon as its own request finishes. Never
+    /// make Audius, Qobuz, JioSaavn or add-ons wait for InnerTube.
+    private enum ProviderSearchResult: Sendable {
+        case audius([MusicCatalogTrack])
+        case qobuz([MusicCatalogTrack])
+        case jiosaavn([MusicCatalogTrack])
+        case addons([MusicCatalogTrack])
+    }
+
+    private var requestsYouTubeCatalogue: Bool {
+        SearchLocalFirstPolicy.requestYouTubeCatalogue(
+            libraryV2Enabled: TropLibraryV2AccountIsolation.isEnabled
+        )
+    }
+
     // MARK: - Local matches (populated per submission, for Library filter)
 
     var localSongs: [SongEntity] = []
@@ -333,7 +348,8 @@ final class SearchViewModel {
         localArtists = []
         localAlbums = []
         localPlaylists = []
-        results = resultCache[submittedQuery] ?? []
+        // Never expose cached YouTube Music sections after switching to V2.
+        results = requestsYouTubeCatalogue ? (resultCache[submittedQuery] ?? []) : []
         extractHero()
         phase = results.isEmpty && heroArtist == nil ? .loading : .results
     }
@@ -362,47 +378,70 @@ final class SearchViewModel {
             self.localPlaylists = local.playlists
             self.updateResultPhase()
         }
-        var youtubeFailure: Error?
-        do {
-            let raw = try await SearchService.shared.search(query: query)
-            guard !Task.isCancelled, query == submittedQuery else { return }
-            // Parse off the main actor. TubeJSON is the Sendable box the
-            // engine already uses to move raw JSON across isolation.
-            let box = TubeJSON(raw)
-            let parsed = await Task.detached(priority: .userInitiated) {
-                SearchParser.parseSearchResults(from: box.value)
-            }.value
-            guard !Task.isCancelled, query == submittedQuery else { return }
-            resultCache[query] = parsed
-            cacheOrder.removeAll { $0 == query }
-            cacheOrder.append(query)
-            if cacheOrder.count > 20 {
-                resultCache.removeValue(forKey: cacheOrder.removeFirst())
+        if requestsYouTubeCatalogue {
+            // Preserve the existing legacy path for users who have not
+            // switched libraries. V2 never requests YouTube catalogue data.
+            do {
+                let raw = try await SearchService.shared.search(query: query)
+                guard !Task.isCancelled, query == submittedQuery,
+                      requestsYouTubeCatalogue else { return }
+                let box = TubeJSON(raw)
+                let parsed = await Task.detached(priority: .userInitiated) {
+                    SearchParser.parseSearchResults(from: box.value)
+                }.value
+                guard !Task.isCancelled, query == submittedQuery,
+                      requestsYouTubeCatalogue else { return }
+                resultCache[query] = parsed
+                cacheOrder.removeAll { $0 == query }
+                cacheOrder.append(query)
+                if cacheOrder.count > 20 {
+                    resultCache.removeValue(forKey: cacheOrder.removeFirst())
+                }
+                results = parsed
+                extractHero()
+            } catch {
+                guard !Task.isCancelled, query == submittedQuery else { return }
+                self.error = error
             }
-            results = parsed
-            extractHero()
-        } catch {
-            guard !Task.isCancelled, query == submittedQuery else { return }
-            youtubeFailure = error
+            updateResultPhase()
         }
-        guard !Task.isCancelled, query == submittedQuery else { return }
-        error = youtubeFailure
-        updateResultPhase()
 
-        // Extra catalogues are fetched on submission; they never delay the
-        // primary results or generate requests for every partial word.
-        guard includeProviders else { return }
-        async let audius = try? AudiusClient().searchTracks(query: query, limit: 25)
-        async let qobuz = QobuzCatalogService.shared.searchIfConfigured(query: query, limit: 25)
-        async let jiosaavn = try? JioSaavnClient().search(query: query, limit: 25)
-        async let addons = fetchAddonTracks(query: query)
-        let (remoteAudius, remoteQobuz, remoteJioSaavn, remoteAddons) = await (audius, qobuz, jiosaavn, addons)
-        guard !Task.isCancelled, query == submittedQuery else { return }
-        audiusTracks = remoteAudius ?? []
-        qobuzTracks = remoteQobuz
-        jiosaavnTracks = remoteJioSaavn ?? []
-        addonTracks = remoteAddons
-        updateResultPhase()
+        // Launch independent audio providers together, not after YouTube.
+        // Each completed provider publishes results without waiting for the
+        // slowest request, and a failed source cannot suppress other sources.
+        guard includeProviders, !Task.isCancelled,
+              query == submittedQuery else { return }
+        await withTaskGroup(of: ProviderSearchResult.self) { group in
+            group.addTask {
+                .audius((try? await AudiusClient().searchTracks(
+                    query: query, limit: 25
+                )) ?? [])
+            }
+            group.addTask {
+                .qobuz(await QobuzCatalogService.shared.searchIfConfigured(
+                    query: query, limit: 25
+                ))
+            }
+            group.addTask {
+                .jiosaavn((try? await JioSaavnClient().search(
+                    query: query, limit: 25
+                )) ?? [])
+            }
+            group.addTask { .addons(await self.fetchAddonTracks(query: query)) }
+            for await provider in group {
+                guard !Task.isCancelled, query == submittedQuery else {
+                    group.cancelAll()
+                    return
+                }
+                switch provider {
+                case .audius(let tracks): audiusTracks = tracks
+                case .qobuz(let tracks): qobuzTracks = tracks
+                case .jiosaavn(let tracks): jiosaavnTracks = tracks
+                case .addons(let tracks): addonTracks = tracks
+                }
+                updateResultPhase()
+            }
+        }
     }
 
     /// Music Add-ons (Stremio, read-only): search every enabled addon and map
@@ -518,10 +557,13 @@ final class SearchViewModel {
             return
         }
         submittedQuery = query
-        suggestions = suggestionCache[query] ?? []
+        suggestions = requestsYouTubeCatalogue ? (suggestionCache[query] ?? []) : []
         prepareQuery()
-        suggestionTask = Task { [weak self] in
-            do {
+        // Suggestion API is sourced from YouTube Music. V2 must not
+        // contact InnerTube merely because the search field changed.
+        if requestsYouTubeCatalogue {
+            suggestionTask = Task { [weak self] in
+                do {
                 try await Task.sleep(for: .milliseconds(180))
                 guard let self, !Task.isCancelled else { return }
                 let values: [String]
@@ -538,7 +580,10 @@ final class SearchViewModel {
                 if self.suggestionCache.count >= 40 { self.suggestionCache.removeAll() }
                 self.suggestionCache[query] = unique
                 self.suggestions = unique
-            } catch { /* Suggestions are optional; results continue independently. */ }
+                } catch { /* Suggestions are optional; results continue independently. */ }
+            }
+        } else {
+            suggestions = []
         }
         fetchTask = Task { [weak self] in
             do { try await Task.sleep(for: .milliseconds(350)) }
