@@ -934,5 +934,9 @@ enum RecoveryFixture {
         // Exercise the actual, production legacy importer on this disposable
         // restored database. This code is NEVER invoked by the app or user UI.
         try await checkProductionLegacyImporter()
+
+        // Mirrors the observed fresh-install V2 counts using SYNTHETIC rows.
+        // All recovery/reset operations are confined to this isolated fixture.
+        try await checkFreshV2ProfileCombinedRoundTrip()
     }
 }
