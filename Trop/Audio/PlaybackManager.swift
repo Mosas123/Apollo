@@ -223,7 +223,8 @@ actor PlaybackManager {
             id: ref.i,
             preferAtmos: policy.allowAtmos,
             quality: policy.requestedQuality,
-            allowHiRes: policy.allowHiRes
+            allowHiRes: policy.allowHiRes,
+            requireLossless: policy.mode == .cd || policy.mode == .lossless
         )
         guard !stream.isEncrypted, policy.accepts(stream) else {
             Log.player.info(
