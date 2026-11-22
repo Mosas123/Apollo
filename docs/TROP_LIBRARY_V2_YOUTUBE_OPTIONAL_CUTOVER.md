@@ -120,6 +120,37 @@ This is not the final catalogue and does **not** authorize migration, restore
 UI or removing YouTube legacy data. Swift 6 search-policy checks, view wiring
 checks and the integrated iOS Nightly must pass before any physical QA claim.
 
+## Fourth implementation slice — explicit V2 saved-audio playback (22 Nov 2026)
+
+Library V2 now offers play actions for saved recordings in Library and Search,
+and for playlist entries. A read-only GRDB source-alias query resolves a saved
+Trop recording UUID to an explicit global provider-scoped audio ID. The first
+slice admits only Audius, Qobuz, JioSaavn and enabled music add-ons; a missing,
+account-scoped, metadata-only, legacy YouTube or ambiguous alias **does not**
+produce a guessed playback ID. In CD/lossless mode, known lossy-only providers
+(Audius, JioSaavn) are rejected. A user-visible message keeps all saved
+metadata and playlist memberships intact when playback cannot begin.
+
+Playlists preserve ordered membership UUIDs, including intentional duplicate
+recordings. The route preflights every entry before replacing the queue; no
+unresolved entry is silently dropped. Existing provider resolvers determine
+whether a real stream is available. Network/service failure can still occur
+after this preflight and is handled by the current player path; this requires
+physical-device QA before claiming complete missing-source UX.
+
+The V2 add-on route now rejects YouTube-backed resolutions unless/until an
+explicit optional YouTube-audio source policy is established. Provider-scoped
+IDs do not enter the legacy YouTube-keyed upgrade-prefetch chain. These
+restrictions deliberately leave legacy mode untouched. A V2 metadata alias
+does not confer licensing, stream rights or proof that another rendition is
+the same recording. There is **no automatic cross-provider matching** yet.
+
+Acceptance remains gated on isolated Swift 6 policies, source wiring checks,
+iOS Nightly and iPhone QA. This does **not** enable real restore, import or a
+default V2 switch and does not claim complete quality/routing compliance.
+Full download-file identity, source choice among multiple valid renditions,
+album/artist V2 playback and provider failover need later dedicated gates.
+
 ## Coupled implementation order — no extra user-facing IPA churn
 
 1. **Safety baseline:** finish PR #80 restore validations, portable backup,
