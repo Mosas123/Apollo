@@ -1,0 +1,17 @@
+name: Trop-owned Playlist Creation Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Library/LibraryView.swift"
+      - "scripts/test-trop-owned-playlist-creation.sh"
+      - ".github/workflows/trop-owned-playlist-creation-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify new playlists never call YouTube mutations
+        run: bash scripts/test-trop-owned-playlist-creation.sh
