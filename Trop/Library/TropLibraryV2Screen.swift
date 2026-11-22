@@ -237,7 +237,8 @@ struct TropLibraryV2Screen: View {
     }
 }
 
-private struct TropLibraryV2PlaylistScreen: View {
+// Shared by Library V2 and its independent Home; keep the view internal.
+struct TropLibraryV2PlaylistScreen: View {
     let playlist: TropLibraryV2Store.PlaylistSummary
 
     @State private var tracks: [TropLibraryV2Store.PlaylistTrack] = []

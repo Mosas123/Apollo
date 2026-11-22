@@ -17,6 +17,17 @@ grep -Fq 'TropLibraryV2Store.createPlaylist(named:' \
   Trop/Library/TropLibraryV2Screen.swift
 grep -Fq 'TropLibraryV2Store.appendRecording(' \
   Trop/Library/TropLibraryV2Screen.swift
+# Home V2 navigates to this playlist from another Swift source file.
+# A file-private view compiles only until Home references it.
+grep -Fq 'TropLibraryV2PlaylistScreen(playlist: playlist)' \
+  Trop/Home/HomeScreenView.swift
+grep -Eq '^struct TropLibraryV2PlaylistScreen: View \{' \
+  Trop/Library/TropLibraryV2Screen.swift
+if grep -Eq '^private struct TropLibraryV2PlaylistScreen' \
+  Trop/Library/TropLibraryV2Screen.swift; then
+  echo 'V2 playlist view cannot be private while Home links to it'
+  exit 1
+fi
 grep -Fq 'TropLibraryV2Store.setLiked(' \
   Trop/Library/TropLibraryV2Screen.swift
 grep -Fq 'TropLibraryV2Store.savePlaybackRecording(' \
