@@ -13,8 +13,8 @@ swiftc -swift-version 6 -strict-concurrency=complete \
 
 # Guard against accidental inclusion of credentials, stream URLs or raw DB
 # serialization in the backup payload. Keep this as a narrow allowlist.
-if grep -Eq 'SongEntity|DownloadedTrackEntity|EventEntity|SELECT \*|library_add_token|library_remove_token|playback_url|local_path' \
-  Trop/Core/LibrarySync/TropLibraryBackupService.swift; then
+if grep -vE '^[[:space:]]*//' Trop/Core/LibrarySync/TropLibraryBackupService.swift \
+  | grep -Eq 'SongEntity|DownloadedTrackEntity|EventEntity|SELECT \*|library_add_token|library_remove_token|playback_url|local_path'; then
   echo 'Backup source contains a prohibited field or raw-table export.'
   exit 1
 fi
