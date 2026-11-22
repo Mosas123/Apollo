@@ -101,9 +101,10 @@ struct MusicBrainzIdentityCatalogChecks {
         precondition(albums[0].firstReleaseDate == "2024-06-02")
 
         // Empty queries must not consume the network budget or emit a request.
-        precondition(try await client.searchRecordings(title: "   ", artist: "").isEmpty)
-        precondition(try await client.searchArtists(query: "").isEmpty)
-        precondition(try await client.searchAlbums(title: "", artist: "").isEmpty)
+        let emptyRecordings = try await client.searchRecordings(title: "   ", artist: "")
+        let emptyArtists = try await client.searchArtists(query: "")
+        let emptyAlbums = try await client.searchAlbums(title: "", artist: "")
+        precondition(emptyRecordings.isEmpty && emptyArtists.isEmpty && emptyAlbums.isEmpty)
 
         let throttled = MusicBrainzIdentityCatalog(
             transport: { request in
