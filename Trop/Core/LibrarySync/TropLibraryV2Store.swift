@@ -169,6 +169,128 @@ enum TropLibraryV2Store {
         return entryID
     }
 
+    /// One local write transaction for the player/search Add to Playlist
+    /// flow. Unlike the legacy menu, this never calls SyncBridge or YouTube.
+    /// The recording has a Trop-owned UUID; the original source identity is
+    /// only a scoped alias (including when the track came from an add-on).
+    enum PlaylistDestination: Sendable {
+        case existing(String)
+        case create(String)
+    }
+
+    @discardableResult
+    static func saveToPlaylist(
+        _ candidate: TropLibraryV2PlaybackCandidate,
+        destination: PlaylistDestination
+    ) async throws -> String {
+        let title = try TropLibraryV2IdentityPolicy.checkedTitle(candidate.title)
+        let artist = try TropLibraryV2IdentityPolicy.checkedOptionalText(candidate.artist)
+        guard candidate.durationSeconds >= 0 else {
+            throw TropLibraryV2ValidationError.invalidIdentifier
+        }
+        let alias = try TropLibraryV2SourceAlias(
+            provider: candidate.provider, externalID: candidate.externalID
+        )
+        let existingPlaylistID: String?
+        let newPlaylistName: String?
+        switch destination {
+        case .existing(let id):
+            existingPlaylistID = try TropLibraryV2IdentityPolicy.checkedID(id)
+            newPlaylistName = nil
+        case .create(let name):
+            existingPlaylistID = nil
+            newPlaylistName = try TropLibraryV2IdentityPolicy.checkedTitle(name)
+        }
+        let now = Date()
+        return try await DatabaseService.shared.writeReturning { db in
+            let playlistID: String
+            if let existingPlaylistID {
+                let kind = try String.fetchOne(
+                    db, sql: "SELECT kind FROM trop_v2_item WHERE id = ?",
+                    arguments: [existingPlaylistID]
+                )
+                guard kind == TropLibraryV2Kind.playlist.rawValue else {
+                    throw TropLibraryV2ValidationError.missingItem
+                }
+                playlistID = existingPlaylistID
+            } else {
+                guard let newPlaylistName else {
+                    throw TropLibraryV2ValidationError.invalidTitle
+                }
+                playlistID = TropLibraryV2IdentityPolicy.newID()
+                try db.execute(
+                    sql: """
+                        INSERT INTO trop_v2_item (
+                            id, kind, title, artist_or_author, duration_seconds,
+                            saved_at, liked_at, created_at, modified_at
+                        ) VALUES (?, 'playlist', ?, NULL, 0, ?, NULL, ?, ?)
+                        """,
+                    arguments: [playlistID, newPlaylistName, now, now, now]
+                )
+            }
+
+            let recordingID: String
+            if let existingID = try String.fetchOne(
+                db,
+                sql: """
+                    SELECT item_id FROM trop_v2_source_alias
+                    WHERE kind = 'recording' AND provider = ?
+                      AND source_scope = ? AND external_id = ?
+                    """,
+                arguments: [alias.provider, alias.scope, alias.externalID]
+            ) {
+                recordingID = existingID
+            } else {
+                recordingID = TropLibraryV2IdentityPolicy.newID()
+                let aliasID = TropLibraryV2IdentityPolicy.newID()
+                try db.execute(
+                    sql: """
+                        INSERT INTO trop_v2_item (
+                            id, kind, title, artist_or_author, duration_seconds,
+                            saved_at, liked_at, created_at, modified_at
+                        ) VALUES (?, 'recording', ?, ?, ?, ?, NULL, ?, ?)
+                        """,
+                    arguments: [
+                        recordingID, title, artist, candidate.durationSeconds,
+                        now, now, now
+                    ]
+                )
+                try db.execute(
+                    sql: """
+                        INSERT INTO trop_v2_source_alias (
+                            id, item_id, kind, provider, source_scope, external_id
+                        ) VALUES (?, ?, 'recording', ?, ?, ?)
+                        """,
+                    arguments: [
+                        aliasID, recordingID, alias.provider, alias.scope,
+                        alias.externalID
+                    ]
+                )
+            }
+
+            // Entry UUID is different from the recording UUID; intentional
+            // duplicates are supported, but the picker guards rapid taps.
+            let entryID = TropLibraryV2IdentityPolicy.newID()
+            let position = try Int.fetchOne(
+                db,
+                sql: """
+                    SELECT COALESCE(MAX(position), -1) + 1
+                    FROM trop_v2_playlist_entry WHERE playlist_id = ?
+                    """,
+                arguments: [playlistID]
+            ) ?? 0
+            try db.execute(
+                sql: """
+                    INSERT INTO trop_v2_playlist_entry (
+                        id, playlist_id, recording_id, position, created_at
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                arguments: [entryID, playlistID, recordingID, position, now]
+            )
+            return playlistID
+        }
+    }
+
     static func playlists() async throws -> [PlaylistSummary] {
         try await DatabaseService.shared.read { db in
             try Row.fetchAll(
