@@ -7,6 +7,7 @@ on:
       - "Trop/Core/LibrarySync/TropLibraryV2RecoveryStore.swift"
       - "Trop/Core/LibrarySync/TropLibraryV2IdentityPolicy.swift"
       - "Trop/Settings/TropLibraryV2RecoveryView.swift"
+      - "Trop/Resources/Info.plist"
       - "Trop/Settings/SettingsView.swift"
       - "tests/LibrarySync/TropLibraryV2RecoveryArchiveChecks.swift"
       - "scripts/test-trop-library-v2-recovery.sh"
