@@ -7,7 +7,8 @@ enum TropLibraryV2IdentityChecks {
         let recording = TropLibraryV2IdentityPolicy.newID()
         assert(playlist != recording)
         assert(TropLibraryV2IdentityPolicy.isCanonicalID(playlist))
-        assert(TropLibraryV2IdentityPolicy.checkedID(recording) == recording)
+        let checkedRecording = try TropLibraryV2IdentityPolicy.checkedID(recording)
+        assert(checkedRecording == recording)
         assert(!TropLibraryV2IdentityPolicy.isCanonicalID("youtube-video-id"))
 
         let name = try TropLibraryV2IdentityPolicy.checkedTitle("  My playlist  ")
