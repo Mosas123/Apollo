@@ -12,7 +12,7 @@ import sqlite3
 migration = Path("Trop/Database/DatabaseMigrations.swift").read_text()
 v11 = migration.split("static let v11:", 1)
 assert len(v11) == 2
-queries = re.findall(r'try db\.execute\(sql: """(.*?)"""\)', v11[1], re.S)
+queries = re.findall(r'try db\.execute\(sql: """(.*?)"""\)', v11[1].split('static let v12:', 1)[0], re.S)
 assert len(queries) == 2, f"Expected 2 statements for v11, got {len(queries)}"
 assert 'registerMigration("v11", migrate: DatabaseMigrations.v11)' in Path(
     "Trop/Database/DatabaseService.swift"
