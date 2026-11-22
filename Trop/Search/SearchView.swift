@@ -18,7 +18,13 @@ struct SearchView: View {
     @ObservedObject private var router = AppRouter.shared
     @FocusState private var fieldFocused: Bool
 
+    private struct PlaylistPickerSelection: Identifiable {
+        let id = UUID()
+        let song: SongItem
+    }
+
     @State private var pendingRoute: DetailRoute?
+    @State private var playlistPickerSelection: PlaylistPickerSelection?
     @State private var headerHidden = false
     @State private var headerHeight: CGFloat = 60
     @State private var searchBarHeight: CGFloat = 60
@@ -71,6 +77,9 @@ struct SearchView: View {
             .frame(maxHeight: .infinity, alignment: .top)
             .toolbar(.hidden, for: .navigationBar)
             .detailRouteDestinations()
+            .sheet(item: $playlistPickerSelection) { selection in
+                AddSongToPlaylistSheet(song: selection.song)
+            }
             .onChange(of: pendingRoute) { _, route in
                 if let route {
                     router.searchPath.append(route)
@@ -364,6 +373,13 @@ struct SearchView: View {
                 Task { await LikeStore.shared.toggle(song: song) }
             } label: {
                 Label("Favorite", systemImage: "star")
+            }
+            if TropLibraryV2AccountIsolation.isEnabled {
+                Button {
+                    playlistPickerSelection = PlaylistPickerSelection(song: song)
+                } label: {
+                    Label("Add to Playlist", systemImage: "music.note.list")
+                }
             }
         }
     }
