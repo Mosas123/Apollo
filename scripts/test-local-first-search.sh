@@ -19,6 +19,16 @@ grep -Fq "SearchLocalFirstPolicy.requestYouTubeCatalogue" Trop/Search/SearchView
 grep -Fq "if requestsYouTubeCatalogue {" Trop/Search/SearchViewModel.swift
 grep -Fq "await withTaskGroup(of: ProviderSearchResult.self)" Trop/Search/SearchViewModel.swift
 grep -Fq "suggestions = []" Trop/Search/SearchViewModel.swift
+# A V2 search must read Trop-owned UUID rows instead of the legacy tables,
+# and the UI must not feed saved UUIDs into YouTube YTItem playback.
+grep -Fq "async let saved = TropLibraryV2Store.recordings()" Trop/Search/SearchViewModel.swift
+grep -Fq "async let lists = TropLibraryV2Store.playlists()" Trop/Search/SearchViewModel.swift
+grep -Fq "async let radio = TropLibraryV2RadioStore.favorites()" Trop/Search/SearchViewModel.swift
+grep -Fq "guard !TropLibraryV2AccountIsolation.isEnabled else { return [] }" Trop/Search/SearchViewModel.swift
+grep -Fq "if viewModel.displaysV2LibraryResults {" Trop/Search/SearchView.swift
+grep -Fq "TropLibraryV2PlaylistScreen(playlist: playlist)" Trop/Search/SearchView.swift
+grep -Fq "RadioPlaybackCoordinator.playSaved(" Trop/Search/SearchView.swift
+
 # Production Home and Explore must not bootstrap InnerTube feeds when V2
 # owns the library. These source checks catch accidental gate removal.
 grep -Fq "if libraryV2PreviewEnabled {" Trop/Home/HomeScreenView.swift
