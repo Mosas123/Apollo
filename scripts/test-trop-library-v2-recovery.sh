@@ -52,6 +52,27 @@ swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2RecoveryStore.swift
 swiftc -frontend -parse Trop/Settings/TropLibraryV2RecoveryView.swift
 swiftc -frontend -parse Trop/Settings/TropLibraryV2DocumentPicker.swift
 swiftc -frontend -parse Trop/Settings/TropLibraryCombinedBackupView.swift
+swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryCombinedRestoreRehearsal.swift
+swiftc -frontend -parse Trop/Database/TropDatabaseMigrationSequence.swift
+grep -Fq 'TropLibraryCombinedRestoreRehearsal.rehearse(found.bytes)' \
+  Trop/Settings/TropLibraryCombinedBackupView.swift
+grep -Fq 'DatabaseQueue()' Trop/Core/LibrarySync/TropLibraryCombinedRestoreRehearsal.swift
+grep -Fq 'TropDatabaseMigrationSequence.register(&migrations)' \
+  Trop/Core/LibrarySync/TropLibraryCombinedRestoreRehearsal.swift
+grep -Fq 'TropLibraryCombinedRestoreStore.restoreInTransaction' \
+  Trop/Core/LibrarySync/TropLibraryCombinedRestoreRehearsal.swift
+if grep -Fq 'DatabaseService.shared' \
+  Trop/Core/LibrarySync/TropLibraryCombinedRestoreRehearsal.swift; then
+  echo 'In-memory restoration rehearsal must never access the live DB singleton'
+  exit 1
+fi
+if grep -Fq 'restoreIntoEmptyLibrary(' \
+  Trop/Settings/TropLibraryCombinedBackupView.swift; then
+  echo 'Combined backup UI must not contain real-library restore calls'
+  exit 1
+fi
+
+swiftc -frontend -parse Trop/Settings/TropLibraryCombinedBackupView.swift
 grep -Fq 'TropLibraryCombinedBackupView()' Trop/Settings/SettingsView.swift
 grep -Fq 'TropLibraryCombinedBackupService.export()' Trop/Settings/TropLibraryCombinedBackupView.swift
 grep -Fq 'TropLibraryCombinedBackupService.preview(bytes)' Trop/Settings/TropLibraryCombinedBackupView.swift
