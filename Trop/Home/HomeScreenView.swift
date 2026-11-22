@@ -9,7 +9,9 @@ import SwiftUI
 
 struct HomeScreenView: View {
     @Environment(SettingsStore.self) private var settings
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var router = AppRouter.shared
+    @ObservedObject private var downloadManager = DownloadManager.shared
     @State private var viewModel = HomeViewModel()
     private let accountState = AccountSheetState.shared
     @AppStorage("trop.library.v2.previewEnabled")
@@ -43,7 +45,20 @@ struct HomeScreenView: View {
                     if viewModel.isLoading {
                         ShimmerLoadingView()
                     } else if let error = viewModel.error {
-                        errorView(error)
+                        if libraryV2PreviewEnabled,
+                           TropOfflineHomePolicy.isDisconnected(error),
+                           !downloadManager.isLoaded {
+                            LoadingStateView("Checking local downloads…")
+                        } else if TropOfflineHomePolicy.showDownloads(
+                            libraryV2Enabled: libraryV2PreviewEnabled,
+                            isDisconnected: TropOfflineHomePolicy.isDisconnected(error),
+                            verifiedDownloadCount: downloadManager.tracks.count
+                        ) {
+                            DownloadsView(embeddedInHome: true)
+                                .padding(.top, headerHeight)
+                        } else {
+                            errorView(error)
+                        }
                     } else {
                         homescreenContent
                     }
@@ -70,7 +85,22 @@ struct HomeScreenView: View {
                 guard !libraryV2PreviewEnabled else { return }
                 viewModel.handleSessionChange(loggedIn: loggedIn)
             }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active, viewModel.error != nil {
+                    Task { await viewModel.refresh() }
+                }
+            }
+            .onChange(of: libraryV2PreviewEnabled) { _, enabled in
+                if enabled {
+                    Task { await downloadManager.reload() }
+                }
+            }
             .task {
+                if libraryV2PreviewEnabled {
+                    // Reconcile on-disk audio before displaying offline Home.
+                    // A saved remote ID is not a playable downloaded file.
+                    Task { await downloadManager.reload() }
+                }
                 // Library V2 never needs YouTube account state merely to
                 // browse Home. The music catalogue remains available to guests.
                 if !libraryV2PreviewEnabled {
