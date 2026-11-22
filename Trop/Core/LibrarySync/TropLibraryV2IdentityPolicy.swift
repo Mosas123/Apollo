@@ -105,6 +105,7 @@ enum TropLibraryV2IdentityPolicy {
 enum TropLibraryV2PlaybackSourceError: Error, Equatable, LocalizedError {
     case unavailable
     case ambiguous
+    case incompatibleQuality
 
     var errorDescription: String? {
         switch self {
@@ -112,6 +113,8 @@ enum TropLibraryV2PlaybackSourceError: Error, Equatable, LocalizedError {
             return "This song has no verified independent audio source yet. It stays saved in your library."
         case .ambiguous:
             return "More than one audio source is linked to this song. Choose a source before playing."
+        case .incompatibleQuality:
+            return "This source does not offer the selected lossless quality. The song remains saved."
         }
     }
 }
@@ -122,7 +125,10 @@ enum TropLibraryV2PlaybackSourcePolicy {
         "audius", "qobuz", "jiosaavn", "addon"
     ]
 
-    static func playbackKey(for aliases: [TropLibraryV2SourceAlias]) throws -> String {
+    static func playbackKey(
+        for aliases: [TropLibraryV2SourceAlias],
+        requiresLossless: Bool = false
+    ) throws -> String {
         let candidates = Set(aliases.compactMap { alias -> String? in
             guard alias.scope == "global",
                   supportedProviders.contains(alias.provider) else { return nil }
@@ -133,6 +139,10 @@ enum TropLibraryV2PlaybackSourcePolicy {
         }
         guard candidates.count == 1, let key = candidates.first else {
             throw TropLibraryV2PlaybackSourceError.ambiguous
+        }
+        // Never silently play an explicitly lossy service in CD or lossless mode.
+        if requiresLossless, key.hasPrefix("audius:") || key.hasPrefix("jiosaavn:") {
+            throw TropLibraryV2PlaybackSourceError.incompatibleQuality
         }
         return key
     }
