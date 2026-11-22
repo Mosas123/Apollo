@@ -570,10 +570,10 @@ final class SettingsStore: @unchecked Sendable {
         )
         apoloRadioBetaEnabled = Self.load(Keys.apoloRadioBetaEnabled, default: false)
         preferAtmos = Self.load(Keys.preferAtmos, default: false)
-        preferHiRes = Self.load(
-            Keys.preferHiRes,
-            default: (d.object(forKey: Keys.legacyPreferLossless) as? Bool) ?? false
-        )
+        // Hi-Res is a SEPARATE opt-in from the old Lossless preference.
+        // Never turn on 24-bit/hi-rate files merely because a previous build
+        // saved "preferLossless". Preserve an explicit modern choice.
+        preferHiRes = Self.load(Keys.preferHiRes, default: false)
         upgradeDuringPlayback = Self.load(Keys.upgradeDuringPlayback, default: false)
         aiProvider = Self.loadString(Keys.aiProvider, default: AIProvider.off.rawValue)
         aiKey = Self.loadString(Keys.aiKey, default: "")
