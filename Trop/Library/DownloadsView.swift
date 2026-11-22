@@ -7,6 +7,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct DownloadsView: View {
+    /// Reuse the verified local-file playback UI inside offline Home, while
+    /// preserving its normal navigation and import controls in Library.
+    var embeddedInHome = false
     @Environment(SettingsStore.self) private var settings
     @ObservedObject private var downloadManager = DownloadManager.shared
     @State private var pendingRoute: DetailRoute?
@@ -33,16 +36,18 @@ struct DownloadsView: View {
             }
         }
         .background(Color(.systemGroupedBackground))
-        .navigationTitle("Downloads")
+        .navigationTitle(embeddedInHome ? "Home" : "Downloads")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showingAudioImporter = true
-                } label: {
-                    Label("Import Audio", systemImage: "square.and.arrow.down")
+            if !embeddedInHome {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingAudioImporter = true
+                    } label: {
+                        Label("Import Audio", systemImage: "square.and.arrow.down")
+                    }
+                    .accessibilityLabel("Import audio from Files")
                 }
-                .accessibilityLabel("Import audio from Files")
             }
         }
         .fileImporter(
