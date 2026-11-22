@@ -75,10 +75,14 @@ struct AddonStreamQualityPolicy: Sendable {
 
     /// Stremio returns several sources in one response, unlike Eclipse.
     /// Select among the *offered* sources by the same policy.
-    static func stremio(requested quality: AddonStreamQuality, preferAtmos: Bool) -> Self {
+    static func stremio(
+        requested quality: AddonStreamQuality,
+        preferAtmos: Bool,
+        allowHiRes: Bool
+    ) -> Self {
         switch quality {
         case .max:
-            return .init(mode: .auto, preferHiRes: true, preferAtmos: preferAtmos)
+            return .init(mode: .auto, preferHiRes: allowHiRes, preferAtmos: preferAtmos)
         case .hires:
             return .init(mode: .lossless, preferHiRes: true, preferAtmos: preferAtmos)
         case .lossless:
