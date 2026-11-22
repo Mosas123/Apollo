@@ -34,6 +34,37 @@ the exact commit. The export UI is for a private experimental metadata copy,
 not authorization to erase the app, reinstall it, transfer devices or
 automatically migrate any old records.
 
+## Isolated iPhone restore rehearsal (not real recovery)
+
+**Staged on draft PR #80, awaiting exact-HEAD CI and device QA.**
+
+- The Combined Metadata Snapshot screen now has an explicit **Test latest
+  saved copy in isolated memory** button. It reads only the newest combined
+  snapshot from the app's Documents folder; it never deletes, resets, merges
+  or updates the user's library.
+- `TropLibraryCombinedRestoreRehearsal` first decodes/validates the archive.
+  It creates a brand-new **in-memory GRDB DatabaseQueue**, applies the same
+  production v1–v13 migration sequence used by the app, and executes the
+  *same restore transaction SQL* against that scratch database.
+- The sandbox rereads the restored metadata and checks source equality for
+  legacy rows, V2-owned items, ordered/duplicate playlist occurrences,
+  podcast relationships, radio, and provider alias redaction. It checks
+  the total live+foreign import lineage, not fragile device-local row IDs.
+  A second restore must reject the occupied scratch database.
+- The sandbox returns aggregate counts only; it logs no archive contents.
+  No scratch queue escapes the function. The production persistent
+  `DatabaseService.shared` is never accessed by the rehearsal.
+- CI includes a **synthetic 0 legacy / 24 V2 recordings / 10 playlist
+  occurrences** case modeled after on-device counts (not personal data),
+  plus a mixed legacy+V2 archive. Tests assert that the original source
+  database is unchanged.
+
+**Not yet proven:** rebuilding a *real* iPhone archive in the isolated
+rehearsal, behavior with large libraries/memory pressure, backgrounding
+and iOS Files-provider quirks. A successful sandbox rehearsal is NOT a
+restoration of user data and must never be treated as permission to erase
+an installation, reinstall Trop or enable real restore/migration.
+
 ## Why this exists
 
 Two independent drafts existed:
