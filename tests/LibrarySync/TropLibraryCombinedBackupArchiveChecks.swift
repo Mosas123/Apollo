@@ -263,11 +263,17 @@ enum TropLibraryCombinedBackupArchiveChecks {
 
         // Multiple source rows must map injectively to destination row IDs.
         let legacy2 = TropLibraryBackupSnapshot(
-            tracks: original.legacy.tracks, albums: original.legacy.albums,
+            tracks: original.legacy.tracks + [
+                .init(
+                    id: "legacy-video-2", title: "Second song", artistName: "Artist",
+                    albumName: nil, duration: 181, liked: true, inLibrary: date,
+                    isEpisode: false, createdAt: date
+                )
+            ], albums: original.legacy.albums,
             artists: original.legacy.artists, playlists: original.legacy.playlists,
             playlistEntries: original.legacy.playlistEntries + [
                 .init(
-                    playlistId: "legacy-playlist-1", songId: "legacy-video-1",
+                    playlistId: "legacy-playlist-1", songId: "legacy-video-2",
                     position: 1
                 )
             ],
@@ -278,14 +284,14 @@ enum TropLibraryCombinedBackupArchiveChecks {
             legacyMemberships: original.legacyMemberships + [
                 .init(
                     sourceRowID: 12, playlistID: "legacy-playlist-1",
-                    songID: "legacy-video-1", position: 1
+                    songID: "legacy-video-2", position: 1
                 )
             ]
         )
         let twoArchive = try TropLibraryCombinedBackupArchive.encode(twoSource)
         let colliding = TropLibraryCombinedRestorePlanner.DestinationMembership(
             sourceRowID: 12, assignedRowID: 902,
-            playlistID: "legacy-playlist-1", songID: "legacy-video-1",
+            playlistID: "legacy-playlist-1", songID: "legacy-video-2",
             position: 1
         )
         do {
