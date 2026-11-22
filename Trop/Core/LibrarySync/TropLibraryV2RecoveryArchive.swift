@@ -79,6 +79,7 @@ enum TropLibraryV2RecoveryError: Error, Equatable, Sendable {
     case oversized
     case checksumMismatch
     case existingLibrary
+    case legacySourceConflict
     case temporaryDatabase
 }
 
