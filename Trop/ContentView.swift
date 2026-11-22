@@ -14,6 +14,8 @@ struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var nowPlaying = NowPlaying.shared
     @State private var selectedTab = SettingsStore.shared.defaultTab
+    @AppStorage("trop.library.v2.previewEnabled")
+    private var libraryV2PreviewEnabled = false
     @State private var sheet = PlayerSheetState.shared
     @State private var scrollState = MiniPlayerScrollState()
     @ObservedObject private var downloadManager = DownloadManager.shared
@@ -109,7 +111,11 @@ struct ContentView: View {
             }
 
             Tab("Library", systemImage: "music.note.square.stack", value: 2) {
-                LibraryView()
+                if libraryV2PreviewEnabled {
+                    TropLibraryV2Screen()
+                } else {
+                    LibraryView()
+                }
             }
 
             if settings.showExploreTab {
