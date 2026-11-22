@@ -136,6 +136,15 @@ across source export, isolated restore and re-export, alongside podcasts
 and radios. Private playlists, signatures, URL parameters, credentials
 and streaming manifests remain excluded.
 
+**No-provider regression (22 Nov):** the GRDB fixture additionally
+restores an internal combined metadata archive with **zero provider aliases,
+zero YouTube legacy relations and zero optional album/artist source IDs**.
+It verifies Trop-owned playlists, ordered podcast/episode relationships and
+radio favorite station IDs across restore and re-export, and checks the
+archive never contains "youtube", private addon manifests or a stream URL.
+This is a test of metadata independence; it does NOT validate playback,
+source resolution without YouTube, radio connectivity, or real iPhone restore.
+
 Before any public Restore action:
 
 1. Validate V13 origin identity and foreign-ID mapping on fresh/upgraded

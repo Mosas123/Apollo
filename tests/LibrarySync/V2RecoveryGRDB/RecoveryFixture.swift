@@ -814,7 +814,86 @@ enum RecoveryFixture {
         let afterRepeat = try await TropLibraryCombinedBackupService.snapshot()
         precondition(afterRepeat.legacy.tracks == restoredCombined.legacy.tracks)
         precondition(afterRepeat.libraryV2.items == restoredCombined.libraryV2.items)
-        print("Combined GRDB restore, remapping, rollback, and overwrite checks passed")
+
+        // No-YouTube / no-provider restore: a metadata archive with ZERO
+        // provider aliases or legacy provider links must still carry all
+        // Trop-owned playlists, podcast relationships and radio favorites.
+        // This proves database portability, NOT live stream playability.
+        let sourceWithNoProvider = TropLibraryCombinedBackupSnapshot(
+            legacy: combined.library.legacy,
+            libraryV2: .init(
+                items: sourceV2.items,
+                aliases: [],
+                playlistEntries: sourceV2.playlistEntries,
+                radioFavorites: sourceV2.radioFavorites,
+                importLedger: sourceV2.importLedger,
+                legacyRelations: [],
+                omittedPrivateAliases: 0
+            ),
+            legacyMemberships: combined.library.legacyMemberships,
+            originScope: combined.library.originScope,
+            foreignTombstones: combined.library.foreignTombstones,
+            relatedPodcasts: combined.library.relatedPodcasts,
+            relatedEpisodes: combined.library.relatedEpisodes,
+            podcastEpisodeMemberships: combined.library.podcastEpisodeMemberships
+        )
+        let noProviderArchive = try TropLibraryCombinedBackupArchive.encode(
+            sourceWithNoProvider
+        )
+        let noProviderJSON = String(decoding: noProviderArchive, as: UTF8.self)
+        precondition(!noProviderJSON.contains("youtube"))
+        precondition(!noProviderJSON.contains("addon:"))
+        precondition(!noProviderJSON.contains("stream_url"))
+
+        // Fixture-only reset. Production restore has NO reset/delete path.
+        try await DatabaseService.shared.write { db in
+            for table in [
+                "trop_v2_legacy_import_entry", "trop_v2_foreign_import_tombstone",
+                "trop_v2_playlist_entry", "trop_v2_source_alias",
+                "trop_v2_legacy_relation", "trop_v2_radio_favorite",
+                "trop_v2_item", "playlist_song_map", "podcast_episode_map",
+                "song", "album", "artist", "playlist", "podcast", "episode"
+            ] {
+                try db.execute(sql: "DELETE FROM \(table)")
+            }
+        }
+        _ = try await TropLibraryCombinedRestoreStore.restoreIntoEmptyLibrary(
+            noProviderArchive
+        )
+        let restoredWithoutProvider = try await TropLibraryCombinedBackupService.snapshot()
+        precondition(restoredWithoutProvider.libraryV2.aliases.isEmpty)
+        precondition(restoredWithoutProvider.libraryV2.legacyRelations.isEmpty)
+        precondition(restoredWithoutProvider.legacyAlbumSources.isEmpty)
+        precondition(restoredWithoutProvider.legacyArtistSources.isEmpty)
+        precondition(
+            restoredWithoutProvider.libraryV2.radioFavorites
+                == combined.library.libraryV2.radioFavorites
+        )
+        precondition(
+            restoredWithoutProvider.libraryV2.playlistEntries
+                == combined.library.libraryV2.playlistEntries
+        )
+        precondition(
+            restoredWithoutProvider.podcastEpisodeMemberships
+                == combined.library.podcastEpisodeMemberships
+        )
+        precondition(restoredWithoutProvider.relatedPodcasts == combined.library.relatedPodcasts)
+        precondition(restoredWithoutProvider.relatedEpisodes == combined.library.relatedEpisodes)
+        let withoutProviderExport = try await TropLibraryCombinedBackupService.export()
+        let exportedWithoutProvider = try TropLibraryCombinedBackupArchive.decode(
+            withoutProviderExport
+        )
+        precondition(exportedWithoutProvider.library.libraryV2.aliases.isEmpty)
+        precondition(
+            exportedWithoutProvider.library.libraryV2.radioFavorites
+                == combined.library.libraryV2.radioFavorites
+        )
+        precondition(
+            exportedWithoutProvider.library.podcastEpisodeMemberships
+                == combined.library.podcastEpisodeMemberships
+        )
+        precondition(!String(decoding: withoutProviderExport, as: UTF8.self).contains("youtube"))
+        print("Combined GRDB metadata roundtrip passed without YouTube/provider aliases")
 
     }
 }
