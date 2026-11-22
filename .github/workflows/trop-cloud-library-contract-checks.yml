@@ -1,0 +1,19 @@
+name: Trop Private iCloud Library Contract Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Core/LibrarySync/TropCloudLibraryContract.swift"
+      - "tests/LibrarySync/TropCloudLibraryContractChecks.swift"
+      - "scripts/test-trop-cloud-library-contract.sh"
+      - ".github/workflows/trop-cloud-library-contract-checks.yml"
+      - "Trop/Core/MusicSources/MusicCatalog.swift"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify metadata-only cloud scope and sync safety
+        run: bash scripts/test-trop-cloud-library-contract.sh
