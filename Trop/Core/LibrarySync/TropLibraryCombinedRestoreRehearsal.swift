@@ -6,9 +6,29 @@ import GRDB
 /// No File Provider, CloudKit, credentials or live database handle is ever
 /// passed to the scratch database.
 enum TropLibraryCombinedRestoreRehearsal {
+    /// Only fixed diagnostic codes leave this boundary. In particular, never
+    /// return a raw SQLite error, SQL arguments, file paths, song names,
+    /// provider identifiers or the archive itself to the UI/logs.
     enum Failure: Error, Sendable {
-        case mismatchedRoundTrip
+        case archiveVerification
+        case scratchSchema
+        case scratchRestore
+        case scratchReadback
+        case scratchOccupiedCheck
+        case mismatchedRoundTrip(String)
         case incompleteLegacyLineage
+
+        var diagnosticCode: String {
+            switch self {
+            case .archiveVerification: "ARCHIVE_VERIFY"
+            case .scratchSchema: "SCRATCH_SCHEMA"
+            case .scratchRestore: "SCRATCH_RESTORE"
+            case .scratchReadback: "SCRATCH_READBACK"
+            case .scratchOccupiedCheck: "OCCUPIED_GUARD"
+            case .mismatchedRoundTrip(let section): "ROUNDTRIP_" + section
+            case .incompleteLegacyLineage: "LINEAGE_COUNT"
+            }
+        }
     }
 
     struct Result: Sendable {
@@ -20,60 +40,98 @@ enum TropLibraryCombinedRestoreRehearsal {
         let withheldPrivateAliases: Int
     }
 
-    /// This synchronous operation can be called from Task.detached to avoid
-    /// blocking the UI thread. Input is bounded and validated before the
-    /// scratch schema is created. The queue never escapes this function.
+    /// The archive itself stores timestamps at millisecond resolution. GRDB
+    /// serializes Date through its own SQLite date representation. Comparing
+    /// Date using binary floating-point equality can report a false mismatch
+    /// after a valid roundtrip on a real device. Compare ALL Codable fields,
+    /// but canonically round dates to the archive's millisecond resolution.
+    private static func sameArchiveMetadata<T: Encodable>(
+        _ original: T, _ recovered: T
+    ) -> Bool {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var value = encoder.singleValueContainer()
+            try value.encode(Int64((date.timeIntervalSince1970 * 1_000).rounded()))
+        }
+        guard let lhs = try? encoder.encode(original),
+              let rhs = try? encoder.encode(recovered) else {
+            return false
+        }
+        return lhs == rhs
+    }
+
+    /// Pure scratch-db restore. Callable from a detached task, never on the
+    /// UI thread; the scratch queue cannot escape this function.
     static func rehearse(_ archive: Data) throws -> Result {
-        let envelope = try TropLibraryCombinedBackupArchive.decode(archive)
-        let source = envelope.library
-        let expected = try TropLibraryCombinedBackupService.preview(archive)
+        let source: TropLibraryCombinedBackupSnapshot
+        let expected: TropLibraryCombinedBackupService.Preview
+        do {
+            source = try TropLibraryCombinedBackupArchive.decode(archive).library
+            expected = try TropLibraryCombinedBackupService.preview(archive)
+        } catch {
+            throw Failure.archiveVerification
+        }
 
-        // This is an entirely separate, empty, memory-only database.
-        let scratch = try DatabaseQueue()
-        var migrations = DatabaseMigrator()
-        TropDatabaseMigrationSequence.register(&migrations)
-        try migrations.migrate(scratch)
+        // This queue is private, nonpersistent, and holds no user data until
+        // the already-validated archive is copied to it inside one write.
+        let scratch: DatabaseQueue
+        do {
+            scratch = try DatabaseQueue()
+            var migrations = DatabaseMigrator()
+            TropDatabaseMigrationSequence.register(&migrations)
+            try migrations.migrate(scratch)
+        } catch {
+            throw Failure.scratchSchema
+        }
 
-        // Reuse *exactly* the production restoration SQL. Both preflight and
-        // inserts execute inside this sole scratch-db write transaction.
-        let restoredPreview = try scratch.write { db in
-            try TropLibraryCombinedRestoreStore.restoreInTransaction(
-                archive, in: db
-            )
+        let restoredPreview: TropLibraryCombinedBackupService.Preview
+        do {
+            restoredPreview = try scratch.write { db in
+                try TropLibraryCombinedRestoreStore.restoreInTransaction(
+                    archive, in: db
+                )
+            }
+        } catch {
+            throw Failure.scratchRestore
         }
         guard restoredPreview == expected else {
-            throw Failure.mismatchedRoundTrip
+            throw Failure.mismatchedRoundTrip("PREVIEW")
         }
 
-        // Read back all serialized metadata from the scratch queue. No data
-        // is fetched from the user's actual on-device database.
-        let restored = try scratch.read { db in
-            try TropLibraryCombinedBackupService.snapshot(in: db)
+        let restored: TropLibraryCombinedBackupSnapshot
+        do {
+            restored = try scratch.read { db in
+                try TropLibraryCombinedBackupService.snapshot(in: db)
+            }
+        } catch {
+            throw Failure.scratchReadback
         }
 
-        // Restore a provider-independent V2 user collection without changing
-        // IDs, playlist occurrence order, likes, radio or podcast metadata.
-        guard restored.legacy == source.legacy,
-              restored.legacyAlbumSources == source.legacyAlbumSources,
-              restored.legacyArtistSources == source.legacyArtistSources,
-              restored.podcastArtists == source.podcastArtists,
-              restored.episodePodcastNames == source.episodePodcastNames,
-              restored.relatedPodcasts == source.relatedPodcasts,
-              restored.relatedEpisodes == source.relatedEpisodes,
-              restored.podcastEpisodeMemberships == source.podcastEpisodeMemberships,
-              restored.libraryV2.items == source.libraryV2.items,
-              restored.libraryV2.aliases == source.libraryV2.aliases,
-              restored.libraryV2.playlistEntries == source.libraryV2.playlistEntries,
-              restored.libraryV2.radioFavorites == source.libraryV2.radioFavorites,
-              restored.libraryV2.legacyRelations == source.libraryV2.legacyRelations,
-              restored.legacyMemberships.count == source.legacyMemberships.count
-        else {
-            throw Failure.mismatchedRoundTrip
+        // Compare the content that is actually recoverable. The origin scope
+        // is intentionally installation-specific; SQLite membership IDs can
+        // differ after restore. Omitted private aliases cannot be recreated.
+        // Compare each preserved section to identify the failure precisely.
+        let sections: [(String, Bool)] = [
+            ("LEGACY", sameArchiveMetadata(source.legacy, restored.legacy)),
+            ("ALBUM_SOURCES", source.legacyAlbumSources == restored.legacyAlbumSources),
+            ("ARTIST_SOURCES", source.legacyArtistSources == restored.legacyArtistSources),
+            ("PODCAST_ARTISTS", source.podcastArtists == restored.podcastArtists),
+            ("EPISODE_NAMES", source.episodePodcastNames == restored.episodePodcastNames),
+            ("RELATED_PODCASTS", sameArchiveMetadata(source.relatedPodcasts, restored.relatedPodcasts)),
+            ("RELATED_EPISODES", sameArchiveMetadata(source.relatedEpisodes, restored.relatedEpisodes)),
+            ("PODCAST_LINKS", source.podcastEpisodeMemberships == restored.podcastEpisodeMemberships),
+            ("V2_ITEMS", sameArchiveMetadata(source.libraryV2.items, restored.libraryV2.items)),
+            ("V2_ALIASES", source.libraryV2.aliases == restored.libraryV2.aliases),
+            ("V2_ENTRIES", sameArchiveMetadata(source.libraryV2.playlistEntries, restored.libraryV2.playlistEntries)),
+            ("V2_RADIO", sameArchiveMetadata(source.libraryV2.radioFavorites, restored.libraryV2.radioFavorites)),
+            ("V2_RELATIONS", sameArchiveMetadata(source.libraryV2.legacyRelations, restored.libraryV2.legacyRelations)),
+            ("MEMBERSHIP_COUNT", source.legacyMemberships.count == restored.legacyMemberships.count)
+        ]
+        if let failingSection = sections.first(where: { !$0.1 }) {
+            throw Failure.mismatchedRoundTrip(failingSection.0)
         }
 
-        // SQLite membership IDs are *database-local*. Existing live links
-        // must be remapped and orphaned history namespaced as tombstones.
-        // Their numeric source IDs are NOT required to equal destination IDs.
         let sourceLineage = source.libraryV2.importLedger.count
             + source.foreignTombstones.count
         let restoredLineage = restored.libraryV2.importLedger.count
@@ -82,17 +140,18 @@ enum TropLibraryCombinedRestoreRehearsal {
             throw Failure.incompleteLegacyLineage
         }
 
-        // A repeated write on an occupied scratch library must be refused
-        // before touching a single existing row. Never reset or overwrite.
+        // Prove a repeated restore cannot overwrite the scratch destination.
         do {
             _ = try scratch.write { db in
                 try TropLibraryCombinedRestoreStore.restoreInTransaction(
                     archive, in: db
                 )
             }
-            throw Failure.mismatchedRoundTrip
+            throw Failure.scratchOccupiedCheck
         } catch TropLibraryCombinedRestorePreflight.Blocker.occupiedDestination {
-            // Expected. The first restoration remains intact in the sandbox.
+            // Correct behavior.
+        } catch {
+            throw Failure.scratchOccupiedCheck
         }
 
         return Result(
