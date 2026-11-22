@@ -67,146 +67,146 @@ enum TropLibraryCombinedBackupService {
     /// Snapshot the exact GRDB connection supplied by the caller, allowing
     /// an isolated in-memory restore rehearsal without reading live data.
     static func snapshot(in db: Database) throws -> TropLibraryCombinedBackupSnapshot {
-            guard let originScope = try String.fetchOne(
-                db, sql: "SELECT origin_scope FROM trop_v2_library_origin WHERE singleton = 1"
-            ) else { throw TropLibraryCombinedBackupError.invalidPayload }
-            let legacy = try TropLibraryBackupService.snapshot(in: db)
-            let v2 = try TropLibraryV2RecoveryStore.snapshot(in: db)
-            let memberships = try Row.fetchAll(
-                db, sql: """
-                    SELECT id, playlist_id, song_id, position
-                    FROM playlist_song_map ORDER BY playlist_id, position, id
-                    """
-            ).map { row in
-                TropLibraryCombinedBackupSnapshot.LegacyMembership(
-                    sourceRowID: row["id"],
-                    playlistID: row["playlist_id"], songID: row["song_id"],
-                    position: row["position"]
-                )
-            }
-            let foreignTombstones = try Row.fetchAll(
-                db, sql: """
-                    SELECT origin_scope, source_membership_id, entry_id, imported_at
-                    FROM trop_v2_foreign_import_tombstone
-                    ORDER BY origin_scope, source_membership_id
-                    """
-            ).map { row in
-                TropLibraryCombinedBackupSnapshot.ForeignTombstone(
-                    originScope: row["origin_scope"],
-                    sourceMembershipID: row["source_membership_id"],
-                    entryID: row["entry_id"], importedAt: row["imported_at"]
-                )
-            }
-            // Legacy V1 intentionally includes only saved/subscribed rows.
-            // Combined V4 also includes unsaved/unsubscribed podcast records
-            // referenced by the ordered podcast_episode_map relationship.
-            let podcastLinks = try Row.fetchAll(
-                db, sql: """
-                    SELECT podcast_id, episode_id, position
-                    FROM podcast_episode_map
-                    ORDER BY podcast_id, position, id
-                    """
-            ).map { row in
-                TropLibraryCombinedBackupSnapshot.PodcastEpisodeMembership(
-                    podcastID: row["podcast_id"], episodeID: row["episode_id"],
-                    position: row["position"]
-                )
-            }
-            let relatedPodcasts = try Row.fetchAll(
-                db, sql: """
-                    SELECT id, name, subscribed_at FROM podcast
-                    WHERE subscribed_at IS NULL AND EXISTS (
-                        SELECT 1 FROM podcast_episode_map AS link
-                        WHERE link.podcast_id = podcast.id
-                    )
-                    ORDER BY id
-                    """
-            ).map { row in
-                TropLibraryCombinedBackupSnapshot.RelatedPodcast(
-                    id: row["id"], name: row["name"],
-                    subscribedAt: row["subscribed_at"]
-                )
-            }
-            let relatedEpisodes = try Row.fetchAll(
-                db, sql: """
-                    SELECT id, title, podcast_id, duration, is_played, saved_at
-                    FROM episode WHERE saved_at IS NULL AND EXISTS (
-                        SELECT 1 FROM podcast_episode_map AS link
-                        WHERE link.episode_id = episode.id
-                    )
-                    ORDER BY id
-                    """
-            ).map { row in
-                TropLibraryCombinedBackupSnapshot.RelatedEpisode(
-                    id: row["id"], title: row["title"],
-                    podcastID: row["podcast_id"], duration: row["duration"],
-                    isPlayed: row["is_played"], savedAt: row["saved_at"]
-                )
-            }
-            // These are optional provider-scoped hints, not mandatory
-            // YouTube/InnerTube accounts or local playlist foreign keys.
-            let albumSources = try Row.fetchAll(
-                db, sql: """
-                    SELECT id, playlist_id FROM album
-                    WHERE bookmarked_at IS NOT NULL AND playlist_id IS NOT NULL
-                    ORDER BY id
-                    """
-            ).map { row in
-                TropLibraryCombinedBackupSnapshot.LegacyAlbumSource(
-                    albumID: row["id"], sourcePlaylistID: row["playlist_id"]
-                )
-            }
-            let artistSources = try Row.fetchAll(
-                db, sql: """
-                    SELECT id, channel_id FROM artist
-                    WHERE bookmarked_at IS NOT NULL AND channel_id IS NOT NULL
-                    ORDER BY id
-                    """
-            ).map { row in
-                TropLibraryCombinedBackupSnapshot.LegacyArtistSource(
-                    artistID: row["id"], sourceChannelID: row["channel_id"]
-                )
-            }
-            // Local semantic flags and human-readable podcast labels survive
-            // without a provider alias or external playlist identity.
-            let podcastArtists = try Row.fetchAll(
-                db, sql: """
-                    SELECT id FROM artist
-                    WHERE bookmarked_at IS NOT NULL AND is_podcast_channel = 1
-                    ORDER BY id
-                    """
-            ).map { row in
-                TropLibraryCombinedBackupSnapshot.LegacyPodcastArtist(
-                    artistID: row["id"]
-                )
-            }
-            let episodePodcastNames = try Row.fetchAll(
-                db, sql: """
-                    SELECT id, podcast_name FROM episode
-                    WHERE podcast_name IS NOT NULL
-                      AND (saved_at IS NOT NULL OR EXISTS (
-                          SELECT 1 FROM podcast_episode_map AS link
-                          WHERE link.episode_id = episode.id
-                      ))
-                    ORDER BY id
-                    """
-            ).map { row in
-                TropLibraryCombinedBackupSnapshot.LegacyEpisodePodcastName(
-                    episodeID: row["id"], podcastName: row["podcast_name"]
-                )
-            }
-            return TropLibraryCombinedBackupSnapshot(
-                legacy: legacy, libraryV2: v2,
-                legacyMemberships: memberships, originScope: originScope,
-                foreignTombstones: foreignTombstones,
-                relatedPodcasts: relatedPodcasts,
-                relatedEpisodes: relatedEpisodes,
-                podcastEpisodeMemberships: podcastLinks,
-                legacyAlbumSources: albumSources,
-                legacyArtistSources: artistSources,
-                podcastArtists: podcastArtists,
-                episodePodcastNames: episodePodcastNames
+        guard let originScope = try String.fetchOne(
+            db, sql: "SELECT origin_scope FROM trop_v2_library_origin WHERE singleton = 1"
+        ) else { throw TropLibraryCombinedBackupError.invalidPayload }
+        let legacy = try TropLibraryBackupService.snapshot(in: db)
+        let v2 = try TropLibraryV2RecoveryStore.snapshot(in: db)
+        let memberships = try Row.fetchAll(
+            db, sql: """
+                SELECT id, playlist_id, song_id, position
+                FROM playlist_song_map ORDER BY playlist_id, position, id
+                """
+        ).map { row in
+            TropLibraryCombinedBackupSnapshot.LegacyMembership(
+                sourceRowID: row["id"],
+                playlistID: row["playlist_id"], songID: row["song_id"],
+                position: row["position"]
             )
+        }
+        let foreignTombstones = try Row.fetchAll(
+            db, sql: """
+                SELECT origin_scope, source_membership_id, entry_id, imported_at
+                FROM trop_v2_foreign_import_tombstone
+                ORDER BY origin_scope, source_membership_id
+                """
+        ).map { row in
+            TropLibraryCombinedBackupSnapshot.ForeignTombstone(
+                originScope: row["origin_scope"],
+                sourceMembershipID: row["source_membership_id"],
+                entryID: row["entry_id"], importedAt: row["imported_at"]
+            )
+        }
+        // Legacy V1 intentionally includes only saved/subscribed rows.
+        // Combined V4 also includes unsaved/unsubscribed podcast records
+        // referenced by the ordered podcast_episode_map relationship.
+        let podcastLinks = try Row.fetchAll(
+            db, sql: """
+                SELECT podcast_id, episode_id, position
+                FROM podcast_episode_map
+                ORDER BY podcast_id, position, id
+                """
+        ).map { row in
+            TropLibraryCombinedBackupSnapshot.PodcastEpisodeMembership(
+                podcastID: row["podcast_id"], episodeID: row["episode_id"],
+                position: row["position"]
+            )
+        }
+        let relatedPodcasts = try Row.fetchAll(
+            db, sql: """
+                SELECT id, name, subscribed_at FROM podcast
+                WHERE subscribed_at IS NULL AND EXISTS (
+                    SELECT 1 FROM podcast_episode_map AS link
+                    WHERE link.podcast_id = podcast.id
+                )
+                ORDER BY id
+                """
+        ).map { row in
+            TropLibraryCombinedBackupSnapshot.RelatedPodcast(
+                id: row["id"], name: row["name"],
+                subscribedAt: row["subscribed_at"]
+            )
+        }
+        let relatedEpisodes = try Row.fetchAll(
+            db, sql: """
+                SELECT id, title, podcast_id, duration, is_played, saved_at
+                FROM episode WHERE saved_at IS NULL AND EXISTS (
+                    SELECT 1 FROM podcast_episode_map AS link
+                    WHERE link.episode_id = episode.id
+                )
+                ORDER BY id
+                """
+        ).map { row in
+            TropLibraryCombinedBackupSnapshot.RelatedEpisode(
+                id: row["id"], title: row["title"],
+                podcastID: row["podcast_id"], duration: row["duration"],
+                isPlayed: row["is_played"], savedAt: row["saved_at"]
+            )
+        }
+        // These are optional provider-scoped hints, not mandatory
+        // YouTube/InnerTube accounts or local playlist foreign keys.
+        let albumSources = try Row.fetchAll(
+            db, sql: """
+                SELECT id, playlist_id FROM album
+                WHERE bookmarked_at IS NOT NULL AND playlist_id IS NOT NULL
+                ORDER BY id
+                """
+        ).map { row in
+            TropLibraryCombinedBackupSnapshot.LegacyAlbumSource(
+                albumID: row["id"], sourcePlaylistID: row["playlist_id"]
+            )
+        }
+        let artistSources = try Row.fetchAll(
+            db, sql: """
+                SELECT id, channel_id FROM artist
+                WHERE bookmarked_at IS NOT NULL AND channel_id IS NOT NULL
+                ORDER BY id
+                """
+        ).map { row in
+            TropLibraryCombinedBackupSnapshot.LegacyArtistSource(
+                artistID: row["id"], sourceChannelID: row["channel_id"]
+            )
+        }
+        // Local semantic flags and human-readable podcast labels survive
+        // without a provider alias or external playlist identity.
+        let podcastArtists = try Row.fetchAll(
+            db, sql: """
+                SELECT id FROM artist
+                WHERE bookmarked_at IS NOT NULL AND is_podcast_channel = 1
+                ORDER BY id
+                """
+        ).map { row in
+            TropLibraryCombinedBackupSnapshot.LegacyPodcastArtist(
+                artistID: row["id"]
+            )
+        }
+        let episodePodcastNames = try Row.fetchAll(
+            db, sql: """
+                SELECT id, podcast_name FROM episode
+                WHERE podcast_name IS NOT NULL
+                  AND (saved_at IS NOT NULL OR EXISTS (
+                      SELECT 1 FROM podcast_episode_map AS link
+                      WHERE link.episode_id = episode.id
+                  ))
+                ORDER BY id
+                """
+        ).map { row in
+            TropLibraryCombinedBackupSnapshot.LegacyEpisodePodcastName(
+                episodeID: row["id"], podcastName: row["podcast_name"]
+            )
+        }
+        return TropLibraryCombinedBackupSnapshot(
+            legacy: legacy, libraryV2: v2,
+            legacyMemberships: memberships, originScope: originScope,
+            foreignTombstones: foreignTombstones,
+            relatedPodcasts: relatedPodcasts,
+            relatedEpisodes: relatedEpisodes,
+            podcastEpisodeMemberships: podcastLinks,
+            legacyAlbumSources: albumSources,
+            legacyArtistSources: artistSources,
+            podcastArtists: podcastArtists,
+            episodePodcastNames: episodePodcastNames
+        )
     }
 
     static func export() async throws -> Data {
