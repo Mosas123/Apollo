@@ -164,6 +164,137 @@ enum TropLibraryCombinedBackupArchiveChecks {
             _ = try TropLibraryCombinedBackupArchive.encode(missing)
             preconditionFailure("Missing membership map must be rejected")
         } catch TropLibraryCombinedBackupError.invalidPayload {}
-        print("Combined legacy+V2 metadata archive, integrity and privacy checks passed")
+        // The future restore must map source membership IDs to the new
+        // integer IDs allocated by SQLite, never reuse source row IDs.
+        let ledgerSource = TropLibraryCombinedBackupSnapshot(
+            legacy: original.legacy,
+            libraryV2: .init(
+                items: original.libraryV2.items,
+                aliases: original.libraryV2.aliases,
+                playlistEntries: original.libraryV2.playlistEntries,
+                radioFavorites: original.libraryV2.radioFavorites,
+                importLedger: [
+                    .init(legacyMembershipID: 11, entryID: entryID, importedAt: date)
+                ],
+                legacyRelations: original.libraryV2.legacyRelations,
+                omittedPrivateAliases: original.libraryV2.omittedPrivateAliases
+            ),
+            legacyMemberships: original.legacyMemberships
+        )
+        let remapArchive = try TropLibraryCombinedBackupArchive.encode(ledgerSource)
+        let good = TropLibraryCombinedRestorePlanner.DestinationMembership(
+            sourceRowID: 11, assignedRowID: 902,
+            playlistID: "legacy-playlist-1", songID: "legacy-video-1",
+            position: 0
+        )
+        let plan = try TropLibraryCombinedRestorePlanner.prepare(
+            archive: remapArchive, insertedMemberships: [good]
+        )
+        precondition(plan.sourceToDestinationID == [11: 902])
+        precondition(plan.remappedImportLedger.count == 1)
+        precondition(plan.remappedImportLedger[0].legacyMembershipID == 902)
+        precondition(plan.remappedImportLedger[0].entryID == entryID)
+
+        // An empty/missing insertion list must never become a partial restore.
+        do {
+            _ = try TropLibraryCombinedRestorePlanner.prepare(
+                archive: remapArchive, insertedMemberships: []
+            )
+            preconditionFailure("Must reject incomplete destination map")
+        } catch TropLibraryCombinedRestorePlanner.Blocker.incompleteMembershipMapping {}
+
+        // Matching position alone is not evidence of matching identity.
+        let wrong = TropLibraryCombinedRestorePlanner.DestinationMembership(
+            sourceRowID: 11, assignedRowID: 903,
+            playlistID: "wrong-playlist", songID: "legacy-video-1",
+            position: 0
+        )
+        do {
+            _ = try TropLibraryCombinedRestorePlanner.prepare(
+                archive: remapArchive, insertedMemberships: [wrong]
+            )
+            preconditionFailure("Must reject incorrect playlist identity")
+        } catch TropLibraryCombinedRestorePlanner.Blocker.wrongMembershipIdentity {}
+
+        let missingSource = TropLibraryCombinedRestorePlanner.DestinationMembership(
+            sourceRowID: 99, assignedRowID: 904,
+            playlistID: "legacy-playlist-1", songID: "legacy-video-1",
+            position: 0
+        )
+        do {
+            _ = try TropLibraryCombinedRestorePlanner.prepare(
+                archive: remapArchive, insertedMemberships: [missingSource]
+            )
+            preconditionFailure("Must reject foreign source membership ID")
+        } catch TropLibraryCombinedRestorePlanner.Blocker.unknownSourceMembership {}
+
+        // A deleted source membership may still appear in the import ledger
+        // (a tombstone). Never remap that ID to an unrelated live row.
+        let tombstoneSource = TropLibraryCombinedBackupSnapshot(
+            legacy: original.legacy,
+            libraryV2: .init(
+                items: original.libraryV2.items,
+                aliases: original.libraryV2.aliases,
+                playlistEntries: original.libraryV2.playlistEntries,
+                radioFavorites: original.libraryV2.radioFavorites,
+                importLedger: [
+                    .init(legacyMembershipID: 99, entryID: nil, importedAt: date)
+                ],
+                legacyRelations: original.libraryV2.legacyRelations,
+                omittedPrivateAliases: original.libraryV2.omittedPrivateAliases
+            ),
+            legacyMemberships: original.legacyMemberships
+        )
+        let orphanArchive = try TropLibraryCombinedBackupArchive.encode(tombstoneSource)
+        do {
+            _ = try TropLibraryCombinedRestorePlanner.prepare(
+                archive: orphanArchive, insertedMemberships: [good]
+            )
+            preconditionFailure("Must reject an orphaned import tombstone")
+        } catch TropLibraryCombinedRestorePlanner.Blocker.orphanedImportTombstone {}
+
+        // A corrupt envelope is never accepted by the remap planner.
+        do {
+            _ = try TropLibraryCombinedRestorePlanner.prepare(
+                archive: Data(damaged.utf8), insertedMemberships: [good]
+            )
+            preconditionFailure("Must reject tampered archive")
+        } catch TropLibraryCombinedBackupError.checksumMismatch {}
+
+        // Multiple source rows must map injectively to destination row IDs.
+        let legacy2 = TropLibraryBackupSnapshot(
+            tracks: original.legacy.tracks, albums: original.legacy.albums,
+            artists: original.legacy.artists, playlists: original.legacy.playlists,
+            playlistEntries: original.legacy.playlistEntries + [
+                .init(
+                    playlistId: "legacy-playlist-1", songId: "legacy-video-1",
+                    position: 1
+                )
+            ],
+            podcasts: original.legacy.podcasts, episodes: original.legacy.episodes
+        )
+        let twoSource = TropLibraryCombinedBackupSnapshot(
+            legacy: legacy2, libraryV2: original.libraryV2,
+            legacyMemberships: original.legacyMemberships + [
+                .init(
+                    sourceRowID: 12, playlistID: "legacy-playlist-1",
+                    songID: "legacy-video-1", position: 1
+                )
+            ]
+        )
+        let twoArchive = try TropLibraryCombinedBackupArchive.encode(twoSource)
+        let colliding = TropLibraryCombinedRestorePlanner.DestinationMembership(
+            sourceRowID: 12, assignedRowID: 902,
+            playlistID: "legacy-playlist-1", songID: "legacy-video-1",
+            position: 1
+        )
+        do {
+            _ = try TropLibraryCombinedRestorePlanner.prepare(
+                archive: twoArchive, insertedMemberships: [good, colliding]
+            )
+            preconditionFailure("Must reject duplicate destination row IDs")
+        } catch TropLibraryCombinedRestorePlanner.Blocker.duplicateDestinationID {}
+
+        print("Combined legacy+V2 metadata archive and safe ID remap checks passed")
     }
 }
