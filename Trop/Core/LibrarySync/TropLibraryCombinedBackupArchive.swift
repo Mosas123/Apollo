@@ -130,13 +130,16 @@ enum TropLibraryCombinedBackupArchive {
         guard canonicalScope(library.originScope),
               library.foreignTombstones.count <= TropLibraryBackupArchive.maximumRecords
         else { throw TropLibraryCombinedBackupError.invalidPayload }
-        let entryIDs = Set(library.libraryV2.playlistEntries.map(\.id))
+        // Foreign tombstone references are historical: a V2 entry may
+        // itself have been deleted after this import. Require canonical UUID
+        // syntax, but never require an active entry to still exist.
         var keys = Set<String>()
         for tombstone in library.foreignTombstones {
             guard canonicalScope(tombstone.originScope),
                   tombstone.sourceMembershipID > 0,
                   tombstone.importedAt.timeIntervalSince1970.isFinite,
-                  tombstone.entryID == nil || tombstone.entryID.map(entryIDs.contains) == true
+                  tombstone.entryID == nil
+                    || tombstone.entryID.map(TropLibraryV2IdentityPolicy.isCanonicalID) == true
             else { throw TropLibraryCombinedBackupError.invalidPayload }
             let key = tombstone.originScope + ":" + String(tombstone.sourceMembershipID)
             guard keys.insert(key).inserted else {

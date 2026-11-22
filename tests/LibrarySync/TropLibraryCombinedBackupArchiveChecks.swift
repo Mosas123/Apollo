@@ -323,6 +323,36 @@ enum TropLibraryCombinedBackupArchiveChecks {
             _ = try TropLibraryCombinedBackupArchive.encode(duplicate)
             preconditionFailure("Duplicated scoped tombstones must fail")
         } catch TropLibraryCombinedBackupError.invalidPayload {}
+        // Historical entry references remain exportable after the V2 entry
+        // is deleted; they are not live foreign-key references.
+        let stale = TropLibraryCombinedBackupSnapshot.ForeignTombstone(
+            originScope: original.originScope, sourceMembershipID: 100,
+            entryID: "b0000000-0000-4000-8000-000000000001", importedAt: date
+        )
+        let history = TropLibraryCombinedBackupSnapshot(
+            legacy: original.legacy, libraryV2: original.libraryV2,
+            legacyMemberships: original.legacyMemberships,
+            originScope: original.originScope, foreignTombstones: [stale]
+        )
+        let decodedHistory = try TropLibraryCombinedBackupArchive.decode(
+            TropLibraryCombinedBackupArchive.encode(history)
+        )
+        precondition(decodedHistory.library.foreignTombstones == [stale])
+        let badHistory = TropLibraryCombinedBackupSnapshot(
+            legacy: original.legacy, libraryV2: original.libraryV2,
+            legacyMemberships: original.legacyMemberships,
+            originScope: original.originScope,
+            foreignTombstones: [
+                .init(
+                    originScope: original.originScope, sourceMembershipID: 100,
+                    entryID: "invalid-entry-id", importedAt: date
+                )
+            ]
+        )
+        do {
+            _ = try TropLibraryCombinedBackupArchive.encode(badHistory)
+            preconditionFailure("Invalid historical entry ID must fail")
+        } catch TropLibraryCombinedBackupError.invalidPayload {}
         print("Combined legacy+V2 archive, scoped tombstones and remap checks passed")
     }
 }
