@@ -15,16 +15,19 @@ schema = Path("Trop/Database/DatabaseMigrations.swift").read_text()
 registration = Path("Trop/Database/DatabaseService.swift").read_text()
 importer = Path("Trop/Core/LibrarySync/TropLibraryV2LegacyImporter.swift").read_text()
 assert 'registerMigration("v12", migrate: DatabaseMigrations.v12)' in registration
+assert 'registerMigration("v13", migrate: DatabaseMigrations.v13)' in registration
 assert "nonisolated let usesPersistentStore: Bool" in registration
 assert "guard DatabaseService.shared.usesPersistentStore" in importer
 assert "writeReturning { db in" in importer
 assert "unresolvedLegacyMemberships(orphanCount)" in importer
 
 v10 = schema.split("static let v10:", 1)[1].split("static let v11:", 1)[0]
-v12 = schema.split("static let v12:", 1)[1].split("\n}", 1)[0]
+v12 = schema.split("static let v12:", 1)[1].split("static let v13:", 1)[0]
+v13 = schema.split("static let v13:", 1)[1].split("\n}", 1)[0]
 queries = lambda part: re.findall(r'try db\.execute\(sql: """(.*?)"""\)', part, re.S)
 assert len(queries(v10)) == 6
 assert len(queries(v12)) == 2
+assert len(queries(v13)) == 2
 
 db = sqlite3.connect(":memory:")
 db.execute("PRAGMA foreign_keys=ON")
@@ -34,7 +37,7 @@ db.execute("CREATE TABLE playlist_song_map (id INTEGER PRIMARY KEY, playlist_id 
 db.execute("INSERT INTO song VALUES ('yt-a', 'Song A', 1)")
 db.execute("INSERT INTO playlist VALUES ('list-a', 'Saved list')")
 db.execute("INSERT INTO playlist_song_map VALUES (1, 'list-a', 'yt-a', 0)")
-for query in queries(v10) + queries(v12):
+for query in queries(v10) + queries(v12) + queries(v13):
     db.execute(query)
 
 for item_id, kind, title in [
@@ -51,6 +54,8 @@ db.execute("""INSERT INTO trop_v2_playlist_entry
 db.execute("""INSERT INTO trop_v2_legacy_import_entry
     (legacy_membership_id, entry_id, imported_at)
     VALUES (1, 'entry-uuid', '2026-11-22')""")
+
+assert db.execute("SELECT COUNT(*) FROM trop_v2_foreign_import_tombstone").fetchone()[0] == 0
 
 # Retry must identify the same legacy membership, not append it twice.
 assert db.execute("""SELECT entry_id FROM trop_v2_legacy_import_entry
