@@ -42,6 +42,11 @@ struct SettingsView: View {
 
             Section("Experimental library") {
                 Toggle("Use Trop Library V2", isOn: $libraryV2PreviewEnabled)
+                if libraryV2PreviewEnabled {
+                    SettingsNavigationRow("Experimental V2 Snapshot", icon: "externaldrive") {
+                        TropLibraryV2RecoveryView()
+                    }
+                }
                 Text(
                     "V2 starts empty and saves locally without YouTube. "
                         + "Your old library remains untouched. The player heart "
