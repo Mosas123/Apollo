@@ -178,7 +178,7 @@ struct MusicBrainzIdentityCatalog: Sendable {
             throw MusicBrainzCatalogError.invalidRequest
         }
         parts.queryItems = [
-            URLQueryItem(name: "query", value: String(term.prefix(300))),
+            URLQueryItem(name: "query", value: term),
             URLQueryItem(name: "fmt", value: "json"),
             URLQueryItem(name: "limit", value: String(min(max(limit, 1), 50)))
         ]
@@ -201,7 +201,10 @@ struct MusicBrainzIdentityCatalog: Sendable {
     }
 
     private static func quoted(_ raw: String) -> String {
-        let escaped = raw.replacingOccurrences(of: "\\", with: "\\\\")
+        // Bound each phrase before escaping: truncating a complete Lucene
+        // expression could cut its closing quote and invalidate the query.
+        let limited = String(raw.prefix(120))
+        let escaped = limited.replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
         return "\"\(escaped)\""
     }
