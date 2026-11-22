@@ -1,0 +1,21 @@
+name: Trop Library V2 Foundation Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Core/LibrarySync/TropLibraryV2IdentityPolicy.swift"
+      - "Trop/Core/LibrarySync/TropLibraryV2Store.swift"
+      - "Trop/Database/DatabaseMigrations.swift"
+      - "Trop/Database/DatabaseService.swift"
+      - "tests/LibrarySync/TropLibraryV2IdentityChecks.swift"
+      - "scripts/test-trop-library-v2-foundation.sh"
+      - ".github/workflows/trop-library-v2-foundation-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify independent V2 IDs, schema and legacy isolation
+        run: bash scripts/test-trop-library-v2-foundation.sh
