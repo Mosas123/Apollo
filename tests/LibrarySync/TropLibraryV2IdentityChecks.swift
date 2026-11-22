@@ -89,6 +89,16 @@ enum TropLibraryV2IdentityChecks {
             for: [addon]
         ) == "addon:install:movie:id")
 
+        assert(try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+            for: [qobuz], requiresLossless: true
+        ) == "qobuz:123")
+        do {
+            _ = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+                for: [audius], requiresLossless: true
+            )
+            fatalError("Lossy playback accepted in lossless mode")
+        } catch TropLibraryV2PlaybackSourceError.incompatibleQuality {}
+
         for unavailable in [
             [TropLibraryV2SourceAlias](), [youtube], [mb],
             [accountScoped], [youtube, mb]
