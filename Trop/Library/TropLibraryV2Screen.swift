@@ -12,6 +12,8 @@ struct TropLibraryV2Screen: View {
     @State private var showCreatePlaylist = false
     @State private var newPlaylistName = ""
     @State private var feedback: String?
+    @State private var playbackMessage: String?
+    @State private var isStartingPlayback = false
 
     var body: some View {
         NavigationStack {
@@ -101,6 +103,14 @@ struct TropLibraryV2Screen: View {
                     }
                 }
             }
+            .alert("Audio unavailable", isPresented: Binding(
+                get: { playbackMessage != nil },
+                set: { if !$0 { playbackMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(playbackMessage ?? "This song remains saved.")
+            }
             .navigationTitle("Library")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -141,16 +151,27 @@ struct TropLibraryV2Screen: View {
 
     private func songRow(_ recording: TropLibraryV2Store.RecordingSummary) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: "music.note")
-                .foregroundStyle(.secondary)
-                .frame(width: 30)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(recording.title).lineLimit(1)
-                if let artist = recording.artist {
-                    Text(artist).font(.caption).foregroundStyle(.secondary)
+            Button {
+                Task { await playSavedRecording(recording) }
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "music.note")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 30)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(recording.title).lineLimit(1)
+                        if let artist = recording.artist {
+                            Text(artist).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    Image(systemName: "play.fill").foregroundStyle(.secondary)
                 }
+                .contentShape(Rectangle())
             }
-            Spacer()
+            .buttonStyle(.plain)
+            .disabled(isStartingPlayback)
+            .accessibilityLabel("Play \(recording.title)")
             Button {
                 Task { await setLiked(recording: recording, liked: !recording.isLiked) }
             } label: {
@@ -159,6 +180,22 @@ struct TropLibraryV2Screen: View {
             }
             .buttonStyle(.borderless)
             .accessibilityLabel(recording.isLiked ? "Unlike song" : "Like song")
+        }
+    }
+
+    @MainActor
+    private func playSavedRecording(_ recording: TropLibraryV2Store.RecordingSummary) async {
+        guard !isStartingPlayback else { return }
+        isStartingPlayback = true
+        defer { isStartingPlayback = false }
+        do {
+            try await TropLibraryV2PlaybackRouter.playSaved(recording)
+        } catch is CancellationError {
+            return
+        } catch let error as TropLibraryV2PlaybackSourceError {
+            playbackMessage = error.localizedDescription
+        } catch {
+            playbackMessage = "Could not start this source. The saved song was not changed."
         }
     }
 
@@ -244,6 +281,8 @@ struct TropLibraryV2PlaylistScreen: View {
     @State private var tracks: [TropLibraryV2Store.PlaylistTrack] = []
     @State private var message: String?
     @State private var isAdding = false
+    @State private var isStartingPlayback = false
+    @State private var playbackMessage: String?
 
     var body: some View {
         List {
@@ -264,18 +303,27 @@ struct TropLibraryV2PlaylistScreen: View {
                         .foregroundStyle(.secondary)
                 }
                 ForEach(tracks, id: \.id) { track in
-                    HStack {
-                        Text("\(track.position + 1)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 24)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(track.title)
-                            if let artist = track.artist {
-                                Text(artist).font(.caption).foregroundStyle(.secondary)
+                    Button {
+                        Task { await playPlaylist(startingAt: track.id) }
+                    } label: {
+                        HStack {
+                            Text("\(track.position + 1)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 24)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(track.title)
+                                if let artist = track.artist {
+                                    Text(artist).font(.caption).foregroundStyle(.secondary)
+                                }
                             }
+                            Spacer()
+                            Image(systemName: "play.fill").foregroundStyle(.secondary)
                         }
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .disabled(isStartingPlayback)
                 }
             }
             if let message {
@@ -285,6 +333,14 @@ struct TropLibraryV2PlaylistScreen: View {
         .navigationTitle(playlist.name)
         .task { await refresh() }
         .refreshable { await refresh() }
+        .alert("Audio unavailable", isPresented: Binding(
+            get: { playbackMessage != nil },
+            set: { if !$0 { playbackMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(playbackMessage ?? "Your playlist remains saved.")
+        }
     }
 
     @MainActor
@@ -294,6 +350,25 @@ struct TropLibraryV2PlaylistScreen: View {
             message = nil
         } catch {
             message = "Could not load the playlist."
+        }
+    }
+
+    @MainActor
+    private func playPlaylist(startingAt entryID: String) async {
+        guard !isStartingPlayback,
+              let index = tracks.firstIndex(where: { $0.id == entryID }) else {
+            return
+        }
+        isStartingPlayback = true
+        defer { isStartingPlayback = false }
+        do {
+            try await TropLibraryV2PlaybackRouter.playPlaylist(tracks, startingAt: index)
+        } catch is CancellationError {
+            return
+        } catch let error as TropLibraryV2PlaybackSourceError {
+            playbackMessage = error.localizedDescription
+        } catch {
+            playbackMessage = "Could not start this playlist. All its songs remain saved."
         }
     }
 
