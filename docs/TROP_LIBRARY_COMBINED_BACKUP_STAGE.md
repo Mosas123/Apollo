@@ -2,8 +2,8 @@
 
 **Status:** schema/restore service remains internal on draft PR #80.
 An experimental, user-initiated **combined metadata export and read-only
-verification** UI is staged under Settings → Experimental library when Library
-V2 preview is enabled. There is **no restore button, no import action, no
+verification** UI is staged under Settings → Experimental library, including
+when Library V2 preview is OFF so users can back up legacy data first. There is **no restore button, no import action, no
 shipped recovery and no proof of safe device restoration**. The older
 standalone V2 export/inspect UI remains separate.
 
