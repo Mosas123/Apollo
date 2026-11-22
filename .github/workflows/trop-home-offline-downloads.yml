@@ -1,0 +1,20 @@
+name: Trop Home Offline Downloads Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Home/TropOfflineHomePolicy.swift"
+      - "Trop/Home/HomeScreenView.swift"
+      - "Trop/Library/DownloadsView.swift"
+      - "tests/Home/TropOfflineHomePolicyChecks.swift"
+      - "scripts/test-trop-home-offline-downloads.sh"
+      - ".github/workflows/trop-home-offline-downloads.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify downloads-only fallback and no-download offline screen
+        run: bash scripts/test-trop-home-offline-downloads.sh
