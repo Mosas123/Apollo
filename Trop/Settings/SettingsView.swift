@@ -31,6 +31,9 @@ struct SettingsView: View {
                 SettingsNavigationRow("Library Migration", icon: "arrow.triangle.2.circlepath") {
                     TropLibraryMigrationPreviewView()
                 }
+                SettingsNavigationRow("Library Backup", icon: "externaldrive") {
+                    TropLibraryBackupView()
+                }
                 SettingsNavigationRow("Downloads", icon: "arrow.down.circle.fill") {
                     DownloadSettingsView()
                 }

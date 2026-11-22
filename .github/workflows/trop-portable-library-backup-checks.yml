@@ -1,0 +1,22 @@
+name: Trop Portable Library Backup Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Core/LibrarySync/TropLibraryBackupArchive.swift"
+      - "Trop/Core/LibrarySync/TropLibraryBackupService.swift"
+      - "Trop/Settings/TropLibraryBackupView.swift"
+      - "Trop/Settings/SettingsView.swift"
+      - "Trop/Resources/Info.plist"
+      - "tests/LibrarySync/TropLibraryBackupArchiveChecks.swift"
+      - "scripts/test-trop-portable-library-backup.sh"
+      - ".github/workflows/trop-portable-library-backup-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify portable archive schema and privacy whitelist
+        run: bash scripts/test-trop-portable-library-backup.sh
