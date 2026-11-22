@@ -1,0 +1,17 @@
+name: Legacy YouTube Sync Data Safety Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Services/TropLibraryStore.swift"
+      - "scripts/test-legacy-remote-sync-safety.sh"
+      - ".github/workflows/legacy-remote-sync-safety-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Ensure remote refresh never removes Trop library saves
+        run: bash scripts/test-legacy-remote-sync-safety.sh
