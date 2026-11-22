@@ -56,6 +56,17 @@ restorable backup, complete playback experience or safe migration on an iPhone.
 ## Stage 4: user-confirmed migration
 
 - [ ] Dry-run difference counts, blocked rows and alias conflicts with NO writes.
+  **Staged on PR #80:** read-only TropLibraryV2MigrationDryRun scans all six
+  importer selection sets and existing V2 aliases/legacy membership ledger in
+  one GRDB read. It reports would-create/reuse counts, new/existing/deleted
+  playlist membership occurrences, orphan references, invalid metadata, alias
+  conflicts, incompatible stored relations and broken import ledgers. The
+  existing Settings → Library Migration preview displays these aggregate
+  results without exposing IDs or a write button. GRDB integration compares
+  preflight with real importer on fresh/replayed/tombstoned/malformed fixtures;
+  the migration preview check forbids SQL writes/provider calls. Pending HEAD
+  CI and iPhone preview QA. Even a zero-blocker report does **not** authorize
+  importing before a complete verified backup and safe restoration.
 - [ ] Require verified backup proof and explicit opt-in, then call the importer.
 - [ ] Verify source/target counts, entry order and recording identity, rerun
   idempotence, restart during import, rollback, and reversibility by toggling
