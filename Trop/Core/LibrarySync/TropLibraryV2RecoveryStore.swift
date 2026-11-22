@@ -174,6 +174,18 @@ enum TropLibraryV2RecoveryStore {
                 }
             }
 
+            // The v12 ledger keys are local INTEGER row IDs, not globally
+            // scoped identities. Refuse foreign legacy memberships until
+            // provenance includes an origin identifier in a future schema.
+            if !library.importLedger.isEmpty {
+                let legacyRows = try Int.fetchOne(
+                    db, sql: "SELECT COUNT(*) FROM playlist_song_map"
+                ) ?? 0
+                guard legacyRows == 0 else {
+                    throw TropLibraryV2RecoveryError.legacySourceConflict
+                }
+            }
+
             for item in library.items {
                 try db.execute(
                     sql: """
