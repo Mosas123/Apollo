@@ -1,8 +1,38 @@
 # Trop combined metadata archive — experimental stage
 
-**Status:** internal-only schema/service on draft PR #80. No new Settings
-control, no restore button and no shipped restoration. The verified iPhone
-export/inspect UI continues to use the existing V2 JSON format.
+**Status:** schema/restore service remains internal on draft PR #80.
+An experimental, user-initiated **combined metadata export and read-only
+verification** UI is staged under Settings → Experimental library when Library
+V2 preview is enabled. There is **no restore button, no import action, no
+shipped recovery and no proof of safe device restoration**. The older
+standalone V2 export/inspect UI remains separate.
+
+## Experimental Files export and verification (not restore)
+
+- A separate **Combined Metadata Snapshot** screen calls the existing
+  one-transaction combined export service, then verifies its format/checksum
+  and displays only aggregate counts before showing the Files exporter.
+- Users choose an export destination themselves. A second read-only verification
+  action opens a UIKit document picker and performs a **bounded 40 MiB + 1**
+  read in an isolated task; the file is never imported into a database.
+- An independent button can verify the newest combined snapshot saved under
+  **On My iPhone → Thrum** without depending on iOS File Provider callbacks.
+  This path skips directories, symbolic links and unrelated names, and reads
+  at most the archive limit. A pure Swift 6 fixture covers ordering/symlinks/
+  oversized files. The actual iPhone Files picker still requires QA.
+- The UI explicitly says this **is not a complete rescue backup**. It excludes
+  downloaded audio, local file paths, history and private provider credentials;
+  some source aliases are redacted for privacy. SHA-256 is not encryption.
+- Export, verification and their errors never call
+  `TropLibraryCombinedRestoreStore`, `TropLibraryV2LegacyImporter`,
+  CloudKit, a provider API or a database write. Existing library data is
+  unchanged. Activation of restoration remains blocked by separate gates.
+
+**Acceptance not yet met:** latest iOS Nightly, dedicated V2 recovery checks,
+read-only source checks and user-device export/verification QA must pass on
+the exact commit. The export UI is for a private experimental metadata copy,
+not authorization to erase the app, reinstall it, transfer devices or
+automatically migrate any old records.
 
 ## Why this exists
 
