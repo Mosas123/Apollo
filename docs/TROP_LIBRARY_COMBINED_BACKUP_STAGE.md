@@ -1,69 +1,53 @@
 # Trop combined metadata archive — experimental stage
 
-**Status:** schema/restore service remains internal on draft PR #80.
-An experimental, user-initiated **combined metadata export and read-only
-verification** UI is staged under Settings → Experimental library, including
-when Library V2 preview is OFF so users can back up legacy data first. There is **no restore button, no import action, no
-shipped recovery and no proof of safe device restoration**. The older
-standalone V2 export/inspect UI remains separate.
+**Status (draft PR #80):** Combined export and file verification have passed
+real iPhone QA. The isolated in-memory reconstruction of a real iPhone archive
+also passed, rebuilding **24 V2 recordings, 4 playlists, 10 playlist entries**
+without writing to the active library. This validates metadata restoration
+logic, **not** production device recovery or downloaded media.
 
-## Experimental Files export and verification (not restore)
+## Files backup and verified rehearsal
 
-- A separate **Combined Metadata Snapshot** screen calls the existing
-  one-transaction combined export service, then verifies its format/checksum
-  and displays only aggregate counts before showing the Files exporter.
-- Users choose an export destination themselves. A second read-only verification
-  action opens a UIKit document picker and performs a **bounded 40 MiB + 1**
-  read in an isolated task; the file is never imported into a database.
-- An independent button can verify the newest combined snapshot saved under
-  **On My iPhone → Thrum** without depending on iOS File Provider callbacks.
-  This path skips directories, symbolic links and unrelated names, and reads
-  at most the archive limit. A pure Swift 6 fixture covers ordering/symlinks/
-  oversized files. The actual iPhone Files picker still requires QA.
-- The UI explicitly says this **is not a complete rescue backup**. It excludes
-  downloaded audio, local file paths, history and private provider credentials;
-  some source aliases are redacted for privacy. SHA-256 is not encryption.
-- Export, verification and their errors never call
-  `TropLibraryCombinedRestoreStore`, `TropLibraryV2LegacyImporter`,
-  CloudKit, a provider API or a database write. Existing library data is
-  unchanged. Activation of restoration remains blocked by separate gates.
+- **Combined Metadata Snapshot** under Settings → Experimental library exports
+  the old+V2 metadata together in a single GRDB read transaction. The user
+  chooses a Files, iCloud Drive or other available document-provider location.
+- Both the UIKit Files picker and On My iPhone → Thrum local scanner can verify
+  the archive with a 40 MiB limit, checksum and strict metadata validators.
+- **Test latest saved copy in isolated memory** reconstructs the archive into
+  a temporary in-memory SQLite database with the actual app migration schema.
+  It verifies the restored records, ordering, dates and duplicate memberships
+  without reading or writing the live library. This passed real-device QA.
+- Neither operation includes downloaded audio, account logins, listening
+  history or private provider links; private aliases may be excluded. SHA-256
+  is neither encryption nor authentication. Keep an extra copy of the file.
 
-**Acceptance not yet met:** latest iOS Nightly, dedicated V2 recovery checks,
-read-only source checks and user-device export/verification QA must pass on
-the exact commit. The export UI is for a private experimental metadata copy,
-not authorization to erase the app, reinstall it, transfer devices or
-automatically migrate any old records.
+## Fresh-install-only restoration — not yet validated on a device
 
-## Isolated iPhone restore rehearsal (not real recovery)
+The experimental Combined Snapshot screen links to **Restore Library**, with
+all of these safety constraints:
 
-**Staged on draft PR #80, awaiting exact-HEAD CI and device QA.**
+1. An eligibility read checks that the database is persistent and **every**
+   protected legacy/V2/music/history/download table is empty. On the user's
+   existing 24-recording library the restore action **must remain disabled**.
+   The UI never offers a reset, replacement, or deletion.
+2. Only after eligibility does the user choose a combined archive with the
+   copy-mode UIKit document picker. A bounded file read verifies checksum,
+   format, record relationships and counts **before** a preview can appear.
+3. The user explicitly confirms the import after viewing summary counts and
+   a warning that no downloaded audio or private connections are recovered.
+4. The production `restoreIntoEmptyLibrary` performs fresh archive validation
+   and `TropLibraryCombinedRestorePreflight.requireEmpty` **inside one atomic
+   GRDB write transaction**. If anything was added between the UI preview
+   and confirmation, the transaction aborts without changing the database.
+5. Success reports saved metadata counts and refreshes the local library.
+   Failure does not invoke a reset, delete, remote sync or destructive merge.
 
-- The Combined Metadata Snapshot screen now has an explicit **Test latest
-  saved copy in isolated memory** button. It reads only the newest combined
-  snapshot from the app's Documents folder; it never deletes, resets, merges
-  or updates the user's library.
-- `TropLibraryCombinedRestoreRehearsal` first decodes/validates the archive.
-  It creates a brand-new **in-memory GRDB DatabaseQueue**, applies the same
-  production v1–v13 migration sequence used by the app, and executes the
-  *same restore transaction SQL* against that scratch database.
-- The sandbox rereads the restored metadata and checks source equality for
-  legacy rows, V2-owned items, ordered/duplicate playlist occurrences,
-  podcast relationships, radio, and provider alias redaction. It checks
-  the total live+foreign import lineage, not fragile device-local row IDs.
-  A second restore must reject the occupied scratch database.
-- The sandbox returns aggregate counts only; it logs no archive contents.
-  No scratch queue escapes the function. The production persistent
-  `DatabaseService.shared` is never accessed by the rehearsal.
-- CI includes a **synthetic 0 legacy / 24 V2 recordings / 10 playlist
-  occurrences** case modeled after on-device counts (not personal data),
-  plus a mixed legacy+V2 archive. Tests assert that the original source
-  database is unchanged.
-
-**Not yet proven:** rebuilding a *real* iPhone archive in the isolated
-rehearsal, behavior with large libraries/memory pressure, backgrounding
-and iOS Files-provider quirks. A successful sandbox rehearsal is NOT a
-restoration of user data and must never be treated as permission to erase
-an installation, reinstall Trop or enable real restore/migration.
+**Release gate:** This user-facing restore is currently staging-only on
+draft PR #80. It must pass exact-commit CI, an empty-container on-device
+restore/relaunch test, blocked-occupied-container tests and a Files-provider
+selection test **before** being considered ready. Do **not** delete or reinstall
+Trop to test this feature; the current installation cannot and should not
+be made eligible by erasing user data. iCloud Sync is separate future work.
 
 ## Why this exists
 
