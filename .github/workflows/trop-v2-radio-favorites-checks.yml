@@ -1,0 +1,23 @@
+name: Trop V2 Radio Favorites Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Core/LibrarySync/TropLibraryV2RadioStore.swift"
+      - "Trop/Database/DatabaseMigrations.swift"
+      - "Trop/Database/DatabaseService.swift"
+      - "Trop/Core/Radio/RadioBrowser.swift"
+      - "Trop/Core/Radio/RadioPlaybackCoordinator.swift"
+      - "Trop/Features/Radio/RadioView.swift"
+      - "Trop/Library/TropLibraryV2Screen.swift"
+      - "scripts/test-trop-v2-radio-favorites.sh"
+      - ".github/workflows/trop-v2-radio-favorites-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify local-only radio favorites and stable station lookup
+        run: bash scripts/test-trop-v2-radio-favorites.sh
