@@ -1,0 +1,19 @@
+name: Independent MusicBrainz Catalogue Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/Core/MusicSources/MusicCatalog.swift"
+      - "Trop/Core/MusicSources/MusicBrainzIdentityCatalog.swift"
+      - "tests/MusicSources/MusicBrainzIdentityCatalogChecks.swift"
+      - "scripts/test-musicbrainz-identity-catalog.sh"
+      - ".github/workflows/musicbrainz-identity-catalog-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check read-only catalogue parsing and independence
+        run: bash scripts/test-musicbrainz-identity-catalog.sh
