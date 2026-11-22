@@ -80,6 +80,36 @@ struct MusicAddonManagerChecks {
                 .first(where: { $0.key == "atmos" })?.default == "false"
         )
 
+        // Eclipse addons may offer identity-based /resolve without /search.
+        // This fixture intentionally contains NO account or token.
+        let resolverOnly = Data("""
+        {"id":"org.example.nebula","name":"Nebula-style Resolver",
+         "version":"1.0.0","resources":["stream","resolve","isrc"],
+         "types":["track"],"contentType":"music"}
+        """.utf8)
+        let resolverPackage = try MusicAddonPackage.parse(resolverOnly, from: beta)
+        precondition(resolverPackage.manifest.protocolKind == .stremio)
+        precondition(resolverPackage.manifest.stremio?.usesEclipseRouting == true)
+        precondition(resolverPackage.manifest.stremio?.offers("resolve") == true)
+        precondition(resolverPackage.manifest.stremio?.offers("search") == false)
+        precondition(resolverPackage.manifest.capabilities.contains(.stream))
+
+        // A declared Eclipse /search resource wins even if the manifest also
+        // has a traditional searchable catalog, avoiding silent wrong routing.
+        let mixed = Data("""
+        {"id":"org.example.eclipse","name":"Mixed Eclipse Catalog",
+         "version":"1.0.0","resources":["search","stream","catalog"],
+         "types":["track"],"contentType":"music",
+         "catalogs":[{"id":"top","type":"track",
+          "extra":[{"name":"search"}]}]}
+        """.utf8)
+        let mixedPackage = try MusicAddonPackage.parse(mixed, from: beta)
+        precondition(mixedPackage.manifest.stremio?.usesEclipseRouting == true)
+        precondition(mixedPackage.manifest.stremio?.offers("search") == true)
+
+        // A standard Stremio addon with only catalog search stays Stremio.
+        precondition(stremioPackage.manifest.stremio?.usesEclipseRouting == false)
+
         // Native Trop manifests remain installable.
         var registry = MusicAddonRegistry()
         try registry.install(data: first, from: alpha)
