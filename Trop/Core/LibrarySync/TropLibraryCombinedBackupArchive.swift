@@ -42,6 +42,17 @@ struct TropLibraryCombinedBackupSnapshot: Codable, Equatable, Sendable {
         let position: Int
     }
 
+    /// Optional public provider IDs from legacy tables. These are NOT
+    /// Trop-owned primary identities and never start a provider session.
+    struct LegacyAlbumSource: Codable, Equatable, Sendable {
+        let albumID: String
+        let sourcePlaylistID: String
+    }
+    struct LegacyArtistSource: Codable, Equatable, Sendable {
+        let artistID: String
+        let sourceChannelID: String
+    }
+
     let legacy: TropLibraryBackupSnapshot
     let libraryV2: TropLibraryV2RecoverySnapshot
     let legacyMemberships: [LegacyMembership]
@@ -50,6 +61,8 @@ struct TropLibraryCombinedBackupSnapshot: Codable, Equatable, Sendable {
     let relatedPodcasts: [RelatedPodcast]
     let relatedEpisodes: [RelatedEpisode]
     let podcastEpisodeMemberships: [PodcastEpisodeMembership]
+    let legacyAlbumSources: [LegacyAlbumSource]
+    let legacyArtistSources: [LegacyArtistSource]
 
     init(
         legacy: TropLibraryBackupSnapshot,
@@ -59,7 +72,9 @@ struct TropLibraryCombinedBackupSnapshot: Codable, Equatable, Sendable {
         foreignTombstones: [ForeignTombstone],
         relatedPodcasts: [RelatedPodcast] = [],
         relatedEpisodes: [RelatedEpisode] = [],
-        podcastEpisodeMemberships: [PodcastEpisodeMembership] = []
+        podcastEpisodeMemberships: [PodcastEpisodeMembership] = [],
+        legacyAlbumSources: [LegacyAlbumSource] = [],
+        legacyArtistSources: [LegacyArtistSource] = []
     ) {
         self.legacy = legacy
         self.libraryV2 = libraryV2
@@ -69,6 +84,8 @@ struct TropLibraryCombinedBackupSnapshot: Codable, Equatable, Sendable {
         self.relatedPodcasts = relatedPodcasts
         self.relatedEpisodes = relatedEpisodes
         self.podcastEpisodeMemberships = podcastEpisodeMemberships
+        self.legacyAlbumSources = legacyAlbumSources
+        self.legacyArtistSources = legacyArtistSources
     }
 }
 
@@ -94,7 +111,7 @@ enum TropLibraryCombinedBackupError: Error, Equatable, Sendable {
 /// foreign device without an explicit origin/provenance mapping.
 enum TropLibraryCombinedBackupArchive {
     static let format = "trop-library-combined-metadata"
-    static let version = 4
+    static let version = 5
     static let maximumBytes = 40 * 1_024 * 1_024
 
     private static func encoder() -> JSONEncoder {
@@ -182,6 +199,25 @@ enum TropLibraryCombinedBackupArchive {
                   linkKeys.insert(link.podcastID + ":" + link.episodeID).inserted
             else { throw TropLibraryCombinedBackupError.invalidPayload }
         }
+
+        // Provider source pointers must belong to saved legacy entities.
+        // They can point to a remote catalogue entry not in local playlists:
+        // never treat sourcePlaylistID or sourceChannelID as a local FK.
+        let albumIDs = Set(library.legacy.albums.map(\.id))
+        let artistIDs = Set(library.legacy.artists.map(\.id))
+        guard library.legacyAlbumSources.count + library.legacyArtistSources.count
+                <= TropLibraryBackupArchive.maximumRecords,
+              Set(library.legacyAlbumSources.map(\.albumID)).count
+                == library.legacyAlbumSources.count,
+              Set(library.legacyArtistSources.map(\.artistID)).count
+                == library.legacyArtistSources.count,
+              library.legacyAlbumSources.allSatisfy({
+                  albumIDs.contains($0.albumID) && validLegacyID($0.sourcePlaylistID)
+              }),
+              library.legacyArtistSources.allSatisfy({
+                  artistIDs.contains($0.artistID) && validLegacyID($0.sourceChannelID)
+              })
+        else { throw TropLibraryCombinedBackupError.invalidPayload }
 
         let ids = library.legacyMemberships.map(\.sourceRowID)
         guard ids.allSatisfy({ $0 > 0 }),

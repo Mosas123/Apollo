@@ -62,6 +62,21 @@ enum TropLibraryCombinedRestoreStore {
                     arguments: [artist.id, artist.name, artist.bookmarkedAt]
                 )
             }
+            // Provider pointers belong to saved album/artist rows. They are
+            // restored only as optional legacy metadata; V2 playback must
+            // resolve providers independently and work without YouTube.
+            for sourceLink in source.legacyAlbumSources {
+                try db.execute(
+                    sql: "UPDATE album SET playlist_id = ? WHERE id = ?",
+                    arguments: [sourceLink.sourcePlaylistID, sourceLink.albumID]
+                )
+            }
+            for sourceLink in source.legacyArtistSources {
+                try db.execute(
+                    sql: "UPDATE artist SET channel_id = ? WHERE id = ?",
+                    arguments: [sourceLink.sourceChannelID, sourceLink.artistID]
+                )
+            }
             for list in source.legacy.playlists {
                 try db.execute(
                     sql: """

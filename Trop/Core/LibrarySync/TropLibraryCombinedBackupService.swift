@@ -21,6 +21,8 @@ enum TropLibraryCombinedBackupService {
         let podcastEpisodeMemberships: Int
         let relatedPodcasts: Int
         let relatedEpisodes: Int
+        let legacyAlbumSources: Int
+        let legacyArtistSources: Int
     }
 
     static func preview(_ data: Data) throws -> Preview {
@@ -43,7 +45,9 @@ enum TropLibraryCombinedBackupService {
             foreignTombstones: library.foreignTombstones.count,
             podcastEpisodeMemberships: library.podcastEpisodeMemberships.count,
             relatedPodcasts: library.relatedPodcasts.count,
-            relatedEpisodes: library.relatedEpisodes.count
+            relatedEpisodes: library.relatedEpisodes.count,
+            legacyAlbumSources: library.legacyAlbumSources.count,
+            legacyArtistSources: library.legacyArtistSources.count
         )
     }
 
@@ -128,13 +132,39 @@ enum TropLibraryCombinedBackupService {
                     isPlayed: row["is_played"], savedAt: row["saved_at"]
                 )
             }
+            // These are optional provider-scoped hints, not mandatory
+            // YouTube/InnerTube accounts or local playlist foreign keys.
+            let albumSources = try Row.fetchAll(
+                db, sql: """
+                    SELECT id, playlist_id FROM album
+                    WHERE bookmarked_at IS NOT NULL AND playlist_id IS NOT NULL
+                    ORDER BY id
+                    """
+            ).map { row in
+                TropLibraryCombinedBackupSnapshot.LegacyAlbumSource(
+                    albumID: row["id"], sourcePlaylistID: row["playlist_id"]
+                )
+            }
+            let artistSources = try Row.fetchAll(
+                db, sql: """
+                    SELECT id, channel_id FROM artist
+                    WHERE bookmarked_at IS NOT NULL AND channel_id IS NOT NULL
+                    ORDER BY id
+                    """
+            ).map { row in
+                TropLibraryCombinedBackupSnapshot.LegacyArtistSource(
+                    artistID: row["id"], sourceChannelID: row["channel_id"]
+                )
+            }
             return TropLibraryCombinedBackupSnapshot(
                 legacy: legacy, libraryV2: v2,
                 legacyMemberships: memberships, originScope: originScope,
                 foreignTombstones: foreignTombstones,
                 relatedPodcasts: relatedPodcasts,
                 relatedEpisodes: relatedEpisodes,
-                podcastEpisodeMemberships: podcastLinks
+                podcastEpisodeMemberships: podcastLinks,
+                legacyAlbumSources: albumSources,
+                legacyArtistSources: artistSources
             )
         }
     }

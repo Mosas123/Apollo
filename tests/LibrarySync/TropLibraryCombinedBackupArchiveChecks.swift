@@ -17,7 +17,12 @@ enum TropLibraryCombinedBackupArchiveChecks {
                     isEpisode: false, createdAt: date
                 )
             ],
-            albums: [], artists: [],
+            albums: [
+                .init(id: "legacy-album-1", title: "Old Album", bookmarkedAt: date)
+            ],
+            artists: [
+                .init(id: "legacy-artist-1", name: "Old Artist", bookmarkedAt: date)
+            ],
             playlists: [
                 .init(
                     id: "legacy-playlist-1", name: "Old Playlist",
@@ -78,6 +83,12 @@ enum TropLibraryCombinedBackupArchiveChecks {
             ],
             podcastEpisodeMemberships: [
                 .init(podcastID: "podcast-unsaved", episodeID: "episode-unsaved", position: 3)
+            ],
+            legacyAlbumSources: [
+                .init(albumID: "legacy-album-1", sourcePlaylistID: "OL-album-source")
+            ],
+            legacyArtistSources: [
+                .init(artistID: "legacy-artist-1", sourceChannelID: "UC-channel-source")
             ]
         )
     }
@@ -146,6 +157,8 @@ enum TropLibraryCombinedBackupArchiveChecks {
         precondition(recovered.library.podcastEpisodeMemberships.count == 1)
         precondition(recovered.library.relatedPodcasts[0].subscribedAt == nil)
         precondition(recovered.library.relatedEpisodes[0].savedAt == nil)
+        precondition(recovered.library.legacyAlbumSources[0].sourcePlaylistID == "OL-album-source")
+        precondition(recovered.library.legacyArtistSources[0].sourceChannelID == "UC-channel-source")
 
         // Reject duplicate legacy origin row IDs even if song metadata agrees.
         let duplicated = TropLibraryCombinedBackupSnapshot(
@@ -388,6 +401,36 @@ enum TropLibraryCombinedBackupArchiveChecks {
             _ = try TropLibraryCombinedBackupArchive.encode(badPodcastLink)
             preconditionFailure("Missing legacy podcast metadata must be rejected")
         } catch TropLibraryCombinedBackupError.invalidPayload {}
-        print("Combined legacy+V2 archive, scoped tombstones and podcast link checks passed")
+        // Reject URLs, signed query parameters and unowned provider hints.
+        let badSource = TropLibraryCombinedBackupSnapshot(
+            legacy: original.legacy, libraryV2: original.libraryV2,
+            legacyMemberships: original.legacyMemberships,
+            originScope: original.originScope,
+            foreignTombstones: original.foreignTombstones,
+            legacyAlbumSources: [
+                .init(
+                    albumID: "legacy-album-1",
+                    sourcePlaylistID: "https://example.com/album?token=secret"
+                )
+            ]
+        )
+        do {
+            _ = try TropLibraryCombinedBackupArchive.encode(badSource)
+            preconditionFailure("Provider URL must be rejected")
+        } catch TropLibraryCombinedBackupError.invalidPayload {}
+        let unownedSource = TropLibraryCombinedBackupSnapshot(
+            legacy: original.legacy, libraryV2: original.libraryV2,
+            legacyMemberships: original.legacyMemberships,
+            originScope: original.originScope,
+            foreignTombstones: original.foreignTombstones,
+            legacyArtistSources: [
+                .init(artistID: "unknown-artist", sourceChannelID: "UC-foreign")
+            ]
+        )
+        do {
+            _ = try TropLibraryCombinedBackupArchive.encode(unownedSource)
+            preconditionFailure("Orphaned artist origin must be rejected")
+        } catch TropLibraryCombinedBackupError.invalidPayload {}
+        print("Combined V5 legacy provider links, podcasts and tombstones validated")
     }
 }

@@ -113,13 +113,13 @@ enum RecoveryFixture {
             try db.execute(sql: """
                 CREATE TABLE album (
                     id TEXT PRIMARY KEY, title TEXT NOT NULL,
-                    bookmarked_at DATETIME
+                    playlist_id TEXT, bookmarked_at DATETIME
                 )
                 """)
             try db.execute(sql: """
                 CREATE TABLE artist (
                     id TEXT PRIMARY KEY, name TEXT NOT NULL,
-                    bookmarked_at DATETIME
+                    channel_id TEXT, bookmarked_at DATETIME
                 )
                 """)
             try db.execute(sql: """
@@ -182,6 +182,22 @@ enum RecoveryFixture {
                     (id, playlist_id, song_id, position)
                 VALUES (11, 'old-playlist', 'legacy-keep', 0)
                 """)
+            // Saved albums/artists retain public source IDs even when their
+            // remote catalogue is not present as a local playlist.
+            try db.execute(
+                sql: """
+                    INSERT INTO album (id, title, playlist_id, bookmarked_at)
+                    VALUES ('legacy-album', 'Saved album', 'OL-album-source', ?)
+                    """,
+                arguments: [now]
+            )
+            try db.execute(
+                sql: """
+                    INSERT INTO artist (id, name, channel_id, bookmarked_at)
+                    VALUES ('legacy-artist', 'Saved artist', 'UC-channel-source', ?)
+                    """,
+                arguments: [now]
+            )
             // One saved/subscribed pair and one unflagged pair. Neither
             // legacy metadata state nor their ordering may be lost.
             try db.execute(
@@ -502,6 +518,12 @@ enum RecoveryFixture {
         precondition(combined.library.legacy.tracks.count == 1)
         precondition(combined.library.legacy.tracks[0].title == "Legacy song preserved")
         precondition(combined.library.legacy.playlists.count == 1)
+        precondition(combined.library.legacy.albums.count == 1)
+        precondition(combined.library.legacy.artists.count == 1)
+        precondition(combined.library.legacyAlbumSources.count == 1)
+        precondition(combined.library.legacyAlbumSources[0].sourcePlaylistID == "OL-album-source")
+        precondition(combined.library.legacyArtistSources.count == 1)
+        precondition(combined.library.legacyArtistSources[0].sourceChannelID == "UC-channel-source")
         precondition(combined.library.legacy.podcasts.count == 1)
         precondition(combined.library.legacy.episodes.count == 1)
         precondition(combined.library.relatedPodcasts.count == 1)
@@ -737,6 +759,14 @@ enum RecoveryFixture {
         let restoredCombined = try await TropLibraryCombinedBackupService.snapshot()
         precondition(restoredCombined.legacy.tracks.count == 1)
         precondition(restoredCombined.legacy.playlists.count == 1)
+        precondition(restoredCombined.legacy.albums == combined.library.legacy.albums)
+        precondition(restoredCombined.legacy.artists == combined.library.legacy.artists)
+        precondition(
+            restoredCombined.legacyAlbumSources == combined.library.legacyAlbumSources
+        )
+        precondition(
+            restoredCombined.legacyArtistSources == combined.library.legacyArtistSources
+        )
         precondition(restoredCombined.legacy.podcasts == combined.library.legacy.podcasts)
         precondition(restoredCombined.legacy.episodes == combined.library.legacy.episodes)
         precondition(restoredCombined.relatedPodcasts == combined.library.relatedPodcasts)
@@ -761,6 +791,8 @@ enum RecoveryFixture {
         let reexported = try await TropLibraryCombinedBackupService.export()
         let redecoded = try TropLibraryCombinedBackupArchive.decode(reexported)
         precondition(redecoded.library.foreignTombstones == restoredCombined.foreignTombstones)
+        precondition(redecoded.library.legacyAlbumSources == combined.library.legacyAlbumSources)
+        precondition(redecoded.library.legacyArtistSources == combined.library.legacyArtistSources)
         precondition(
             redecoded.library.podcastEpisodeMemberships
                 == combined.library.podcastEpisodeMemberships

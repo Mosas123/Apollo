@@ -19,7 +19,7 @@ It does not silently change the previous formats or move existing data.
 
 ## Transport contract
 
-- Format: `trop-library-combined-metadata`, version `4` (internal, not
+- Format: `trop-library-combined-metadata`, version `5` (internal, not
   released to users). Earlier combined v1/v2 prototypes were not shipped.
   The standalone legacy v1 and standalone Library V2 v2 formats are unchanged.
 - JSON with sorted keys, dates in milliseconds and SHA-256 over the canonical
@@ -27,7 +27,12 @@ It does not silently change the previous formats or move existing data.
 - Payload consists of `legacy` and `libraryV2` snapshot objects, the original
   `legacyMemberships`, a stable installation-local UUID `originScope`, and
   `foreignTombstones` scoped to their original installation.
-  V4 adds ordered `podcastEpisodeMemberships`, plus minimal metadata for
+  V5 additionally captures optional `legacyAlbumSources` (`album.playlist_id`)
+  and `legacyArtistSources` (`artist.channel_id`) as public source hints
+  owned by bookmarked legacy albums/artists. They are NOT local playlist
+  foreign keys, and V2 will not require the source provider to be enabled.
+  Signed URLs, query tokens and unsupported source identifiers are rejected.
+  V4 added ordered `podcastEpisodeMemberships`, plus minimal metadata for
   unsaved/unsubscribed referenced podcasts and episodes. This preserves
   the legacy `podcast_episode_map` without inventing saved/subscribed dates;
   its links must have existing parent and child records or export fails.
@@ -121,6 +126,15 @@ unsaved/unsubscribed items it references. GRDB fixtures check exact link order,
 all associated podcast/episode metadata, and the independent radio favorite
 `station_uuid`/name/date across restore and re-export; no radio stream URL
 is archived. These tests do not establish playback/Now Playing or iPhone QA.
+
+**Audit of album/artist source links (22 Nov):** real legacy migrations
+include `album.playlist_id` and `artist.channel_id`, which the legacy V1
+metadata-only backup does not capture. Experimental combined V5 preserves
+the public identifiers as optional provider references, never as canonical
+Trop IDs or required YouTube logins. GRDB fixtures now test these links
+across source export, isolated restore and re-export, alongside podcasts
+and radios. Private playlists, signatures, URL parameters, credentials
+and streaming manifests remain excluded.
 
 Before any public Restore action:
 
