@@ -35,5 +35,6 @@ grep -Fq 'FileLog.shared.beginNewLaunch()' Trop/TropApp.swift
 grep -Fq 'APP_LOG_SESSION_START build=' Trop/TropApp.swift
 grep -Fq 'self.prepareLaunchFileIfNeeded(url)' Trop/Utilities/Log.swift
 grep -Fq 'try Data().write(to: url, options: .atomic)' Trop/Utilities/Log.swift
+grep -Fq 'appendingPathComponent("log.previous.txt")' Trop/Utilities/Log.swift
 
 echo 'Trop log reset per process checks passed'
