@@ -15,6 +15,13 @@ swiftc -swift-version 6 -strict-concurrency=complete \
 # downloads use the existing DownloadsView playback path.
 grep -Fq 'v2HomeContent' Trop/Home/HomeScreenView.swift
 grep -Fq 'TropLibraryV2Store.recordings()' Trop/Home/HomeScreenView.swift
+# Saved V2 rows are interactive only through a source-aware router.
+# Unresolved metadata must never be handed straight to the legacy queue.
+grep -Fq 'TropLibraryV2PlaybackRouter.playSaved(recording)' Trop/Home/HomeScreenView.swift
+grep -Fq 'catch let error as TropLibraryV2PlaybackSourceError' \
+  Trop/Home/HomeScreenView.swift
+grep -Fq '.disabled(isStartingV2Playback)' Trop/Home/HomeScreenView.swift
+grep -Fq 'Audio unavailable' Trop/Home/HomeScreenView.swift
 grep -Fq 'TropLibraryV2Store.playlists()' Trop/Home/HomeScreenView.swift
 grep -Fq 'TropLibraryV2RadioStore.favorites()' Trop/Home/HomeScreenView.swift
 grep -Fq 'RadioPlaybackCoordinator.playSaved(' Trop/Home/HomeScreenView.swift
