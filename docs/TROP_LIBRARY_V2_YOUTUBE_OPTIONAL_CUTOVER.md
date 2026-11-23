@@ -219,6 +219,53 @@ not a failure of the successful Fénix metadata restore.
   IPA until a new CI-validated beta is installed and tested.** Never clear the
   restored database or silently re-enable YouTube fallback.
 
+## Trop Match — first integrated implementation (22 Nov 2026, PR #80 DRAFT)
+
+Trop Match is distinct from a music catalogue, source transport and ApoloEngine:
+
+- **Stable library identity:** recording UUIDs, likes, playlists, ordering,
+  downloaded files and metadata backups must never change because a provider
+  match is missing, rejected, or approved.
+- **Discovery:** when a saved song cannot be played with its current compatible
+  aliases, Trop queries the configured independent audio providers by title
+  and artist. The on-Play path uses a strict exact-recording classifier and
+  can create a provider alias automatically. It does not open a modal on a
+  normal Play tap. No automatic query of the YouTube Music catalogue.
+- **Version evidence:** matching uses normalized artist/title, version markers,
+  duration tolerance and release-title hints when provided by addons, Qobuz
+  and JioSaavn. Live/remix, suspicious release editions, unknown timings and
+  other plausible alternatives are **review-only**. An album cover image is
+  not authoritative edition metadata; test real-world false positives.
+- **Review UI:** the song's long-press menu opens *Review Audio Sources*,
+  separating verified candidates from *Review Alternatives*. Approving an
+  alternate requires a second explicit confirmation. Such links use
+  `source_scope=user-approved-alt`, preserving that they are NOT an
+  exact match. The original recording is NOT overwritten or re-identified.
+- **Multiple audio links:** `trop_v2_source_alias` retains existing source
+  rows and may link additional confirmed audio IDs (bounded; non-destructive,
+  conflict-guarded). Playback selects an exact source ahead of approved
+  alternatives; current quality preferences influence provider ranking.
+  This does **not** guarantee the actual bitrate/codec of an addon stream:
+  resolving the URL must still check its format before claiming CD, Hi-Res
+  or Atmos. Resolving a fresh provider link remains best effort.
+- **Optional YouTube audio:** off by default under Settings → Experimental
+  Library → YouTube as optional audio source. When enabled, a pre-existing,
+  valid saved YouTube video ID may be used as an audio transport for quality
+  modes permitting compressed audio. CD/Best FLAC never accept YouTube as
+  lossless. This is not a YouTube Music library, login, bootstrap or search;
+  newly imported provider-neutral recordings without a saved YouTube ID
+  cannot yet discover YouTube audio. No silent YouTube fallback.
+- **Future work / not delivered in this slice:** a resumable 480+-track
+  batch matcher on imports and addon changes, offline-safe playback fallback,
+  independent quality-capability proof per provider/codec, source health and
+  expiry, background throttling, changes while a song is playing, automatic
+  playlist rematching and full UI for importing/reviewing candidate sets.
+- **Validation gates:** strict Swift 6 tests cover exact vs live/remix, wrong
+  artist, duration mismatch, provider security, YouTube opt-in and source
+  choice; integrated iOS Nightly and real-device QA are required. Do not
+  tell the user to uninstall Thrum or claim this works on their phone until
+  the new beta has passed CI and device checks.
+
 ## Coupled implementation order — no extra user-facing IPA churn
 
 1. **Safety baseline:** finish PR #80 restore validations, portable backup,
