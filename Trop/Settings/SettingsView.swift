@@ -63,6 +63,9 @@ struct SettingsView: View {
                     TropLibraryCombinedBackupView()
                 }
                 if libraryV2PreviewEnabled {
+                    SettingsNavigationRow("Match Saved Music", icon: "music.note.list") {
+                        TropLibraryV2BatchMatchView()
+                    }
                     SettingsNavigationRow("Experimental V2 Snapshot", icon: "externaldrive") {
                         TropLibraryV2RecoveryView()
                     }
