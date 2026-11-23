@@ -179,6 +179,15 @@ struct TropLibraryV2Screen: View {
             .buttonStyle(.plain)
             .disabled(isStartingPlayback)
             .accessibilityLabel("Play \(recording.title)")
+            .contextMenu {
+                Button {
+                    audioSourceRequest = TropLibraryV2AudioSourceRequest(
+                        recording: recording
+                    )
+                } label: {
+                    Label("Review Audio Sources", systemImage: "link")
+                }
+            }
             Button {
                 Task { await setLiked(recording: recording, liked: !recording.isLiked) }
             } label: {
@@ -200,11 +209,7 @@ struct TropLibraryV2Screen: View {
         } catch is CancellationError {
             return
         } catch let error as TropLibraryV2PlaybackSourceError {
-            if error == .unavailable {
-                audioSourceRequest = TropLibraryV2AudioSourceRequest(recording: recording)
-            } else {
-                playbackMessage = error.localizedDescription
-            }
+            playbackMessage = error.localizedDescription
         } catch {
             playbackMessage = "Could not start this source. The saved song was not changed."
         }
