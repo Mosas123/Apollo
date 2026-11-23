@@ -271,6 +271,7 @@ struct TropLibraryV2MainStyleView: View {
             async let lists = TropLibraryV2Store.playlists()
             let (songs, userPlaylists) = try await (saved, lists)
             recordings = songs
+            TropLibraryV2Prelinker.shared.scheduleVisibleLibrary(songs)
             playlistCount = userPlaylists.count
             message = nil
         } catch {
@@ -506,6 +507,7 @@ private struct TropLibraryV2SongCollectionView: View {
     private func refresh() async {
         do {
             recordings = try await TropLibraryV2Store.recordings()
+            TropLibraryV2Prelinker.shared.scheduleVisibleLibrary(recordings)
             message = nil
         } catch {
             message = "Could not load saved songs."
