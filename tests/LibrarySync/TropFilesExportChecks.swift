@@ -84,11 +84,13 @@ struct TropFilesExportChecks {
         let exposed = try staged.files.map { try String(contentsOf: $0, encoding: .utf8) }
         precondition(!exposed.joined().contains("private.example"))
         precondition(!exposed.joined().contains("private_value"))
-        precondition(try String(
+        let preservedLog = try String(
             contentsOf: docs.appendingPathComponent("log.txt"),
             encoding: .utf8
-        ) == original)
-        precondition(try Data(contentsOf: song) == Data([0x66, 0x4C, 0x61, 0x43]))
+        )
+        let preservedAudio = try Data(contentsOf: song)
+        precondition(preservedLog == original)
+        precondition(preservedAudio == Data([0x66, 0x4C, 0x61, 0x43]))
         print("Trop Files exports passed: sandbox, no symlink escape, log redaction, read-only originals")
     }
 }
