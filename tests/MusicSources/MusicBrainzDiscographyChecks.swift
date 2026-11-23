@@ -73,7 +73,8 @@ struct MusicBrainzDiscographyChecks {
         precondition(tracks[1].id == recordID2)
         precondition(tracks[1].position == 2)
         precondition(tracks[1].durationSeconds == 191)
-        precondition(try await client.albumTracks(releaseGroupID: "invalid") == [])
+        let invalid = try await client.albumTracks(releaseGroupID: "invalid")
+        precondition(invalid.isEmpty)
         print("Independent artist discography and ordered album tracklist passed")
     }
 }
