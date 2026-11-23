@@ -63,7 +63,8 @@ struct TropGlobalMusicCatalogChecks {
         precondition(items[1].title == "Second Song")
         precondition(items[1].album == nil)
         precondition(items[0].id != items[1].id)
-        precondition(try await catalog.popularRecordings() == items)
+        let cached = try await catalog.popularRecordings()
+        precondition(cached == items)
         print("Global metadata discovery: public source, validation and cache passed")
     }
 }
