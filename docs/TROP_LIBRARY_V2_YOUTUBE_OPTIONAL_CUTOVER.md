@@ -219,6 +219,38 @@ not a failure of the successful Fénix metadata restore.
   IPA until a new CI-validated beta is installed and tested.** Never clear the
   restored database or silently re-enable YouTube fallback.
 
+## Trop Match — manual resumable batches (22 Nov 2026, PR #80 DRAFT)
+
+**Optional action:** In Settings → Experimental library (with V2 enabled)
+→ **Match Saved Music**. The user starts each batch deliberately; the app
+does not bulk-scan the whole collection on launch, login or app restore.
+
+- A batch scans **up to 8 unique saved recording UUIDs** in deterministic
+  sorted order, one recording/provider search group at a time. The user
+  may stop and later resume from the UUID cursor stored in local
+  `UserDefaults`. The cursor is saved after each completed attempt;
+  stopped/failed attempts are retried, rather than silently skipped.
+- Deleting a recording during the operation does not break pagination:
+  the next UUID greater than the cursor is used. Adding new saved music
+  triggers the normal small post-save opportunistic prelink; restarting
+  the manual scan is the user's explicit way to rescan older records.
+- This scan shares the prelinker with automatic post-save work so two
+  independent high-fanout searches do **not** hammer installed providers
+  in parallel. Provider search is best-effort and no remote failure
+  blocks local saving or browsing.
+- Recorded aliases are safe provider identifiers, **not URLs**; only
+  matching `exact` editions are saved after current-recording validation,
+  never a remix/live alternate without user consent. Search results,
+  Home, Explore and provider discovery do not bulk write Library.
+- The button **Restart Scan from Beginning** clears only the scan cursor;
+  it never deletes recordings, playlists, favorites, downloads or
+  confirmed source aliases. This is **not** a full unattended
+  background-import matcher and does not claim iOS background execution.
+- **QA gate:** run a partial batch, stop/relaunch and resume, confirm
+  numbering, source aliases, no duplicate playlists, no YouTube catalogue
+  dependency, no unintended audio play, quality changes and normal
+  playback. No user QA or signed IPA verification at implementation time.
+
 ## Trop Match — saved-library prelink slice (22 Nov 2026, PR #80 DRAFT)
 
 **Source of truth remains Library V2 metadata and UUID; these prelinks are
