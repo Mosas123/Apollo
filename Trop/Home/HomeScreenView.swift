@@ -44,6 +44,8 @@ struct HomeScreenView: View {
     @State private var v2Radios: [TropLibraryV2RadioStore.Favorite] = []
     @State private var v2HomeLoading = true
     @State private var v2HomeMessage: String?
+    @State private var v2PlaybackMessage: String?
+    @State private var isStartingV2Playback = false
 
     var body: some View {
         NavigationStack(path: $router.homePath) {
@@ -72,6 +74,14 @@ struct HomeScreenView: View {
             .frame(maxHeight: .infinity, alignment: .top)
             .toolbar(.hidden, for: .navigationBar)
             .detailRouteDestinations()
+            .alert("Audio unavailable", isPresented: Binding(
+                get: { v2PlaybackMessage != nil },
+                set: { if !$0 { v2PlaybackMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(v2PlaybackMessage ?? "Your library remains saved.")
+            }
             .onChange(of: pendingRoute) { _, route in
                 if let route {
                     router.homePath.append(route)
@@ -162,23 +172,32 @@ struct HomeScreenView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Recently saved").font(.headline)
                         ForEach(v2Recordings.prefix(12), id: \.id) { recording in
-                            HStack(spacing: 10) {
-                                Image(systemName: "music.note")
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(recording.title).lineLimit(1)
-                                    if let artist = recording.artist {
-                                        Text(artist).font(.caption)
-                                            .foregroundStyle(.secondary)
+                            Button {
+                                Task { await playSavedV2Recording(recording) }
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "music.note")
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(recording.title).lineLimit(1)
+                                        if let artist = recording.artist {
+                                            Text(artist).font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
                                     }
+                                    Spacer()
+                                    if recording.isLiked {
+                                        Image(systemName: "heart.fill")
+                                            .foregroundStyle(.red)
+                                    }
+                                    Image(systemName: "play.fill")
+                                        .foregroundStyle(settings.accentColor)
                                 }
-                                Spacer()
-                                if recording.isLiked {
-                                    Image(systemName: "heart.fill")
-                                        .foregroundStyle(.red)
-                                }
+                                .contentShape(Rectangle())
                             }
-                            // Playback needs a verified source alias;
-                            // never guess a YouTube ID from a Trop UUID.
+                            .buttonStyle(.plain)
+                            .disabled(isStartingV2Playback)
+                            // Trop UUID is NOT a playable ID. This always
+                            // resolves a provider alias before starting audio.
                         }
                     }
                     .padding(.horizontal, 16)
@@ -241,6 +260,24 @@ struct HomeScreenView: View {
         .scrollEdgeEffectHidden(true, for: .bottom)
         .task { await refreshV2Home() }
         .refreshable { await refreshV2Home() }
+    }
+
+    @MainActor
+    private func playSavedV2Recording(
+        _ recording: TropLibraryV2Store.RecordingSummary
+    ) async {
+        guard libraryV2PreviewEnabled, !isStartingV2Playback else { return }
+        isStartingV2Playback = true
+        defer { isStartingV2Playback = false }
+        do {
+            try await TropLibraryV2PlaybackRouter.playSaved(recording)
+        } catch is CancellationError {
+            return
+        } catch let error as TropLibraryV2PlaybackSourceError {
+            v2PlaybackMessage = error.localizedDescription
+        } catch {
+            v2PlaybackMessage = "This source could not play. Your saved song is unchanged."
+        }
     }
 
     @MainActor
