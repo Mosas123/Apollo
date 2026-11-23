@@ -97,11 +97,9 @@ enum TropLibraryV2IdentityPolicy {
 }
 
 
-/// The first V2 playback slice accepts only an explicitly saved, unambiguous
-/// provider-scoped audio ID. This intentionally does not infer one from title,
-/// artist, Trop UUID, a MusicBrainz metadata ID or a legacy YouTube video ID.
-/// YouTube audio can be added later behind an explicit opt-in and music-only
-/// provenance gate; it must never become an implicit fallback.
+/// One recording may have several provider links. Resolve the playable
+/// source deterministically for the current quality instead of conflating
+/// a Trop UUID with a provider track ID. No remote catalogue is queried here.
 enum TropLibraryV2PlaybackSourceError: Error, Equatable, LocalizedError {
     case unavailable
     case ambiguous
@@ -110,40 +108,94 @@ enum TropLibraryV2PlaybackSourceError: Error, Equatable, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unavailable:
-            return "This song has no verified independent audio source yet. It stays saved in your library."
+            return "No verified audio source is available right now. "
+                + "Your song stays saved. Review alternatives from its menu."
         case .ambiguous:
-            return "More than one audio source is linked to this song. Choose a source before playing."
+            return "Multiple editions need your approval. The song stays saved."
         case .incompatibleQuality:
-            return "This source does not offer the selected lossless quality. The song remains saved."
+            return "No linked source meets this audio-quality setting. "
+                + "Your song stays saved."
         }
     }
 }
 
 enum TropLibraryV2PlaybackSourcePolicy {
-    /// Only full-track sources with a dedicated non-YouTube playback route.
     private static let supportedProviders: Set<String> = [
         "audius", "qobuz", "jiosaavn", "addon"
     ]
+    private static let alternateScope = "user-approved-alt"
+
+    /// YouTube is an optional AUDIO transport for previously saved IDs,
+    /// never a mandatory catalogue or login dependency. Reject arbitrary
+    /// non-video strings, provider-specific IDs, URLs and query fragments.
+    private static func youtubeIDIsSafe(_ value: String) -> Bool {
+        value.utf8.count == 11 && value.utf8.allSatisfy {
+            (48...57).contains($0) || (65...90).contains($0)
+                || (97...122).contains($0) || $0 == 45 || $0 == 95
+        }
+    }
 
     static func playbackKey(
         for aliases: [TropLibraryV2SourceAlias],
-        requiresLossless: Bool = false
+        requiresLossless: Bool = false,
+        allowYouTubeAudio: Bool = false,
+        preferHigh: Bool = false
     ) throws -> String {
-        let candidates = Set(aliases.compactMap { alias -> String? in
-            guard alias.scope == "global",
-                  supportedProviders.contains(alias.provider) else { return nil }
-            return "\(alias.provider):\(alias.externalID)"
-        })
-        guard !candidates.isEmpty else {
+        struct Option {
+            let key: String
+            let provider: String
+            let isAlternate: Bool
+        }
+        let options: [Option] = aliases.compactMap { alias in
+            guard alias.scope == "global" || alias.scope == alternateScope else {
+                return nil
+            }
+            if supportedProviders.contains(alias.provider) {
+                return Option(
+                    key: "\(alias.provider):\(alias.externalID)",
+                    provider: alias.provider,
+                    isAlternate: alias.scope == alternateScope
+                )
+            }
+            if alias.provider == "youtube" && allowYouTubeAudio,
+               alias.scope == "global",
+               youtubeIDIsSafe(alias.externalID) {
+                return Option(
+                    key: alias.externalID, provider: "youtube",
+                    isAlternate: false
+                )
+            }
+            return nil
+        }
+        guard !options.isEmpty else {
             throw TropLibraryV2PlaybackSourceError.unavailable
         }
-        guard candidates.count == 1, let key = candidates.first else {
-            throw TropLibraryV2PlaybackSourceError.ambiguous
+        let eligible = options.filter {
+            !requiresLossless || $0.provider == "addon" || $0.provider == "qobuz"
         }
-        // Never silently play an explicitly lossy service in CD or lossless mode.
-        if requiresLossless, key.hasPrefix("audius:") || key.hasPrefix("jiosaavn:") {
+        guard !eligible.isEmpty else {
             throw TropLibraryV2PlaybackSourceError.incompatibleQuality
         }
-        return key
+        // Qobuz has an independently verified CD FLAC route; addon output
+        // still needs format verification when its stream is actually opened.
+        // Do not claim that a source supports Hi-Res or Atmos by its name.
+        let priority: [String]
+        if requiresLossless {
+            priority = ["qobuz", "addon"]
+        } else if preferHigh {
+            priority = ["qobuz", "addon", "jiosaavn", "audius", "youtube"]
+        } else {
+            priority = ["addon", "qobuz", "youtube", "jiosaavn", "audius"]
+        }
+        // Exact links win over expressly approved alternate versions.
+        return eligible.sorted {
+            if $0.isAlternate != $1.isAlternate {
+                return !$0.isAlternate
+            }
+            let left = priority.firstIndex(of: $0.provider) ?? priority.count
+            let right = priority.firstIndex(of: $1.provider) ?? priority.count
+            if left != right { return left < right }
+            return $0.key < $1.key
+        }[0].key
     }
 }
