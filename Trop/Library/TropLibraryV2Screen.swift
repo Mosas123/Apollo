@@ -155,9 +155,12 @@ struct TropLibraryV2Screen: View {
                 Task { await playSavedRecording(recording) }
             } label: {
                 HStack(spacing: 12) {
-                    Image(systemName: "music.note")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 30)
+                    TropLibraryV2ArtworkView(
+                        title: recording.title,
+                        artist: recording.artist,
+                        durationSeconds: recording.durationSeconds
+                    )
+                    .frame(width: 40, height: 40)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(recording.title).lineLimit(1)
                         if let artist = recording.artist {
@@ -311,6 +314,12 @@ struct TropLibraryV2PlaylistScreen: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .frame(width: 24)
+                            TropLibraryV2ArtworkView(
+                                title: track.title,
+                                artist: track.artist,
+                                durationSeconds: track.durationSeconds
+                            )
+                            .frame(width: 40, height: 40)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(track.title)
                                 if let artist = track.artist {
