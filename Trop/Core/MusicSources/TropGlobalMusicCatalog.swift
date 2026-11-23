@@ -30,6 +30,19 @@ struct TropGlobalRecording: Identifiable, Equatable, Sendable {
     }
 }
 
+struct TropGlobalArtist: Identifiable, Equatable, Sendable {
+    let id: String  // validated MusicBrainz artist MBID
+    let name: String
+    let listenCount: Int
+}
+
+struct TropGlobalReleaseGroup: Identifiable, Equatable, Sendable {
+    let id: String  // validated MusicBrainz release-group MBID
+    let title: String
+    let artist: String
+    let listenCount: Int
+}
+
 enum TropGlobalCatalogError: Error {
     case invalidResponse
     case unavailable
@@ -45,6 +58,8 @@ actor TropGlobalMusicCatalog {
     typealias Transport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
     private let transport: Transport
     private var cached: (updated: Date, items: [TropGlobalRecording])?
+    private var cachedArtists: (updated: Date, items: [TropGlobalArtist])?
+    private var cachedReleases: (updated: Date, items: [TropGlobalReleaseGroup])?
     private static let ttl: TimeInterval = 30 * 60
     private static let maximumBytes = 1024 * 1024
 
@@ -79,6 +94,153 @@ actor TropGlobalMusicCatalog {
         if let cached { return cached.items }
         if let failure { throw failure }
         return []
+    }
+
+    func popularArtists(forceRefresh: Bool = false) async throws
+        -> [TropGlobalArtist] {
+        if !forceRefresh, let cachedArtists,
+           Date().timeIntervalSince(cachedArtists.updated) < Self.ttl {
+            return cachedArtists.items
+        }
+        var failure: Error?
+        for period in ["week", "month"] {
+            do {
+                let page: SiteArtists = try await fetchSitewide(
+                    endpoint: "artists", period: period
+                )
+                var seen = Set<String>()
+                let items = page.payload.artists.compactMap { row -> TropGlobalArtist? in
+                    guard let id = row.artist_mbid.flatMap({
+                        UUID(uuidString: $0)?.uuidString.lowercased()
+                    }), row.listen_count > 0 else { return nil }
+                    let name = row.artist_name.trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    )
+                    guard (2...180).contains(name.count),
+                          seen.insert(id).inserted else { return nil }
+                    return TropGlobalArtist(
+                        id: id, name: name, listenCount: row.listen_count
+                    )
+                }
+                if !items.isEmpty {
+                    cachedArtists = (Date(), items)
+                    return items
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                failure = error
+            }
+        }
+        if let cachedArtists { return cachedArtists.items }
+        if let failure { throw failure }
+        return []
+    }
+
+    func popularReleaseGroups(forceRefresh: Bool = false) async throws
+        -> [TropGlobalReleaseGroup] {
+        if !forceRefresh, let cachedReleases,
+           Date().timeIntervalSince(cachedReleases.updated) < Self.ttl {
+            return cachedReleases.items
+        }
+        var failure: Error?
+        for period in ["week", "month"] {
+            do {
+                let page: SiteReleases = try await fetchSitewide(
+                    endpoint: "release-groups", period: period
+                )
+                var seen = Set<String>()
+                let items = page.payload.release_groups.compactMap {
+                    row -> TropGlobalReleaseGroup? in
+                    guard let id = row.release_group_mbid.flatMap({
+                        UUID(uuidString: $0)?.uuidString.lowercased()
+                    }), row.listen_count > 0 else { return nil }
+                    let title = row.release_group_name.trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    )
+                    let artist = row.artist_name.trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    )
+                    guard (2...180).contains(title.count),
+                          (2...180).contains(artist.count),
+                          seen.insert(id).inserted else { return nil }
+                    return TropGlobalReleaseGroup(
+                        id: id, title: title, artist: artist,
+                        listenCount: row.listen_count
+                    )
+                }
+                if !items.isEmpty {
+                    cachedReleases = (Date(), items)
+                    return items
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                failure = error
+            }
+        }
+        if let cachedReleases { return cachedReleases.items }
+        if let failure { throw failure }
+        return []
+    }
+
+    private func fetchSitewide<T: Decodable>(
+        endpoint: String, period: String
+    ) async throws -> T {
+        guard ["artists", "release-groups"].contains(endpoint),
+              var components = URLComponents(
+                string: "https://api.listenbrainz.org/1/stats/sitewide/\(endpoint)"
+              ) else { throw TropGlobalCatalogError.invalidResponse }
+        components.queryItems = [
+            URLQueryItem(name: "range", value: period),
+            URLQueryItem(name: "count", value: "60"),
+            URLQueryItem(name: "offset", value: "0")
+        ]
+        guard let url = components.url else {
+            throw TropGlobalCatalogError.invalidResponse
+        }
+        var request = URLRequest(url: url, timeoutInterval: 15)
+        request.setValue("Trop/1.0 (https://github.com/Mosas123/Trop)",
+                         forHTTPHeaderField: "User-Agent")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        try Task.checkCancellation()
+        let (data, response) = try await transport(request)
+        try Task.checkCancellation()
+        guard let http = response as? HTTPURLResponse else {
+            throw TropGlobalCatalogError.invalidResponse
+        }
+        guard http.statusCode == 200 else {
+            throw TropGlobalCatalogError.unavailable
+        }
+        guard data.count <= Self.maximumBytes else {
+            throw TropGlobalCatalogError.oversizedResponse
+        }
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    private struct SiteArtists: Decodable {
+        struct Payload: Decodable {
+            struct Artist: Decodable {
+                let artist_mbid: String?
+                let artist_name: String
+                let listen_count: Int
+            }
+            let artists: [Artist]
+        }
+        let payload: Payload
+    }
+
+    private struct SiteReleases: Decodable {
+        struct Payload: Decodable {
+            struct Release: Decodable {
+                let release_group_mbid: String?
+                let release_group_name: String
+                let artist_name: String
+                let listen_count: Int
+            }
+            let release_groups: [Release]
+        }
+        let payload: Payload
     }
 
     private func fetch(period: String) async throws -> [TropGlobalRecording] {
