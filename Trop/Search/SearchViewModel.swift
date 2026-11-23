@@ -569,7 +569,8 @@ final class SearchViewModel {
                         TropGlobalRecording(
                             id: $0.id.storageKey, title: $0.title,
                             artist: $0.artist, album: nil,
-                            listenCount: 0, source: "MusicBrainz"
+                            listenCount: 0, source: "MusicBrainz",
+                            durationSeconds: $0.durationSeconds
                         )
                     }
                 case .catalogAlbums(let items): catalogAlbums = items
