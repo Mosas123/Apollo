@@ -42,7 +42,7 @@ enum TropMatchCandidatePolicy {
                 return .unrelated
             }
         }
-        if suspectRelease(track.albumTitle), 
+        if suspectRelease(track.albumTitle),
            !suspectRelease(title) {
             return .review
         }
