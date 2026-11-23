@@ -13,6 +13,18 @@ swiftc -swift-version 6 -strict-concurrency=complete \
   -o "$tmp_dir/v2-combined-local-save-checks"
 "$tmp_dir/v2-combined-local-save-checks"
 
+# User-requested Files export is read-only. Validate downloaded audio paths,
+# symlink escapes, sanitization and original-file preservation on Swift 6.
+swiftc -swift-version 6 -strict-concurrency=complete \
+  Trop/Core/Storage/TropFilesExportPolicy.swift \
+  tests/LibrarySync/TropFilesExportChecks.swift \
+  -o "$tmp_dir/trop-files-export-checks"
+"$tmp_dir/trop-files-export-checks"
+swiftc -frontend -parse Trop/Settings/TropFilesExportView.swift
+grep -Fq 'TropFilesExportView()' Trop/Settings/StorageSettingsView.swift
+grep -Fq 'UIDocumentPickerViewController(' Trop/Settings/TropFilesExportView.swift
+grep -Fq 'asCopy: true' Trop/Settings/TropFilesExportView.swift
+
 # Portable Library V2 artwork must match independent recording metadata.
 swiftc -swift-version 6 -strict-concurrency=complete \
   Trop/Core/Metadata/TextMatch.swift \
