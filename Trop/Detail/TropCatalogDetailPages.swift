@@ -211,7 +211,8 @@ struct TropCatalogAlbumPage: View {
                     Text("Tracks")
                         .font(.title2.bold())
                         .padding(.horizontal, 16)
-                    ForEach(Array(tracks.enumerated()), id: \.offset) { _, track in
+                    ForEach(Array(tracks.enumerated()), id: \.offset) { indexed in
+                        let track = indexed.element
                         let recording = TropGlobalRecording(
                             id: "musicbrainz:recording:" + track.id,
                             title: track.title,
