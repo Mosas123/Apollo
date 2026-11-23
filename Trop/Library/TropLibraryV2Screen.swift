@@ -222,6 +222,7 @@ struct TropLibraryV2Screen: View {
             async let lists = TropLibraryV2Store.playlists()
             async let radios = TropLibraryV2RadioStore.favorites()
             recordings = try await saved
+            TropLibraryV2Prelinker.shared.scheduleVisibleLibrary(recordings)
             playlists = try await lists
             savedRadios = try await radios
             feedback = nil
