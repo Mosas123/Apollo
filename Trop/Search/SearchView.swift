@@ -345,101 +345,43 @@ struct SearchView: View {
                     }
                 }
 
-                // Global artist, album and recording identities must appear
-                // without requiring anything to be saved in Library V2.
-                if viewModel.showsCatalogArtists && !viewModel.catalogArtists.isEmpty {
-                    v2SectionHeader("Artists · MusicBrainz")
+                // Like a real music search: Top Results mixes public artist,
+                // track and album identities. None requires a saved V2 item.
+                if viewModel.showsV2TopResults {
+                    if !viewModel.catalogArtists.isEmpty
+                        || !viewModel.catalogRecordings.isEmpty
+                        || !viewModel.catalogAlbums.isEmpty {
+                        v2SectionHeader("Top Results")
+                        ForEach(viewModel.catalogArtists.prefix(1),
+                                id: \.id.storageKey) { artist in
+                            v2CatalogArtistRow(artist)
+                        }
+                        ForEach(viewModel.catalogRecordings.prefix(5)) { recording in
+                            v2CatalogRecordingRow(recording)
+                        }
+                        ForEach(viewModel.catalogAlbums.prefix(2),
+                                id: \.id.storageKey) { album in
+                            v2CatalogAlbumRow(album)
+                        }
+                    }
+                }
+
+                if viewModel.showsCatalogArtists {
+                    v2SectionHeader("Artists")
                     ForEach(viewModel.catalogArtists, id: \.id.storageKey) { artist in
-                        Button {
-                            selectedCatalogDetail = CatalogDetail(
-                                name: artist.name,
-                                subtitle: artist.disambiguation ?? "MusicBrainz artist",
-                                note: "Artist identity from MusicBrainz. Audio tracks are "
-                                    + "searched separately in the enabled providers.",
-                                searchQuery: artist.name
-                            )
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "person.crop.circle")
-                                    .font(.title2)
-                                    .frame(width: 52, height: 52)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(artist.name).foregroundStyle(.primary)
-                                    if let note = artist.disambiguation {
-                                        Text(note).font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.horizontal, 16)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
+                        v2CatalogArtistRow(artist)
                     }
                 }
-                if viewModel.showsCatalogAlbums && !viewModel.catalogAlbums.isEmpty {
-                    v2SectionHeader("Albums · MusicBrainz")
+                if viewModel.showsCatalogAlbums {
+                    v2SectionHeader("Albums")
                     ForEach(viewModel.catalogAlbums, id: \.id.storageKey) { album in
-                        Button {
-                            selectedCatalogDetail = CatalogDetail(
-                                name: album.title, subtitle: album.artist,
-                                note: "Album identity from MusicBrainz. "
-                                    + "This is metadata, not a verified audio release.",
-                                searchQuery: album.artist + " " + album.title
-                            )
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "square.stack")
-                                    .font(.title2)
-                                    .frame(width: 52, height: 52)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(album.title).foregroundStyle(.primary)
-                                    Text(album.artist).font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.horizontal, 16)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
+                        v2CatalogAlbumRow(album)
                     }
                 }
-                if viewModel.showsCatalogRecordings
-                    && !viewModel.catalogRecordings.isEmpty {
-                    v2SectionHeader("Songs · MusicBrainz")
+                if viewModel.showsCatalogRecordings {
+                    v2SectionHeader("Songs")
                     ForEach(viewModel.catalogRecordings) { recording in
-                        Button {
-                            selectedCatalogRecording = recording
-                        } label: {
-                            HStack(spacing: 12) {
-                                TropLibraryV2ArtworkView(
-                                    title: recording.title,
-                                    artist: recording.artist,
-                                    durationSeconds: 0
-                                )
-                                .frame(width: 52, height: 52)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(recording.title).foregroundStyle(.primary)
-                                        .lineLimit(1)
-                                    Text(recording.artist)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.horizontal, 16)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
+                        v2CatalogRecordingRow(recording)
                     }
                 }
 
@@ -481,6 +423,117 @@ struct SearchView: View {
         }
         .scrollIndicators(.automatic)
         .miniPlayerTracksScroll(headerHidden: $headerHidden).scrollEdgeEffectHidden(true, for: .bottom)
+    }
+
+    private func v2CatalogArtistRow(_ artist: MusicBrainzArtist) -> some View {
+        Button {
+            selectedCatalogDetail = CatalogDetail(
+                name: artist.name,
+                subtitle: artist.disambiguation ?? "Artist",
+                note: "Artist identity from MusicBrainz. Audio tracks are "
+                    + "searched separately using enabled providers.",
+                searchQuery: artist.name
+            )
+        } label: {
+            HStack(spacing: 12) {
+                V2CatalogArtistArtwork(
+                    name: artist.name,
+                    artistID: artist.id.mbid,
+                    referenceTracks: viewModel.catalogRecordings.filter {
+                        TextMatch.artistsMatch($0.artist, artist.name)
+                    }.prefix(5).map(\.title)
+                )
+                .frame(width: 52, height: 52)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(artist.name)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text("Artist")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func v2CatalogAlbumRow(_ album: MusicBrainzAlbum) -> some View {
+        Button {
+            selectedCatalogDetail = CatalogDetail(
+                name: album.title, subtitle: album.artist,
+                note: "Album identity from MusicBrainz. "
+                    + "Metadata does not imply available audio.",
+                searchQuery: album.artist + " " + album.title
+            )
+        } label: {
+            HStack(spacing: 12) {
+                V2CatalogAlbumArtwork(title: album.title, artist: album.artist)
+                    .frame(width: 52, height: 52)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(album.title)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text("Album · " + album.artist)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func v2CatalogRecordingRow(_ recording: TropGlobalRecording) -> some View {
+        Button {
+            selectedCatalogRecording = recording
+        } label: {
+            HStack(spacing: 12) {
+                TropLibraryV2ArtworkView(
+                    title: recording.title,
+                    artist: recording.artist,
+                    durationSeconds: 0
+                )
+                .frame(width: 52, height: 52)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(recording.title)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text("Song · " + recording.artist)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Image(systemName: "ellipsis")
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                selectedCatalogRecording = recording
+            } label: {
+                Label("Play or save", systemImage: "ellipsis.circle")
+            }
+        }
     }
 
     /// Library V2 search never converts local UUIDs into video-backed YTItems.
@@ -786,11 +839,12 @@ struct SearchView: View {
 
     private var filterChips: some View {
         FilterChipBar(
-            items: ["All Results"] + viewModel.availableFilters,
+            items: [TropLibraryV2AccountIsolation.isEnabled
+                ? "Top Results" : "All Results"] + viewModel.availableFilters,
             id: \.self,
             title: { $0 },
             isSelected: { filter in
-                if filter == "All Results" {
+                if filter == "All Results" || filter == "Top Results" {
                     return viewModel.selectedSectionFilter == nil && !viewModel.isShowingLibrary
                 }
                 return filter == "Library"
