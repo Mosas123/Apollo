@@ -40,7 +40,7 @@ enum TropLibraryV2PrelinkPolicy {
         )
         var perProvider: [String: Int] = [:]
         let existing = existingAliases.filter {
-            independentProviders.contains($0.provider)
+            independentProviders.contains($0.provider) && $0.scope == "global"
         }
         for alias in existing {
             perProvider[alias.provider, default: 0] += 1
