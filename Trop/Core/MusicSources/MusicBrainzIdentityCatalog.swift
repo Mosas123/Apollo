@@ -111,6 +111,24 @@ struct MusicBrainzIdentityCatalog: Sendable {
         guard !title.isEmpty else { return [] }
         let term = "recording:\(Self.quoted(title))"
             + (artist.isEmpty ? "" : " AND artist:\(Self.quoted(artist))")
+        return try await matchingRecordings(term: term, limit: limit)
+    }
+
+    /// Global artist searches must also find music by that performer, even
+    /// when the typed phrase is not part of any track's title.
+    func searchRecordingsByArtist(
+        artist: String, limit: Int = 25
+    ) async throws -> [MusicBrainzRecording] {
+        let artist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard artist.count >= 2 else { return [] }
+        return try await matchingRecordings(
+            term: "artist:\(Self.quoted(artist))", limit: limit
+        )
+    }
+
+    private func matchingRecordings(
+        term: String, limit: Int
+    ) async throws -> [MusicBrainzRecording] {
         let page: RecordingPage = try await search(entity: "recording", term: term, limit: limit)
         var seen = Set<String>()
         return page.recordings.compactMap { item in
