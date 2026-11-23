@@ -427,12 +427,18 @@ enum TropLibraryV2Store {
     static func linkConfirmedAudioSource(
         toRecordingID rawID: String,
         track: MusicCatalogTrack,
-        requiresLossless: Bool
+        requiresLossless: Bool,
+        userApprovedAlternate: Bool = false
     ) async throws {
         let id = try TropLibraryV2IdentityPolicy.checkedID(rawID)
-        guard let alias = TropLibraryV2AudioMatchPolicy.alias(for: track) else {
+        guard let sourceAlias = TropLibraryV2AudioMatchPolicy.alias(for: track) else {
             throw TropLibraryV2AudioLinkError.notVerified
         }
+        let scope = userApprovedAlternate ? "user-approved-alt" : "global"
+        let alias = try TropLibraryV2SourceAlias(
+            provider: sourceAlias.provider, scope: scope,
+            externalID: sourceAlias.externalID
+        )
         let newAliasID = TropLibraryV2IdentityPolicy.newID()
         try await DatabaseService.shared.write { db in
             guard let row = try Row.fetchOne(
@@ -450,10 +456,13 @@ enum TropLibraryV2Store {
             let title: String = row["title"]
             let artist: String? = row["artist_or_author"]
             let duration: Int = row["duration_seconds"]
-            guard TropLibraryV2AudioMatchPolicy.accepts(
+            let classification = TropMatchCandidatePolicy.classify(
                 title: title, artist: artist, durationSeconds: duration,
                 track: track, requiresLossless: requiresLossless
-            ) else { throw TropLibraryV2AudioLinkError.notVerified }
+            )
+            guard classification == .exact
+                    || (userApprovedAlternate && classification == .review)
+            else { throw TropLibraryV2AudioLinkError.notVerified }
 
             let currentOwner = try String.fetchOne(
                 db,
@@ -471,19 +480,18 @@ enum TropLibraryV2Store {
                 return // Already linked: no duplicate row or side effects.
             }
 
-            // Today the player accepts only a single independent source.
-            // Do not create an ambiguous set or erase an existing preference.
+            // Keep multiple verified sources, without replacing old links.
+            // Cap growth if an addon returns unstable opaque IDs.
             let other = try Int.fetchOne(
                 db,
                 sql: """
                     SELECT COUNT(*) FROM trop_v2_source_alias
                     WHERE item_id = ? AND kind = 'recording'
-                      AND source_scope = 'global'
                       AND provider IN ('audius', 'qobuz', 'jiosaavn', 'addon')
                     """,
                 arguments: [id]
             ) ?? 0
-            guard other == 0 else {
+            guard other < 12 else {
                 throw TropLibraryV2AudioLinkError.existingSource
             }
             try db.execute(
