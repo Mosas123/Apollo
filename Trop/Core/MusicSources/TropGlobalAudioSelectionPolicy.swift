@@ -12,7 +12,7 @@ enum TropGlobalAudioSelectionPolicy {
         // Known-duration recordings must use the existing strict exact matcher.
         guard (recording.durationSeconds ?? 0) <= 0 else { return nil }
         let safe = reviews.filter { track in
-            guard track.isStreamable, track.durationSeconds > 0,
+            guard track.isStreamable,
                   TextMatch.recordingsMatch(recording.title, track.title),
                   TextMatch.normalizeArtist(recording.artist)
                     == TextMatch.normalizeArtist(track.artist),
@@ -32,13 +32,19 @@ enum TropGlobalAudioSelectionPolicy {
                 return false
             }
             let expected = TextMatch.normalize(recording.album ?? "")
-            return expected.isEmpty || release.isEmpty || expected == release
+            guard expected.isEmpty || release.isEmpty || expected == release
+            else { return false }
+            // Missing timing is acceptable only when an independent album
+            // title confirms the same release; never trust two empty fields.
+            return track.durationSeconds > 0
+                || (!expected.isEmpty && expected == release)
         }
         guard let first = safe.first else { return nil }
         // Different run times for an unknown recording may be different edits.
         // If providers disagree strongly, request explicit version review.
         guard safe.allSatisfy({
-            abs($0.durationSeconds - first.durationSeconds) <= 15
+            $0.durationSeconds <= 0 || first.durationSeconds <= 0
+                || abs($0.durationSeconds - first.durationSeconds) <= 15
         }) else { return nil }
         return first
     }
