@@ -11,7 +11,8 @@ import OSLog
 /// Appends log lines to Documents/log.txt (exposed as Trop/log.txt in the
 /// Files app) so issues that only show up on-device can be diagnosed without
 /// attaching to Xcode. Users can share this file when reporting bugs. The
-/// file rotates itself once it exceeds ~1 MB.
+/// log starts empty once per app process launch, retains one prior session in
+/// log.previous.txt for crash recovery, and rotates at ~1 MB.
 final class FileLog: @unchecked Sendable {
     static let shared = FileLog()
 
@@ -21,6 +22,9 @@ final class FileLog: @unchecked Sendable {
     // Only touched from `queue`.
     private var handle: FileHandle?
     private var currentSize = 0
+    // Queue-confined: an earlier logger can run before TropApp.init, so the
+    // first append also prepares the session if startup has not done so yet.
+    private var launchPrepared = false
 
     var fileURL: URL? {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
@@ -30,9 +34,47 @@ final class FileLog: @unchecked Sendable {
 
     private init() {}
 
+    /// One reset per process, not per scene activation or return from background.
+    /// Synchronous with pending writes to avoid replacing a live file handle.
+    /// If logging happens before TropApp.init, the first append performs the
+    /// same reset and this method will not erase those early launch lines.
+    func beginNewLaunch() {
+        queue.sync {
+            guard let url = self.fileURL else { return }
+            _ = self.prepareLaunchFileIfNeeded(url)
+        }
+    }
+
+    /// Runs only on the serial file queue. Close the writer before atomically
+    /// replacing the previous process's log, then reopen on first append.
+    /// Keep at most one previous session so a crash remains diagnosable after
+    /// relaunch without mixing old messages into the fresh log.
+    /// Never append to stale log data if the reset failed.
+    private func prepareLaunchFileIfNeeded(_ url: URL) -> Bool {
+        guard !launchPrepared else { return true }
+        try? handle?.close()
+        handle = nil
+
+        if let oldLog = try? Data(contentsOf: url), !oldLog.isEmpty {
+            let previousURL = url.deletingLastPathComponent()
+                .appendingPathComponent("log.previous.txt")
+            // A backup failure must not prevent this launch from starting.
+            try? oldLog.write(to: previousURL, options: .atomic)
+        }
+        do {
+            try Data().write(to: url, options: .atomic)
+            currentSize = 0
+            launchPrepared = true
+            return true
+        } catch {
+            return false
+        }
+    }
+
     func append(_ category: String, _ level: String, _ message: String) {
         queue.async { [weak self] in
-            guard let self, let url = self.fileURL else { return }
+            guard let self, let url = self.fileURL,
+                  self.prepareLaunchFileIfNeeded(url) else { return }
             let stamp = Self.formatter.string(from: Date())
             let line = "\(stamp) [\(level)][\(category)] \(message)\n"
             guard let data = line.data(using: .utf8) else { return }

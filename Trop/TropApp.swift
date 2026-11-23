@@ -14,6 +14,11 @@ struct TropApp: App {
     @State private var settings = SettingsStore.shared
 
     init() {
+        // New process = clean Documents/log.txt; foreground transitions do not
+        // reset it. FileLog also handles any messages emitted before this init.
+        FileLog.shared.beginNewLaunch()
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
+        Log.player.info("APP_LOG_SESSION_START build=\(build)")
         configureNuke()
         configureURLCache()
         ensureDirectories()

@@ -1559,7 +1559,9 @@ actor PlaybackManager {
             intentGeneration: intentGeneration,
             sourceMIMEType: audioResult.mimeType,
             isAtmos: audioResult.audioQuality.lowercased().contains("atmos"),
-            bypassSponsorBlock: audioResult.videoId != videoId
+            bypassSponsorBlock: externalSource
+                || !SponsorBlockSkipPolicy.allowsSource(clientName: audioResult.clientName)
+                || audioResult.videoId != videoId
                 || queueSong?.contentKind == .episode
                 || queueSong?.contentKind == .podcast
         )

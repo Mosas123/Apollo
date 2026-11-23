@@ -151,8 +151,7 @@ actor MusicAddonClient {
         // NullBeat (and other Eclipse addons) also publish browse catalogs with
         // no search extra; the `search` resource is what tells them apart from
         // Stremio addons, which always search through a catalog.
-        self.eclipseMode = descriptor.resources.contains { $0.name == "search" }
-            && searchable.isEmpty
+        self.eclipseMode = descriptor.usesEclipseRouting
     }
 
     var installationKey: String { installation.key }
@@ -180,6 +179,10 @@ actor MusicAddonClient {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return [] }
         if eclipseMode {
+            // A resolver-only Eclipse addon may have no /search route.
+            guard installation.manifest.stremio?.offers("search") == true else {
+                return []
+            }
             return try await eclipseSearch(term, limit: limit)
         }
         guard !searchCatalogs.isEmpty else { return [] }
@@ -287,9 +290,67 @@ actor MusicAddonClient {
         }
     }
 
+    /// Resolve a recording through the explicit Eclipse identity API before
+    /// launching multiple fuzzy text searches. An addon that declares only
+    /// "resolve" can still provide audio to Trop's normal playback queue.
+    /// Caller must independently verify title, artist and duration before
+    /// trusting the returned track ID; no URL is stored or executed here.
+    func resolveIdentity(
+        title: String,
+        artist: String,
+        durationSeconds: Int?
+    ) async -> AddonTrack? {
+        guard eclipseMode,
+              installation.manifest.stremio?.offers("resolve") == true,
+              !title.isEmpty, !artist.isEmpty else { return nil }
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("resolve"),
+            resolvingAgainstBaseURL: false
+        )
+        var query = [
+            URLQueryItem(name: "title", value: title),
+            URLQueryItem(name: "artist", value: artist)
+        ]
+        if let durationSeconds, durationSeconds > 0,
+           durationSeconds <= Int.max / 1_000 {
+            query.append(URLQueryItem(
+                name: "durationMs", value: String(durationSeconds * 1_000)
+            ))
+        }
+        components?.queryItems = query
+        guard let url = components?.url,
+              let data = await fetch(url),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let root = object as? [String: Any],
+              let item = root["item"] as? [String: Any],
+              let id = item["id"] as? String, !id.isEmpty,
+              let resolvedTitle = item["title"] as? String,
+              let resolvedArtist = item["artist"] as? String,
+              !resolvedTitle.isEmpty, !resolvedArtist.isEmpty else {
+            return nil
+        }
+        let type = ((item["type"] as? String) ?? "track").lowercased()
+        guard isMusicItemType(type) else { return nil }
+        let duration: Int? = Self.parseDurationSeconds(item["duration"])
+            ?? (item["durationMs"] as? Int).map { $0 / 1_000 }
+        let poster = item["artworkURL"] as? String
+        return AddonTrack(
+            installationKey: installation.key,
+            type: type,
+            id: id,
+            title: resolvedTitle,
+            poster: poster.flatMap(URL.init(string:)),
+            detail: item["album"] as? String,
+            artist: resolvedArtist,
+            album: item["album"] as? String,
+            durationSeconds: duration
+        )
+    }
+
     /// Albums returned by the same search call (Eclipse addons only).
     func searchAlbums(_ query: String, limit: Int = 8) async -> [AddonAlbum] {
-        guard eclipseMode else { return [] }
+        guard eclipseMode,
+              installation.manifest.stremio?.offers("search") == true else { return [] }
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return [] }
         var components = URLComponents(
@@ -322,10 +383,11 @@ actor MusicAddonClient {
     /// Full track list for an album (Eclipse addons cap it at 20 tracks).
     func albumTracks(id: String) async throws -> [AddonTrack] {
         guard eclipseMode,
-              let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+              let url = EclipseAddonURL.resource(
+                baseURL: baseURL, resource: "album", id: id
+              ) else {
             return []
         }
-        let url = baseURL.appendingPathComponent("album").appendingPathComponent(encoded)
         guard let data = await cachedFetch(url, key: "album|\(url.absoluteString)"),
               let object = try? JSONSerialization.jsonObject(with: data),
               let root = object as? [String: Any],
@@ -370,23 +432,21 @@ actor MusicAddonClient {
         preferAtmos: Bool,
         quality: AddonStreamQuality
     ) async throws -> AddonStream {
-        guard let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
-            throw MusicAddonClientError.invalidURL
-        }
         // Addons that carry Dolby Atmos copies (NullBeat) switch between the
         // Atmos and the plain FLAC master with this flag.
-        var components = URLComponents(
-            url: baseURL.appendingPathComponent("stream").appendingPathComponent(encoded),
-            resolvingAgainstBaseURL: false
-        )
-        components?.queryItems = [
-            // NullBeat expects a boolean here; "on"/"off" silently fell back
-            // to FLAC, so the Atmos toggle never worked.
-            URLQueryItem(name: "atmos", value: preferAtmos ? "true" : "false"),
-            URLQueryItem(name: "quality", value: quality.rawValue)
-        ]
-        let url = components?.url
-            ?? baseURL.appendingPathComponent("stream").appendingPathComponent(encoded)
+        // Encode the track ID exactly once; using an already percent-escaped
+        // ID with URL.appendingPathComponent double-encodes ':' into '%253A'.
+        guard let url = EclipseAddonURL.resource(
+            baseURL: baseURL,
+            resource: "stream",
+            id: id,
+            queryItems: [
+                URLQueryItem(name: "atmos", value: preferAtmos ? "true" : "false"),
+                URLQueryItem(name: "quality", value: quality.rawValue)
+            ]
+        ) else {
+            throw MusicAddonClientError.invalidURL
+        }
         guard let data = await fetch(url),
               let object = try? JSONSerialization.jsonObject(with: data),
               let root = object as? [String: Any],

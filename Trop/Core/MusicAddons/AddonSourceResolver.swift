@@ -247,6 +247,25 @@ enum AddonSourceResolver {
         preferHiRes: Bool
     ) async -> (Match, Int)? {
         guard let client = try? MusicAddonClient(installation: installation) else { return nil }
+        // The official Eclipse /resolve endpoint matches the recording
+        // before expensive text queries, and also supports addons with no
+        // /search route. Keep Trop's independent metadata verification:
+        // a provider response alone must never silently switch editions.
+        if let resolved = await client.resolveIdentity(
+            title: criteria.title,
+            artist: criteria.artist,
+            durationSeconds: criteria.duration
+        ), Self.verified(resolved, for: criteria),
+           let exact = await resolveBest(
+               [resolved],
+               in: client,
+               requireCD: requireCD,
+               preferAtmos: preferAtmos,
+               preferHiRes: preferHiRes
+           ) {
+            return exact
+        }
+
         let hasAlbum = !(criteria.album ?? "").isEmpty
 
         var collected: [AddonTrack] = []

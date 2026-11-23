@@ -1,0 +1,20 @@
+name: SponsorBlock Provider Provenance Checks
+
+on:
+  pull_request:
+    paths:
+      - "Trop/SponsorBlock/SponsorBlockIntegration.swift"
+      - "Trop/SponsorBlock/SponsorBlockSkipPolicy.swift"
+      - "Trop/Audio/PlaybackManager.swift"
+      - "tests/SponsorBlock/SponsorBlockSourceScopeChecks.swift"
+      - "scripts/test-sponsorblock-source-scope.sh"
+      - ".github/workflows/sponsorblock-source-scope-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify SponsorBlock only seeks original YouTube timeline
+        run: bash scripts/test-sponsorblock-source-scope.sh
