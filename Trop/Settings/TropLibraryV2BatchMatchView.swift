@@ -5,6 +5,8 @@ import SwiftUI
 struct TropLibraryV2BatchMatchView: View {
     @State private var processed = 0
     @State private var total = 0
+    @State private var independentlyLinked = 0
+    @State private var coverageAvailable = false
     @State private var isRunning = false
     @State private var showingRestartConfirmation = false
     @State private var message: String?
@@ -19,6 +21,16 @@ struct TropLibraryV2BatchMatchView: View {
                     Text("\(processed) / \(total)")
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
+                }
+
+                if coverageAvailable {
+                    HStack {
+                        Text("Saved songs with non-YouTube audio references")
+                        Spacer()
+                        Text("\(independentlyLinked) / \(total)")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
                 }
 
                 if isRunning {
@@ -52,7 +64,9 @@ struct TropLibraryV2BatchMatchView: View {
                         + "Progress is saved after each attempt and can resume "
                         + "after reopening Thrum. Each tap scans at most eight "
                         + "recordings, one at a time. Missing providers and "
-                        + "uncertain editions never delete or replace a song."
+                        + "uncertain editions never delete or replace a song. "
+                        + "Audio references are metadata only: the number "
+                        + "linked does not guarantee that a stream will play."
                 )
             }
 
@@ -96,7 +110,11 @@ struct TropLibraryV2BatchMatchView: View {
             let state = try await TropLibraryV2Prelinker.shared.batchProgress()
             processed = state.processed
             total = state.total
+            let coverage = try await TropLibraryV2Store.independentSourceCoverage()
+            independentlyLinked = coverage.withIndependentReference
+            coverageAvailable = true
         } catch {
+            coverageAvailable = false
             message = "Could not read your saved Library V2 recordings."
         }
     }
