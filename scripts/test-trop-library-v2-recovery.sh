@@ -85,6 +85,10 @@ grep -Fq 'try Task.checkCancellation()' \
 grep -Fq 'scanNextBatch()' Trop/Settings/TropLibraryV2BatchMatchView.swift
 grep -Fq 'TropLibraryV2Store.independentSourceCoverage()' \
   Trop/Settings/TropLibraryV2BatchMatchView.swift
+grep -Fq '.recordingsMissingIndependentSources()' \
+  Trop/Settings/TropLibraryV2BatchMatchView.swift
+grep -Fq 'TropLibraryV2AudioSourceSheet(recording:' \
+  Trop/Settings/TropLibraryV2BatchMatchView.swift
 # Read-only coverage counts saved recordings, not aliases, ignores YouTube
 # and unapproved scopes, and does not mistake a link for playable audio.
 python3 - <<'COVERAGE_CHECK'
@@ -117,7 +121,28 @@ INSERT INTO trop_v2_source_alias VALUES
  ('p','recording','addon','global');
 """)
 assert db.execute(query).fetchone() == (4, 2)
-print("Saved independent-audio reference coverage passed (4 saved, 2 linked)")
+
+# The list must be limited, sorted, and agree with the independent-coverage
+# count, even with duplicate provider IDs and excluded YouTube-only aliases.
+db.executescript("""
+ALTER TABLE trop_v2_item ADD COLUMN title TEXT;
+ALTER TABLE trop_v2_item ADD COLUMN artist_or_author TEXT;
+ALTER TABLE trop_v2_item ADD COLUMN duration_seconds INTEGER;
+ALTER TABLE trop_v2_item ADD COLUMN liked_at TEXT;
+UPDATE trop_v2_item SET title=id, artist_or_author='Artist',
+    duration_seconds=200;
+""")
+missing_marker = "SELECT item.id, item.title, item.artist_or_author,"
+assert missing_marker in store
+missing_source_query = missing_marker + store.split(
+    missing_marker, 1
+)[1].split('"""', 1)[0]
+assert "NOT EXISTS" in missing_source_query and "LIMIT ?" in missing_source_query
+missing = db.execute(missing_source_query, (12,)).fetchall()
+assert [row[0] for row in missing] == ["b", "d"]
+assert len(missing) + db.execute(query).fetchone()[1] == 4
+assert len(db.execute(missing_source_query, (1,)).fetchall()) == 1
+print("Saved independent-audio coverage and missing-source review passed")
 COVERAGE_CHECK
 
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2Prelinker.swift
