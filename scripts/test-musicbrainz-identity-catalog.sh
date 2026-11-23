@@ -9,3 +9,9 @@ swiftc -swift-version 6 -strict-concurrency=complete \
   tests/MusicSources/MusicBrainzIdentityCatalogChecks.swift \
   -o "$tmp_dir/musicbrainz-identity-checks"
 "$tmp_dir/musicbrainz-identity-checks"
+swiftc -swift-version 6 -strict-concurrency=complete \
+  Trop/Core/MusicSources/MusicCatalog.swift \
+  Trop/Core/MusicSources/MusicBrainzIdentityCatalog.swift \
+  tests/MusicSources/MusicBrainzDiscographyChecks.swift \
+  -o "$tmp_dir/musicbrainz-discography-checks"
+"$tmp_dir/musicbrainz-discography-checks"
