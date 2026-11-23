@@ -12,6 +12,8 @@ struct SettingsView: View {
     @Bindable private var accountState = AccountSheetState.shared
     @AppStorage("trop.library.v2.previewEnabled")
     private var libraryV2PreviewEnabled = false
+    @AppStorage("trop.match.youtubeAudioEnabled")
+    private var youtubeAudioProviderEnabled = false
 
     var body: some View {
         List {
@@ -42,6 +44,17 @@ struct SettingsView: View {
 
             Section("Experimental library") {
                 Toggle("Use Trop Library V2", isOn: $libraryV2PreviewEnabled)
+                Toggle(
+                    "YouTube as optional audio source",
+                    isOn: $youtubeAudioProviderEnabled
+                )
+                Text(
+                    "When enabled, saved YouTube track IDs may supply audio. "
+                        + "This never restores a YouTube Music library, account "
+                        + "login or mandatory music catalogue."
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
                 // The combined copy is needed BEFORE migration, including
                 // when the user has never enabled the V2 preview.
                 SettingsNavigationRow(
