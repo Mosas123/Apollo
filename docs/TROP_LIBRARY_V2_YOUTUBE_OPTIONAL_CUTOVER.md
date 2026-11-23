@@ -151,6 +151,36 @@ default V2 switch and does not claim complete quality/routing compliance.
 Full download-file identity, source choice among multiple valid renditions,
 album/artist V2 playback and provider failover need later dedicated gates.
 
+## Fénix II physical QA — restored playback and artwork (22 Nov 2026)
+
+The first iPhone restore via combined V6 snapshot and external Telegram
+document passed: 25 V2 recordings, 4 playlists, 10 entries, 1 favorite radio,
+and user-confirmed persistence after reopening Thrum. **The next on-device
+recording demonstrated a remaining issue:** saved tracks display placeholder
+music-note icons and the **"Audio unavailable — This song has no verified
+independent audio source yet"** alert when tapped.
+
+These are separate issues, not a failure of recovery:
+
+- **Artwork:** earlier V2 UI intentionally had no image representation or
+  lookup. The current PR now enriches saved V2 tracks in Recently Added,
+  Songs and playlist rows through the existing independent
+  `MetadataResolver` (iTunes, Deezer, MusicBrainz), accepting only matching
+  title+artist and HTTPS artwork. Covers are display-only and are not yet
+  portable in the backup; no YouTube catalogue is required. Missing/mismatched
+  results retain placeholders. CI and new iPhone QA are still required.
+- **Playback:** V2 playback accepts only verified global Audius/Qobuz/
+  JioSaavn/addon source aliases; the backup deliberately omits potentially
+  private addon IDs, and the policy currently excludes YouTube aliases to
+  avoid implicit YouTube fallback. Therefore restoring saved metadata does
+  **not** imply that each track has a playable audio source. Never guess by
+  title or silently re-enable YouTube. Implement explicit source-relinking
+  and/or explicitly opted-in provider audio with separate QA while retaining
+  all restored songs and playlist memberships.
+- **No destructive QA:** do not ask the user to uninstall the restored library
+  again. Verify covers in a new beta, and source relinking as a separate
+  feature. Keep PR #80 DRAFT until complete.
+
 ## Coupled implementation order — no extra user-facing IPA churn
 
 1. **Safety baseline:** finish PR #80 restore validations, portable backup,
