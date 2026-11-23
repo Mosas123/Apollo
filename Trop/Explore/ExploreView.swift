@@ -12,12 +12,10 @@ struct ExploreView: View {
     @ObservedObject private var router = AppRouter.shared
 
     @State private var pendingRoute: DetailRoute?
-    @State private var v2ArtistSeeds: [String] = []
-    @State private var selectedV2Artist: String?
-    @State private var v2DiscoveredTracks: [MusicCatalogTrack] = []
-    @State private var isLoadingV2Artists = false
-    @State private var isSearchingV2Artist = false
-    @State private var v2ExploreMessage: String?
+    @State private var v2GlobalRecordings: [TropGlobalRecording] = []
+    @State private var isLoadingGlobal = false
+    @State private var globalError: String?
+    @State private var selectedGlobalRecording: TropGlobalRecording?
 
     private let accountState = AccountSheetState.shared
     @AppStorage("trop.library.v2.previewEnabled")
@@ -42,6 +40,9 @@ struct ExploreView: View {
             .frame(maxHeight: .infinity, alignment: .top)
             .toolbar(.hidden, for: .navigationBar)
             .detailRouteDestinations()
+            .sheet(item: $selectedGlobalRecording) { recording in
+                TropGlobalRecordingSheet(recording: recording)
+            }
             .navigationDestination(for: MoodItem.self) { mood in
                 MoodDetailView(mood: mood)
             }
@@ -75,101 +76,79 @@ struct ExploreView: View {
 
     // MARK: - Content
 
-    /// Explore V2 never loads YouTube Music's browse feeds. Artists come
-    /// from saved Trop UUID metadata; audio candidates are queried only after
-    /// an explicit tap, from enabled, independent source providers.
+    /// Real sitewide music discovery works with a completely empty V2
+    /// library. Never use saved artists as the feed's source of truth.
     private var v2AudioExplore: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
-                Label("Explore audio", systemImage: "music.magnifyingglass")
+                Label("Explore music", systemImage: "music.magnifyingglass")
                     .font(.title2.weight(.bold))
                 Text(
-                    "Browse artists from your Trop library and discover "
-                        + "audio from independent providers. No YouTube Music catalogue."
+                    "Discover public music from ListenBrainz. "
+                        + "Your library does not have to contain any songs."
                 )
                 .foregroundStyle(.secondary)
 
-                if isLoadingV2Artists {
-                    ProgressView("Reading saved artists…")
-                } else if v2ArtistSeeds.isEmpty {
-                    Text("Save a song or artist to start exploring from your library.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("Artists from your library").font(.headline)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(v2ArtistSeeds, id: \.self) { artist in
-                                Button(artist) {
-                                    guard selectedV2Artist != artist else { return }
-                                    v2DiscoveredTracks = []
-                                    selectedV2Artist = artist
-                                }
-                                .buttonStyle(.bordered)
-                                .tint(selectedV2Artist == artist ? .accentColor : .secondary)
-                            }
-                        }
-                    }
+                if isLoadingGlobal && v2GlobalRecordings.isEmpty {
+                    ProgressView("Loading music discovery…")
                 }
-
-                if let selectedV2Artist {
-                    Text("From audio providers · " + selectedV2Artist)
-                        .font(.headline)
-                    if isSearchingV2Artist {
-                        ProgressView("Searching enabled audio providers…")
-                    } else if v2DiscoveredTracks.isEmpty {
-                        Text("No matching playable candidates found. Try another artist.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(v2DiscoveredTracks, id: \.id) { track in
-                            Button {
-                                let group = v2DiscoveredTracks.filter {
-                                    $0.id.source == track.id.source
-                                }.map { $0.asQueueSong() }
-                                PlaybackQueue.play(
-                                    track.asQueueSong(), in: group,
-                                    log: Log.explore,
-                                    context: "independent explore"
+                if !v2GlobalRecordings.isEmpty {
+                    Text("Popular on ListenBrainz").font(.headline)
+                    ForEach(v2GlobalRecordings) { recording in
+                        Button {
+                            selectedGlobalRecording = recording
+                        } label: {
+                            HStack(spacing: 12) {
+                                TropLibraryV2ArtworkView(
+                                    title: recording.title,
+                                    artist: recording.artist,
+                                    durationSeconds: 0
                                 )
-                            } label: {
-                                HStack(spacing: 12) {
-                                    AsyncImageView(url: track.artworkURL?.absoluteString)
-                                        .frame(width: 50, height: 50)
-                                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(track.title)
-                                            .foregroundStyle(.primary)
-                                            .lineLimit(1)
-                                        Text(track.artist)
-                                            .foregroundStyle(.secondary)
-                                            .font(.caption)
-                                        Text(track.id.source == .addon
-                                             ? "Music Add-on"
-                                             : track.id.source.rawValue.capitalized)
-                                            .foregroundStyle(.secondary)
+                                .frame(width: 54, height: 54)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(recording.title)
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                    Text(recording.artist)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                    if let album = recording.album {
+                                        Text(album)
                                             .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
                                     }
-                                    Spacer()
-                                    Image(systemName: "play.fill")
                                 }
-                                .contentShape(Rectangle())
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(.secondary)
                             }
-                            .buttonStyle(.plain)
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
                     }
+                } else if let globalError {
+                    ContentUnavailableView(
+                        "Discovery unavailable",
+                        systemImage: "wifi.exclamationmark",
+                        description: Text(globalError)
+                    )
+                    Button("Try again") {
+                        Task { await refreshGlobal(force: true) }
+                    }
+                    .buttonStyle(.bordered)
                 }
 
-                if let v2ExploreMessage {
-                    Text(v2ExploreMessage)
-                        .foregroundStyle(.secondary)
-                        .font(.footnote)
-                }
                 Text(
-                    "These are provider search candidates, not official charts "
-                        + "or personalized recommendations. Streams and quality "
-                        + "are verified when playback starts."
+                    "Popular = plays reported by the ListenBrainz community, "
+                        + "not an official worldwide chart or a personal recommendation. "
+                        + "Audio availability depends on enabled providers."
                 )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+
                 Button {
                     router.selectedTabIndex = 3
                 } label: {
@@ -184,43 +163,30 @@ struct ExploreView: View {
                 .buttonStyle(.bordered)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(20)
+            .padding(16)
         }
-        .task { await loadV2ArtistSeeds() }
-        .task(id: selectedV2Artist) {
-            guard libraryV2PreviewEnabled, let artist = selectedV2Artist else {
-                return
-            }
-            isSearchingV2Artist = true
-            let matches = await ExploreV2ProviderDiscovery.tracks(for: artist)
-            guard !Task.isCancelled, libraryV2PreviewEnabled,
-                  selectedV2Artist == artist else { return }
-            v2DiscoveredTracks = matches
-            isSearchingV2Artist = false
-        }
+        .task { await refreshGlobal() }
+        .refreshable { await refreshGlobal(force: true) }
         .miniPlayerTracksScroll()
         .scrollEdgeEffectHidden(true, for: .bottom)
     }
 
     @MainActor
-    private func loadV2ArtistSeeds() async {
+    private func refreshGlobal(force: Bool = false) async {
         guard libraryV2PreviewEnabled else { return }
-        isLoadingV2Artists = true
+        isLoadingGlobal = true
+        defer { isLoadingGlobal = false }
         do {
-            async let saved = TropLibraryV2Store.recordings()
-            async let artists = TropLibraryV2Store.savedCatalogItems(kind: .artist)
-            let (recordings, artistItems) = try await (saved, artists)
+            let tracks = try await TropGlobalMusicCatalog.shared
+                .popularRecordings(forceRefresh: force)
             guard !Task.isCancelled, libraryV2PreviewEnabled else { return }
-            v2ArtistSeeds = ExploreV2DiscoveryPolicy.artistSeeds(
-                artistItems.map { Optional($0.title) }
-                    + recordings.map(\.artist)
-            )
-            v2ExploreMessage = nil
+            v2GlobalRecordings = tracks
+            globalError = tracks.isEmpty
+                ? "No public music data available right now." : nil
         } catch {
-            v2ArtistSeeds = []
-            v2ExploreMessage = "Could not load saved artists. Your library was not changed."
+            guard !Task.isCancelled, libraryV2PreviewEnabled else { return }
+            globalError = "Could not connect to public music discovery."
         }
-        isLoadingV2Artists = false
     }
 
     @ViewBuilder
