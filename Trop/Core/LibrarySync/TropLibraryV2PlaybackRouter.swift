@@ -16,10 +16,49 @@ enum TropLibraryV2PlaybackRouter {
         requestGeneration += 1
         let request = requestGeneration
         let playerGeneration = NowPlaying.shared.playbackGeneration
-        let aliases = try await TropLibraryV2Store.sourceAliases(forRecordingID: recording.id)
-        let key = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
-            for: aliases, requiresLossless: requiresLossless
+        let currentAliases = try await TropLibraryV2Store.sourceAliases(
+            forRecordingID: recording.id
         )
+        let key: String
+        do {
+            key = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+                for: currentAliases, requiresLossless: requiresLossless
+            )
+        } catch let error as TropLibraryV2PlaybackSourceError
+            where error == .unavailable || error == .incompatibleQuality {
+            // Trop Match never opens a provider picker on a normal Play tap.
+            // Only exact-version metadata candidates can be auto-linked.
+            // Uncertain editions remain available for explicit review.
+            let matches = await TropLibraryV2AudioDiscovery.inspect(
+                for: recording, requiresLossless: requiresLossless
+            )
+            guard !Task.isCancelled, request == requestGeneration,
+                  playerGeneration == NowPlaying.shared.playbackGeneration else {
+                throw CancellationError()
+            }
+            guard let candidate = matches.exact.first else {
+                throw error
+            }
+            do {
+                try await TropLibraryV2Store.linkConfirmedAudioSource(
+                    toRecordingID: recording.id,
+                    track: candidate,
+                    requiresLossless: requiresLossless
+                )
+            } catch TropLibraryV2AudioLinkError.existingSource {
+                // Preserve the existing link and tell the user an explicit
+                // source-quality switch is needed in this first iteration.
+                throw TropLibraryV2PlaybackSourceError.incompatibleQuality
+            } catch TropLibraryV2AudioLinkError.usedByAnotherRecording {
+                throw TropLibraryV2PlaybackSourceError.ambiguous
+            }
+            let aliases = try await TropLibraryV2Store.sourceAliases(
+                forRecordingID: recording.id
+            )
+            key = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+                for: aliases, requiresLossless: requiresLossless
+            )
+        }
         guard !Task.isCancelled, request == requestGeneration,
               playerGeneration == NowPlaying.shared.playbackGeneration else {
             throw CancellationError()
