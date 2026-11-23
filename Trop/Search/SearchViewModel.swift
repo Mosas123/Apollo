@@ -224,19 +224,19 @@ final class SearchViewModel {
     }
 
     var showsAudiusResults: Bool {
-        !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "Audius")
+        !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "Songs" || selectedSectionFilter == "Audius")
     }
 
     var showsQobuzResults: Bool {
-        !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "Qobuz")
+        !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "Songs" || selectedSectionFilter == "Qobuz")
     }
 
     var showsJioSaavnResults: Bool {
-        !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "JioSaavn")
+        !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "Songs" || selectedSectionFilter == "JioSaavn")
     }
 
     var showsAddonResults: Bool {
-        !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "Add-ons")
+        !isShowingLibrary && (selectedSectionFilter == nil || selectedSectionFilter == "Songs" || selectedSectionFilter == "Add-ons")
     }
 
     var filteredResults: [SearchSection] {
@@ -496,7 +496,8 @@ final class SearchViewModel {
         // waits for another metadata/provider request to succeed.
         guard !Task.isCancelled, query == submittedQuery else { return }
         await withTaskGroup(of: ProviderSearchResult.self) { group in
-            if TropLibraryV2AccountIsolation.isEnabled {
+            if TropLibraryV2AccountIsolation.isEnabled,
+               (includeProviders || query.count >= 3) {
                 group.addTask {
                     let catalog = MusicBrainzIdentityCatalog()
                     let byTitle = (try? await catalog.searchRecordings(
@@ -624,8 +625,10 @@ final class SearchViewModel {
             hasRemoteSections: !results.isEmpty,
             hasRemoteHero: heroArtist != nil,
             hasLocalSections: !librarySections.isEmpty
-                || !localV2Recordings.isEmpty
-                || !localV2Playlists.isEmpty || !localV2Radios.isEmpty,
+                || (isShowingLibrary && (
+                    !localV2Recordings.isEmpty || !localV2Playlists.isEmpty
+                        || !localV2Radios.isEmpty
+                )),
             hasExternalProviderTracks: !audiusTracks.isEmpty
                 || !qobuzTracks.isEmpty || !jiosaavnTracks.isEmpty
                 || !addonTracks.isEmpty
@@ -716,7 +719,11 @@ final class SearchViewModel {
             suggestions = []
         }
         fetchTask = Task { [weak self] in
-            do { try await Task.sleep(for: .milliseconds(350)) }
+            do {
+                try await Task.sleep(
+                    for: .milliseconds(requestsYouTubeCatalogue ? 350 : 850)
+                )
+            }
             catch { return }
             guard !Task.isCancelled else { return }
             await self?.fetchResults(for: query, includeProviders: false)
