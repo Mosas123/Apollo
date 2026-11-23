@@ -352,7 +352,7 @@ struct HomeScreenView: View {
     }
 
     /// Visual sibling of main's feature card. It opens our independent
-    /// Explore surface; it must never call the legacy SurpriseMeService.
+    /// Explore surface; it must never invoke the legacy surprise queue.
     private var v2DiscoveryCard: some View {
         Button {
             router.selectedTabIndex = 1
