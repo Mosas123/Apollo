@@ -12,10 +12,13 @@ struct TropGlobalRecording: Identifiable, Equatable, Sendable {
     let album: String?
     let listenCount: Int
     let source: String
+    // Reference metadata may be unknown; never invent a duration from artwork.
+    let durationSeconds: Int?
 
     init(
         id: String, title: String, artist: String,
-        album: String?, listenCount: Int, source: String = "ListenBrainz"
+        album: String?, listenCount: Int, source: String = "ListenBrainz",
+        durationSeconds: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -23,6 +26,7 @@ struct TropGlobalRecording: Identifiable, Equatable, Sendable {
         self.album = album
         self.listenCount = listenCount
         self.source = source
+        self.durationSeconds = durationSeconds
     }
 }
 
@@ -83,7 +87,7 @@ actor TropGlobalMusicCatalog {
         ) else { throw TropGlobalCatalogError.invalidResponse }
         parts.queryItems = [
             URLQueryItem(name: "range", value: period),
-            URLQueryItem(name: "count", value: "25"),
+            URLQueryItem(name: "count", value: "100"),
             URLQueryItem(name: "offset", value: "0")
         ]
         guard let url = parts.url else {
@@ -108,7 +112,10 @@ actor TropGlobalMusicCatalog {
         }
         let decoded = try JSONDecoder().decode(SiteStats.self, from: data)
         var seen = Set<String>()
-        return decoded.payload.recordings.compactMap { row in
+        var perArtist: [String: Int] = [:]
+        // Public ListenBrainz activity is often concentrated in one fanbase.
+        // Cap *display candidates* per performer while retaining source order.
+        return decoded.payload.recordings.compactMap { row -> TropGlobalRecording? in
             let title = row.track_name.trimmingCharacters(in: .whitespacesAndNewlines)
             let artist = row.artist_name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard (2...180).contains(title.count),
@@ -119,6 +126,12 @@ actor TropGlobalMusicCatalog {
             }
             let key = mbid ?? "\(artist.lowercased())|\(title.lowercased())"
             guard seen.insert(key).inserted else { return nil }
+            let artistKey = artist.folding(
+                options: [.caseInsensitive, .diacriticInsensitive],
+                locale: Locale(identifier: "en_US_POSIX")
+            ).lowercased()
+            guard perArtist[artistKey, default: 0] < 2 else { return nil }
+            perArtist[artistKey, default: 0] += 1
             let album = row.release_name?.trimmingCharacters(
                 in: .whitespacesAndNewlines
             )
