@@ -383,10 +383,11 @@ actor MusicAddonClient {
     /// Full track list for an album (Eclipse addons cap it at 20 tracks).
     func albumTracks(id: String) async throws -> [AddonTrack] {
         guard eclipseMode,
-              let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+              let url = EclipseAddonURL.resource(
+                baseURL: baseURL, resource: "album", id: id
+              ) else {
             return []
         }
-        let url = baseURL.appendingPathComponent("album").appendingPathComponent(encoded)
         guard let data = await cachedFetch(url, key: "album|\(url.absoluteString)"),
               let object = try? JSONSerialization.jsonObject(with: data),
               let root = object as? [String: Any],
@@ -431,23 +432,21 @@ actor MusicAddonClient {
         preferAtmos: Bool,
         quality: AddonStreamQuality
     ) async throws -> AddonStream {
-        guard let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
-            throw MusicAddonClientError.invalidURL
-        }
         // Addons that carry Dolby Atmos copies (NullBeat) switch between the
         // Atmos and the plain FLAC master with this flag.
-        var components = URLComponents(
-            url: baseURL.appendingPathComponent("stream").appendingPathComponent(encoded),
-            resolvingAgainstBaseURL: false
-        )
-        components?.queryItems = [
-            // NullBeat expects a boolean here; "on"/"off" silently fell back
-            // to FLAC, so the Atmos toggle never worked.
-            URLQueryItem(name: "atmos", value: preferAtmos ? "true" : "false"),
-            URLQueryItem(name: "quality", value: quality.rawValue)
-        ]
-        let url = components?.url
-            ?? baseURL.appendingPathComponent("stream").appendingPathComponent(encoded)
+        // Encode the track ID exactly once; using an already percent-escaped
+        // ID with URL.appendingPathComponent double-encodes ':' into '%253A'.
+        guard let url = EclipseAddonURL.resource(
+            baseURL: baseURL,
+            resource: "stream",
+            id: id,
+            queryItems: [
+                URLQueryItem(name: "atmos", value: preferAtmos ? "true" : "false"),
+                URLQueryItem(name: "quality", value: quality.rawValue)
+            ]
+        ) else {
+            throw MusicAddonClientError.invalidURL
+        }
         guard let data = await fetch(url),
               let object = try? JSONSerialization.jsonObject(with: data),
               let root = object as? [String: Any],
