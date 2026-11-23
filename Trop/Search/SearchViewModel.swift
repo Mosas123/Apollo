@@ -72,6 +72,12 @@ final class SearchViewModel {
     private(set) var jiosaavnTracks: [MusicCatalogTrack] = []
     private(set) var addonTracks: [MusicCatalogTrack] = []
 
+    // Public metadata discovery never depends on the saved V2 library.
+    // Artist/album/recording identities come from MusicBrainz, not YTItem.
+    private(set) var catalogRecordings: [TropGlobalRecording] = []
+    private(set) var catalogAlbums: [MusicBrainzAlbum] = []
+    private(set) var catalogArtists: [MusicBrainzArtist] = []
+
     // Saved V2 metadata is not a YouTube YTItem or a playable video ID.
     // Keep it separate until a verified provider alias resolves to audio.
     private(set) var localV2Recordings: [TropLibraryV2Store.RecordingSummary] = []
@@ -79,8 +85,22 @@ final class SearchViewModel {
     private(set) var localV2Radios: [TropLibraryV2RadioStore.Favorite] = []
 
     var displaysV2LibraryResults: Bool {
-        TropLibraryV2AccountIsolation.isEnabled
-            && (isShowingLibrary || selectedSectionFilter == nil)
+        TropLibraryV2AccountIsolation.isEnabled && isShowingLibrary
+    }
+
+    var showsCatalogRecordings: Bool {
+        TropLibraryV2AccountIsolation.isEnabled && !isShowingLibrary
+            && (selectedSectionFilter == nil || selectedSectionFilter == "Songs")
+    }
+
+    var showsCatalogAlbums: Bool {
+        TropLibraryV2AccountIsolation.isEnabled && !isShowingLibrary
+            && (selectedSectionFilter == nil || selectedSectionFilter == "Albums")
+    }
+
+    var showsCatalogArtists: Bool {
+        TropLibraryV2AccountIsolation.isEnabled && !isShowingLibrary
+            && (selectedSectionFilter == nil || selectedSectionFilter == "Artists")
     }
 
     /// Each provider reports as soon as its own request finishes. Never
@@ -90,6 +110,9 @@ final class SearchViewModel {
         case qobuz([MusicCatalogTrack])
         case jiosaavn([MusicCatalogTrack])
         case addons([MusicCatalogTrack])
+        case catalogRecordings([MusicBrainzRecording])
+        case catalogAlbums([MusicBrainzAlbum])
+        case catalogArtists([MusicBrainzArtist])
     }
 
     private var requestsYouTubeCatalogue: Bool {
@@ -176,6 +199,11 @@ final class SearchViewModel {
         if !TropLibraryV2AccountIsolation.isEnabled {
             let titles = Set(results.map(\.title))
             filters.append(contentsOf: Self.displayOrder.filter { titles.contains($0) })
+        }
+        if TropLibraryV2AccountIsolation.isEnabled {
+            if !catalogRecordings.isEmpty { filters.append("Songs") }
+            if !catalogAlbums.isEmpty { filters.append("Albums") }
+            if !catalogArtists.isEmpty { filters.append("Artists") }
         }
         if !audiusTracks.isEmpty { filters.append("Audius") }
         if !qobuzTracks.isEmpty { filters.append("Qobuz") }
@@ -359,6 +387,9 @@ final class SearchViewModel {
         qobuzTracks = []
         jiosaavnTracks = []
         addonTracks = []
+        catalogRecordings = []
+        catalogAlbums = []
+        catalogArtists = []
         localSongs = []
         localArtists = []
         localAlbums = []
@@ -459,28 +490,60 @@ final class SearchViewModel {
             updateResultPhase()
         }
 
-        // Launch independent audio providers together, not after YouTube.
-        // Each completed provider publishes results without waiting for the
-        // slowest request, and a failed source cannot suppress other sources.
-        guard includeProviders, !Task.isCancelled,
-              query == submittedQuery else { return }
+        // Search public MusicBrainz identities on every V2 query, including
+        // debounced typing. Full audio providers run on explicit submission.
+        // These tasks are independent: neither needs the local Library nor
+        // waits for another metadata/provider request to succeed.
+        guard !Task.isCancelled, query == submittedQuery else { return }
         await withTaskGroup(of: ProviderSearchResult.self) { group in
-            group.addTask {
-                .audius((try? await AudiusClient().searchTracks(
-                    query: query, limit: 25
-                )) ?? [])
+            if TropLibraryV2AccountIsolation.isEnabled {
+                group.addTask {
+                    let catalog = MusicBrainzIdentityCatalog()
+                    let byTitle = (try? await catalog.searchRecordings(
+                        title: query, artist: "", limit: 12
+                    )) ?? []
+                    let byArtist = (try? await catalog.searchRecordingsByArtist(
+                        artist: query, limit: 12
+                    )) ?? []
+                    var seen = Set<String>()
+                    let matches = (byTitle + byArtist).filter {
+                        seen.insert($0.id.storageKey).inserted
+                    }
+                    return .catalogRecordings(Array(matches.prefix(24)))
+                }
+                group.addTask {
+                    .catalogAlbums(
+                        (try? await MusicBrainzIdentityCatalog().searchAlbums(
+                            title: query, artist: "", limit: 12
+                        )) ?? []
+                    )
+                }
+                group.addTask {
+                    .catalogArtists(
+                        (try? await MusicBrainzIdentityCatalog().searchArtists(
+                            query: query, limit: 12
+                        )) ?? []
+                    )
+                }
             }
-            group.addTask {
-                .qobuz(await QobuzCatalogService.shared.searchIfConfigured(
-                    query: query, limit: 25
-                ))
+            if includeProviders {
+                group.addTask {
+                    .audius((try? await AudiusClient().searchTracks(
+                        query: query, limit: 25
+                    )) ?? [])
+                }
+                group.addTask {
+                    .qobuz(await QobuzCatalogService.shared.searchIfConfigured(
+                        query: query, limit: 25
+                    ))
+                }
+                group.addTask {
+                    .jiosaavn((try? await JioSaavnClient().search(
+                        query: query, limit: 25
+                    )) ?? [])
+                }
+                group.addTask { .addons(await self.fetchAddonTracks(query: query)) }
             }
-            group.addTask {
-                .jiosaavn((try? await JioSaavnClient().search(
-                    query: query, limit: 25
-                )) ?? [])
-            }
-            group.addTask { .addons(await self.fetchAddonTracks(query: query)) }
             for await provider in group {
                 guard !Task.isCancelled, query == submittedQuery else {
                     group.cancelAll()
@@ -491,6 +554,16 @@ final class SearchViewModel {
                 case .qobuz(let tracks): qobuzTracks = tracks
                 case .jiosaavn(let tracks): jiosaavnTracks = tracks
                 case .addons(let tracks): addonTracks = tracks
+                case .catalogRecordings(let items):
+                    catalogRecordings = items.map {
+                        TropGlobalRecording(
+                            id: $0.id.storageKey, title: $0.title,
+                            artist: $0.artist, album: nil,
+                            listenCount: 0, source: "MusicBrainz"
+                        )
+                    }
+                case .catalogAlbums(let items): catalogAlbums = items
+                case .catalogArtists(let items): catalogArtists = items
                 }
                 updateResultPhase()
             }
@@ -556,6 +629,8 @@ final class SearchViewModel {
             hasExternalProviderTracks: !audiusTracks.isEmpty
                 || !qobuzTracks.isEmpty || !jiosaavnTracks.isEmpty
                 || !addonTracks.isEmpty
+                || !catalogRecordings.isEmpty
+                || !catalogAlbums.isEmpty || !catalogArtists.isEmpty
         )
         if hasContent {
             phase = .results
@@ -658,6 +733,9 @@ final class SearchViewModel {
         qobuzTracks = []
         jiosaavnTracks = []
         addonTracks = []
+        catalogRecordings = []
+        catalogAlbums = []
+        catalogArtists = []
         localSongs = []
         localArtists = []
         localAlbums = []
