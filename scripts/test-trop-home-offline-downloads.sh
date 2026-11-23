@@ -10,33 +10,37 @@ swiftc -swift-version 6 -strict-concurrency=complete \
   -o "$temp_dir/trop-offline-home"
 "$temp_dir/trop-offline-home"
 
-# V2 Home displays local metadata without relying on a network failure.
-# Saved metadata is NOT automatically playable offline; only verified local
-# downloads use the existing DownloadsView playback path.
+# Home V2 is a public discovery surface. Library is a different tab.
+# No private saved songs, playlists or radio favorites should fill Home.
 grep -Fq 'v2HomeContent' Trop/Home/HomeScreenView.swift
-# V2 must share the visible Home design language with main, but not its
-# InnerTube shelves, YouTube-keyed queue or SurpriseMeService.
-grep -Fq 'v2CategoryChips' Trop/Home/HomeScreenView.swift
 grep -Fq 'v2DiscoveryCard' Trop/Home/HomeScreenView.swift
-grep -Fq 'HorizontalSection(title: "Your playlists"' Trop/Home/HomeScreenView.swift
-grep -Fq 'HorizontalSection(title: "Recently saved"' Trop/Home/HomeScreenView.swift
-grep -Fq 'HorizontalSection(title: "Your radio stations"' Trop/Home/HomeScreenView.swift
+grep -Fq 'HorizontalSection(title: "Popular on ListenBrainz"' Trop/Home/HomeScreenView.swift
 grep -Fq 'TropLibraryV2ArtworkView(' Trop/Home/HomeScreenView.swift
-swiftc -frontend -parse Trop/Home/HomeScreenView.swift
-grep -Fq 'TropLibraryV2Store.recordings()' Trop/Home/HomeScreenView.swift
-# Saved V2 rows are interactive only through a source-aware router.
-# Unresolved metadata must never be handed straight to the legacy queue.
-grep -Fq 'TropLibraryV2PlaybackRouter.playSaved(recording)' Trop/Home/HomeScreenView.swift
-grep -Fq 'catch let error as TropLibraryV2PlaybackSourceError' \
-  Trop/Home/HomeScreenView.swift
-grep -Fq '.disabled(isStartingV2Playback)' Trop/Home/HomeScreenView.swift
+grep -Fq 'TropGlobalPlaybackCoordinator.play(recording)' Trop/Home/HomeScreenView.swift
+grep -Fq 'TropGlobalPlaybackCoordinator.save(recording)' Trop/Home/HomeScreenView.swift
 grep -Fq 'Audio unavailable' Trop/Home/HomeScreenView.swift
-grep -Fq 'TropLibraryV2Store.playlists()' Trop/Home/HomeScreenView.swift
-grep -Fq 'TropLibraryV2RadioStore.favorites()' Trop/Home/HomeScreenView.swift
-grep -Fq 'RadioPlaybackCoordinator.playSaved(' Trop/Home/HomeScreenView.swift
-grep -Fq 'DownloadsView()' Trop/Home/HomeScreenView.swift
 grep -Fq 'await downloadManager.reload()' Trop/Home/HomeScreenView.swift
 grep -Fq 'errorView(error)' Trop/Home/HomeScreenView.swift
+swiftc -frontend -parse Trop/Home/HomeScreenView.swift
+
+python3 - <<'HOME_IS_NOT_LIBRARY'
+from pathlib import Path
+s = Path("Trop/Home/HomeScreenView.swift").read_text()
+start = s.index("private var v2HomeContent:")
+end = s.index("private var homescreenContent:", start)
+v2 = s[start:end]
+for forbidden in (
+    "TropLibraryV2Store.recordings(", "TropLibraryV2Store.playlists(",
+    "TropLibraryV2RadioStore.favorites(", "Your playlists",
+    "Recently saved", "Your radio stations",
+    "TropGlobalRecordingSheet(", "TropLibraryV2PlaybackRouter.playSaved("
+):
+    assert forbidden not in v2, f"Saved-library content leaked into Home: {forbidden}"
+assert "TropGlobalMusicCatalog.shared" in v2
+assert "TropGlobalPlaybackCoordinator.play(recording)" in v2
+assert "TropGlobalPlaybackCoordinator.save(recording)" in v2
+print("Home V2 source independently discovers music without Library")
+HOME_IS_NOT_LIBRARY
 
 # DownloadsView retains its local URL validation, source MIME, and playback
 # generation guard. Do not replace it with streaming PlaybackQueue calls.
@@ -53,4 +57,4 @@ if printf '%s' "$v2_surface" | grep -Eq 'PlaybackQueue\.play|InnerTubeClient|Syn
   echo 'V2 Home must not play unresolved metadata or call YouTube'
   exit 1
 fi
-echo 'Trop offline Home local metadata + verified downloads checks passed'
+echo 'Trop independent Home + verified Downloads checks passed'
