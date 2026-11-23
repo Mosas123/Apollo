@@ -67,6 +67,23 @@ swiftc -swift-version 6 -strict-concurrency=complete \
   tests/LibrarySync/TropLibraryV2PrelinkPolicyChecks.swift \
   -o "$tmp_dir/trop-match-prelink-checks"
 "$tmp_dir/trop-match-prelink-checks"
+
+# Manual matching is opt-in, page-bounded and resumes from a Trop UUID;
+# missing/deleted records cannot corrupt playlist membership or cursor state.
+swiftc -swift-version 6 -strict-concurrency=complete \
+  Trop/Core/LibrarySync/TropLibraryV2IdentityPolicy.swift \
+  Trop/Core/LibrarySync/TropLibraryV2PrelinkBatchPolicy.swift \
+  tests/LibrarySync/TropLibraryV2PrelinkBatchPolicyChecks.swift \
+  -o "$tmp_dir/trop-match-batch-checks"
+"$tmp_dir/trop-match-batch-checks"
+swiftc -frontend -parse Trop/Settings/TropLibraryV2BatchMatchView.swift
+grep -Fq 'TropLibraryV2BatchMatchView()' Trop/Settings/SettingsView.swift
+grep -Fq 'TropLibraryV2PrelinkBatchPolicy.cursorKey' \
+  Trop/Core/LibrarySync/TropLibraryV2Prelinker.swift
+grep -Fq 'try Task.checkCancellation()' \
+  Trop/Core/LibrarySync/TropLibraryV2Prelinker.swift
+grep -Fq 'scanNextBatch()' Trop/Settings/TropLibraryV2BatchMatchView.swift
+
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2Prelinker.swift
 grep -Fq 'TropLibraryV2Prelinker.shared.schedule(' \
   Trop/Core/LibrarySync/TropLibraryV2Store.swift
