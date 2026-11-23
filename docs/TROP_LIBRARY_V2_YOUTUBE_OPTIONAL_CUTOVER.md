@@ -186,6 +186,39 @@ These are separate V2 product-completeness issues, not a failure of recovery:
   again. Verify covers in a new beta, and source relinking as a separate
   feature. Keep PR #80 DRAFT until complete.
 
+## Fénix II — metadata-driven audio relinking (22 Nov 2026)
+
+The user clarified that the missing artwork/unplayable saved recordings
+**already existed before uninstalling Thrum**. This is V2 playback/UX debt,
+not a failure of the successful Fénix metadata restore.
+
+**First opt-in implementation slice (PR #80 DRAFT):**
+- Tapping a V2 recording without a usable independent source opens **Find audio
+  source**; playlist entries expose the same action in their context menu.
+- Trop searches **Audius, authorized Qobuz, JioSaavn and up to four enabled
+  music addons** from the recording's saved title and artist. Search is
+  parallel, no YouTube Music catalogue call, account bootstrap or background
+  mutation. Results lacking title/artist agreement, an appropriate edition,
+  available duration evidence or supported quality are excluded. Results are
+  **candidates, not verified stream URLs**; no implicit autoplay.
+- The user must choose a track explicitly. Inside one GRDB write, Trop
+  re-reads the current recording and checks source identity again, prevents an
+  alias already owned by another recording, is idempotent if already linked,
+  and declines to create ambiguous extra active sources. The recording UUID,
+  liked state, playlists, ordered entries and backup metadata are left intact.
+  Playback then uses the existing normal ApoloEngine router.
+- **Current limitations:** no automatic bulk relinking, no provider choice
+  switching when an independent source is already linked, and a catalogue
+  match does not establish stream availability. The chosen addon alias may
+  contain private installation identifiers; it **remains intentionally omitted
+  from portable backups** and may require relinking on future reinstalls.
+  Title/duration metadata cannot prove two different masters are identical,
+  even with strict matching; the user confirms the match.
+- Strict Swift 6 match-policy tests, UI wiring checks and integrated Nightly
+  are needed before device QA. **Do not claim this feature works in the user
+  IPA until a new CI-validated beta is installed and tested.** Never clear the
+  restored database or silently re-enable YouTube fallback.
+
 ## Coupled implementation order — no extra user-facing IPA churn
 
 1. **Safety baseline:** finish PR #80 restore validations, portable backup,
