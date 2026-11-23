@@ -55,7 +55,7 @@ struct JioSaavnClient: Sendable {
             }
             let seconds = Int(more["duration"] as? String ?? "") ?? (more["duration"] as? Int) ?? 0
             let image = Self.hires((item["image"] as? String) ?? "")
-            return MusicCatalogTrack(
+            var result = MusicCatalogTrack(
                 id: MusicCatalogID(source: .jiosaavn, rawValue: id),
                 title: title,
                 artist: artist,
@@ -64,6 +64,9 @@ struct JioSaavnClient: Sendable {
                 permalinkURL: nil,
                 isStreamable: true
             )
+            result.albumTitle = more["album"] as? String
+                ?? item["album"] as? String
+            return result
         }
     }
 
