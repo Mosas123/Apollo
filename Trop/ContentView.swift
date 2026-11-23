@@ -47,20 +47,29 @@ struct ContentView: View {
         .environment(scrollState)
         .onAppear {
             if selectedTab == 1 && !settings.showRadioTab { selectedTab = 0 }
-            if selectedTab == 4 && !settings.showExploreTab { selectedTab = 0 }
+            if selectedTab == 4 && !settings.showExploreTab && !libraryV2PreviewEnabled { selectedTab = 0 }
             AppRouter.shared.selectedTabIndex = selectedTab
         }
         .onChange(of: settings.showRadioTab) { _, shown in
             if !shown, selectedTab == 1 { selectedTab = 0 }
         }
         .onChange(of: settings.showExploreTab) { _, shown in
-            if !shown, selectedTab == 4 { selectedTab = 0 }
+            if !shown, !libraryV2PreviewEnabled, selectedTab == 4 { selectedTab = 0 }
         }
         .onChange(of: libraryV2PreviewEnabled) { _, _ in
             Task { await LikeStore.shared.refresh() }
         }
         .onChange(of: selectedTab) { _, newValue in
             AppRouter.shared.selectedTabIndex = newValue
+        }
+        // Home/Explore/Search actions write to AppRouter. Keep the native
+        // TabView selection in sync with those programmatic requests.
+        .onReceive(AppRouter.shared.$selectedTabIndex.dropFirst()) { requested in
+            guard requested != selectedTab else { return }
+            guard requested != 1 || settings.showRadioTab else { return }
+            guard requested != 4 || settings.showExploreTab
+                || libraryV2PreviewEnabled else { return }
+            selectedTab = requested
         }
         .onReceive(AppRouter.shared.$activeRoute) { route in
             // A detail page was opened from an overlay: collapse the player so
@@ -121,7 +130,7 @@ struct ContentView: View {
                 }
             }
 
-            if settings.showExploreTab {
+            if settings.showExploreTab || libraryV2PreviewEnabled {
                 Tab("Explore", systemImage: "flame", value: 4) {
                     ExploreView()
                 }
