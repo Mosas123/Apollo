@@ -49,20 +49,3 @@ struct TropLibraryV2ArtworkView: View {
     }
 }
 
-/// The cover is only displayed when an independent catalogue confirms the
-/// recording title and artist. Never guess using a YouTube ID or fetch media.
-enum TropLibraryV2ArtworkSelectionPolicy {
-    static func url(
-        title: String,
-        artist: String,
-        metadata: ResolvedMetadata
-    ) -> URL? {
-        guard ["iTunes", "Deezer", "MusicBrainz"].contains(metadata.source),
-              TextMatch.recordingsMatch(metadata.title, title),
-              TextMatch.artistsMatch(metadata.artist, artist),
-              let url = metadata.artworkURL,
-              url.scheme?.lowercased() == "https",
-              url.host != nil else { return nil }
-        return url
-    }
-}
