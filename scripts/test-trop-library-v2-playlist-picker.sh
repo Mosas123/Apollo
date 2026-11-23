@@ -31,7 +31,11 @@ grep -Fq 'pendingIDs.insert(playlist.id)' Trop/Audio/PlayerMenuSheet.swift
 # Creating/adding a V2 song must be a single GRDB write transaction with
 # source alias, Trop recording, playlist and membership all local.
 grep -Fq 'static func saveToPlaylist(' Trop/Core/LibrarySync/TropLibraryV2Store.swift
-grep -Fq 'return try await DatabaseService.shared.writeReturning { db in' Trop/Core/LibrarySync/TropLibraryV2Store.swift
+# Keep the GRDB write transaction atomic while scheduling optional provider
+# prelinks only after it commits; external lookups must not join the write.
+grep -Fq 'let saved = try await DatabaseService.shared.writeReturning { db in' Trop/Core/LibrarySync/TropLibraryV2Store.swift
+grep -Fq 'return (playlistID: playlistID, recordingID: recordingID)' Trop/Core/LibrarySync/TropLibraryV2Store.swift
+grep -Fq 'await TropLibraryV2Prelinker.shared.schedule(' Trop/Core/LibrarySync/TropLibraryV2Store.swift
 grep -Fq 'INSERT INTO trop_v2_source_alias' Trop/Core/LibrarySync/TropLibraryV2Store.swift
 grep -Fq 'INSERT INTO trop_v2_playlist_entry' Trop/Core/LibrarySync/TropLibraryV2Store.swift
 
