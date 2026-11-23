@@ -906,3 +906,76 @@ struct SearchView: View {
         )
     }
 }
+
+
+/// Resolve identity-checked portraits only when there are enough matching
+/// recordings to distinguish a namesake. Missing art stays a placeholder.
+private struct V2CatalogArtistArtwork: View {
+    let name: String
+    let artistID: String
+    let referenceTracks: [String]
+
+    @State private var resolvedURL: String?
+
+    private var lookupKey: String {
+        artistID + "|" + referenceTracks.joined(separator: "|")
+    }
+
+    var body: some View {
+        ZStack {
+            Circle().fill(Color(uiColor: .secondarySystemBackground))
+            if let resolvedURL {
+                AsyncImageView(url: resolvedURL).clipShape(Circle())
+            } else {
+                Image(systemName: "person.crop.circle")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .task(id: lookupKey) {
+            resolvedURL = nil
+            guard referenceTracks.count >= 2 else { return }
+            let url = await ArtistImageResolver.preferredImageURL(
+                name: name, youTubeURL: nil,
+                artistID: artistID, referenceTracks: referenceTracks
+            )
+            guard !Task.isCancelled,
+                  let url, url.scheme?.lowercased() == "https" else { return }
+            resolvedURL = url.absoluteString
+        }
+    }
+}
+
+/// Album release artwork is a metadata lookup, never an audio or YouTube ID.
+private struct V2CatalogAlbumArtwork: View {
+    let title: String
+    let artist: String
+
+    @State private var resolvedURL: String?
+
+    private var lookupKey: String { artist + "|" + title }
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(uiColor: .secondarySystemBackground))
+            if let resolvedURL {
+                AsyncImageView(url: resolvedURL)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                Image(systemName: "square.stack")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .task(id: lookupKey) {
+            resolvedURL = nil
+            let url = await MetadataResolver.albumArtwork(
+                title: title, artist: artist
+            )
+            guard !Task.isCancelled,
+                  let url, url.scheme?.lowercased() == "https" else { return }
+            resolvedURL = url.absoluteString
+        }
+    }
+}
