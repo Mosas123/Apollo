@@ -9,7 +9,7 @@ struct TropLibraryV2PrelinkBatchPolicyChecks {
         precondition(ids.allSatisfy(TropLibraryV2IdentityPolicy.isCanonicalID))
 
         let first = TropLibraryV2PrelinkBatchPolicy.page(
-            savedIDs: ids.reversed() + ids.prefix(5), after: nil
+            savedIDs: Array(ids.reversed()) + Array(ids.prefix(5)), after: nil
         )
         precondition(first.recordingIDs == Array(ids[0..<8]))
         precondition(first.completedBefore == 0)
