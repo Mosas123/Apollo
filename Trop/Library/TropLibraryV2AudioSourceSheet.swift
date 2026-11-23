@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// A missing playback source starts a user-approved provider search. The
-/// existing recording UUID, likes and playlist memberships are never replaced.
+/// Manual review is available from a saved song's menu; normal Play uses
+/// Trop Match automatically and never presents this sheet.
 struct TropLibraryV2AudioSourceRequest: Identifiable {
     let recording: TropLibraryV2Store.RecordingSummary
     var id: String { recording.id }
@@ -12,13 +12,14 @@ struct TropLibraryV2AudioSourceSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var candidates: [MusicCatalogTrack] = []
+    @State private var alternates: [MusicCatalogTrack] = []
+    @State private var pendingAlternate: MusicCatalogTrack?
     @State private var isSearching = true
     @State private var isLinking = false
     @State private var message: String?
 
     private var requiresLossless: Bool {
-        let quality = SettingsStore.shared.musicQualityMode
-        return quality == .cd || quality == .lossless
+        SettingsStore.shared.musicQualityMode.prefersLossless
     }
 
     var body: some View {
@@ -30,69 +31,64 @@ struct TropLibraryV2AudioSourceSheet: View {
                         LabeledContent("Artist", value: artist)
                     }
                     Text(
-                        "This recording keeps its Trop identity, likes and "
-                            + "playlist entries. Only its audio source can be linked."
+                        "The original song, favorites, and playlist entries "
+                            + "stay intact. Choosing an alternate links audio "
+                            + "without replacing the saved recording."
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 }
 
-                Section("Matching audio sources") {
+                Section("Verified matches") {
                     if isSearching {
                         HStack {
                             ProgressView()
-                            Text("Searching your available music providers…")
+                            Text("Checking enabled audio providers…")
                         }
                     } else if candidates.isEmpty {
-                        ContentUnavailableView(
-                            "No verified audio match",
-                            systemImage: "waveform.slash",
-                            description: Text(
-                                "No independent provider returned a matching "
-                                    + "recording. Your song remains saved. "
-                                    + "Try enabling a compatible music addon "
-                                    + "or adjusting your audio quality."
-                            )
+                        Text(
+                            "No exact match found at the selected quality. "
+                                + "The original song stays in your library."
                         )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     } else {
                         ForEach(candidates, id: \.id) { track in
                             Button {
-                                Task { await select(track) }
+                                Task { await select(track, approvedAlternate: false) }
                             } label: {
-                                HStack(spacing: 12) {
-                                    AsyncImageView(
-                                        url: track.artworkURL?.absoluteString
-                                    )
-                                    .frame(width: 48, height: 48)
-                                    .clipShape(RoundedRectangle(cornerRadius: 7))
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(track.title)
-                                            .foregroundStyle(.primary)
-                                        Text(track.artist)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                        Text(track.id.source.rawValue.capitalized
-                                             + " · " + durationLabel(track.durationSeconds))
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    Image(systemName: "link")
-                                        .foregroundStyle(.secondary)
-                                }
-                                .contentShape(Rectangle())
+                                candidateRow(track, alternate: false)
                             }
                             .disabled(isLinking)
                         }
                     }
                 }
 
+                if !alternates.isEmpty {
+                    Section("Review Alternatives") {
+                        Text(
+                            "These may be live, remix, different-length, or "
+                                + "other editions. None are linked automatically."
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        ForEach(alternates, id: \.id) { track in
+                            Button {
+                                pendingAlternate = track
+                            } label: {
+                                candidateRow(track, alternate: true)
+                            }
+                            .disabled(isLinking)
+                        }
+                    }
+                }
                 Section {
                     Text(
-                        "Choose only the correct recording. Similar metadata "
-                            + "does not guarantee that a provider's stream will "
-                            + "work. YouTube is not searched automatically. "
-                            + "Private addon links are intentionally omitted "
+                        "Exact recording identity is checked before linking. "
+                            + "An alternate needs your explicit approval. "
+                            + "Provider stream availability is checked at play. "
+                            + "YouTube is not used as a mandatory music "
+                            + "catalogue, and private addon links are excluded "
                             + "from portable backups."
                     )
                     .font(.footnote)
@@ -105,7 +101,7 @@ struct TropLibraryV2AudioSourceSheet: View {
                     }
                 }
             }
-            .navigationTitle("Find audio source")
+            .navigationTitle("Review Audio Sources")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -113,18 +109,75 @@ struct TropLibraryV2AudioSourceSheet: View {
                         .disabled(isLinking)
                 }
             }
+            .confirmationDialog(
+                "Use a different recording?",
+                isPresented: Binding(
+                    get: { pendingAlternate != nil },
+                    set: { if !$0 { pendingAlternate = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Link this alternate version") {
+                    if let track = pendingAlternate {
+                        Task { await select(track, approvedAlternate: true) }
+                    }
+                }
+                Button("Keep original without linking", role: .cancel) {}
+            } message: {
+                Text(
+                    "This may not be the same studio recording. Your original "
+                        + "song metadata and playlists will NOT be replaced."
+                )
+            }
             .task(id: recording.id) {
                 isSearching = true
-                candidates = await TropLibraryV2AudioDiscovery.find(
+                let matches = await TropLibraryV2AudioDiscovery.inspect(
                     for: recording, requiresLossless: requiresLossless
                 )
+                guard !Task.isCancelled else { return }
+                candidates = matches.exact
+                alternates = matches.review
                 isSearching = false
             }
         }
     }
 
+    private func candidateRow(
+        _ track: MusicCatalogTrack, alternate: Bool
+    ) -> some View {
+        HStack(spacing: 12) {
+            AsyncImageView(url: track.artworkURL?.absoluteString)
+                .frame(width: 48, height: 48)
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(track.title).foregroundStyle(.primary)
+                Text(track.artist)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(
+                    track.id.source.rawValue.capitalized
+                        + " · " + durationLabel(track.durationSeconds)
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                if let album = track.albumTitle {
+                    Text(album)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer()
+            Image(systemName: alternate ? "chevron.right" : "link")
+                .foregroundStyle(.secondary)
+        }
+        .contentShape(Rectangle())
+    }
+
     @MainActor
-    private func select(_ track: MusicCatalogTrack) async {
+    private func select(
+        _ track: MusicCatalogTrack, approvedAlternate: Bool
+    ) async {
         guard !isLinking else { return }
         isLinking = true
         defer { isLinking = false }
@@ -132,10 +185,9 @@ struct TropLibraryV2AudioSourceSheet: View {
             try await TropLibraryV2Store.linkConfirmedAudioSource(
                 toRecordingID: recording.id,
                 track: track,
-                requiresLossless: requiresLossless
+                requiresLossless: requiresLossless,
+                userApprovedAlternate: approvedAlternate
             )
-            // The source now belongs to this same UUID. Playback still goes
-            // through the existing ApoloEngine source resolver and controls.
             try await TropLibraryV2PlaybackRouter.playSaved(recording)
             dismiss()
         } catch {
