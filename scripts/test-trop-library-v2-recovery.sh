@@ -55,6 +55,33 @@ swiftc -swift-version 6 -strict-concurrency=complete \
   -o "$tmp_dir/trop-match-candidate-checks"
 "$tmp_dir/trop-match-candidate-checks"
 
+# Saved recordings only: strictly verified metadata may generate a small,
+# bounded number of prelinks. Uncertain editions must never auto-link.
+swiftc -swift-version 6 -strict-concurrency=complete \
+  Trop/Core/Metadata/TextMatch.swift \
+  Trop/Core/MusicSources/MusicCatalog.swift \
+  Trop/Core/LibrarySync/TropLibraryV2IdentityPolicy.swift \
+  Trop/Core/LibrarySync/TropLibraryV2AudioMatchPolicy.swift \
+  Trop/Core/LibrarySync/TropMatchCandidatePolicy.swift \
+  Trop/Core/LibrarySync/TropLibraryV2PrelinkPolicy.swift \
+  tests/LibrarySync/TropLibraryV2PrelinkPolicyChecks.swift \
+  -o "$tmp_dir/trop-match-prelink-checks"
+"$tmp_dir/trop-match-prelink-checks"
+swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2Prelinker.swift
+grep -Fq 'TropLibraryV2Prelinker.shared.schedule(' \
+  Trop/Core/LibrarySync/TropLibraryV2Store.swift
+grep -Fq 'TropLibraryV2Prelinker.shared.scheduleVisibleLibrary' \
+  Trop/Library/TropLibraryV2MainStyleView.swift
+grep -Fq 'TropLibraryV2Prelinker.shared.scheduleVisibleLibrary' \
+  Trop/Library/TropLibraryV2Screen.swift
+grep -Fq 'TropLibraryV2Store.linkConfirmedAudioSource(' \
+  Trop/Core/LibrarySync/TropLibraryV2Prelinker.swift
+if grep -E 'InnerTube|SyncBridge|PlaybackQueue.play' \
+  Trop/Core/LibrarySync/TropLibraryV2Prelinker.swift; then
+  echo 'Saved prelinker must not bootstrap YouTube, sync accounts or autoplay'
+  exit 1
+fi
+
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2AudioDiscovery.swift
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2PlaybackRouter.swift
 swiftc -frontend -parse Trop/Core/MusicSources/QobuzClient.swift
