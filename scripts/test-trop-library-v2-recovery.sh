@@ -12,6 +12,19 @@ swiftc -swift-version 6 -strict-concurrency=complete \
   tests/LibrarySync/TropLibraryCombinedLocalSnapshotStoreChecks.swift \
   -o "$tmp_dir/v2-combined-local-save-checks"
 "$tmp_dir/v2-combined-local-save-checks"
+
+# Portable Library V2 artwork must match independent recording metadata.
+swiftc -swift-version 6 -strict-concurrency=complete \
+  Trop/Core/Metadata/TextMatch.swift \
+  Trop/Core/Metadata/TropLibraryV2ArtworkSelectionPolicy.swift \
+  tests/LibrarySync/TropLibraryV2ArtworkChecks.swift \
+  -o "$tmp_dir/v2-artwork-checks"
+"$tmp_dir/v2-artwork-checks"
+swiftc -frontend -parse Trop/Library/TropLibraryV2ArtworkView.swift
+swiftc -frontend -parse Trop/Library/TropLibraryV2MainStyleView.swift
+swiftc -frontend -parse Trop/Library/TropLibraryV2Screen.swift
+grep -Fq 'TropLibraryV2ArtworkView(' Trop/Library/TropLibraryV2MainStyleView.swift
+grep -Fq 'TropLibraryV2ArtworkView(' Trop/Library/TropLibraryV2Screen.swift
 swiftc -frontend -parse Trop/Settings/TropLibraryCombinedBackupView.swift
 grep -Fq 'TropLibraryCombinedLocalSnapshotStore.saveVerified(data)' \
   Trop/Settings/TropLibraryCombinedBackupView.swift
