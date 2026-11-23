@@ -2,7 +2,8 @@ import Foundation
 
 /// Discover candidate audio by music metadata from providers already used by
 /// Trop Search. No YouTube catalogue call, no login, no writes, no autoplay.
-/// The user must approve the exact resulting provider track before linking.
+/// Exact-version results may be prelinked by Library V2; alternative versions
+/// remain review-only and always require explicit user approval.
 @MainActor
 enum TropLibraryV2AudioDiscovery {
     static func inspect(
