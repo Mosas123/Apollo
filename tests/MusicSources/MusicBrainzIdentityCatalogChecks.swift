@@ -56,7 +56,10 @@ struct MusicBrainzIdentityCatalogChecks {
                 precondition(params["limit"] == "50")
                 switch url.path {
                 case "/ws/2/recording":
-                    precondition(params["query"] == "recording:\"Canción & Jazz\" AND artist:\"Artista Uno\"")
+                    precondition(
+                        params["query"] == "recording:\\"Canción & Jazz\\" AND artist:\\"Artista Uno\\""
+                            || params["query"] == "artist:\\"Artista Uno\\""
+                    )
                     return (Data(recordingJSON.utf8), response)
                 case "/ws/2/artist":
                     precondition(params["query"] == "artist:\"Artista Uno\"")
@@ -83,6 +86,14 @@ struct MusicBrainzIdentityCatalogChecks {
         precondition(recording.durationSeconds == 214 && recording.score == 100)
         precondition(recording.isrcs == ["USRC17607839"])
         precondition(!MusicPlaybackIdentity.isYouTube(recording.id.storageKey))
+        // An artist-name query must return recordings even when none has
+        // the artist's name in its title. The artist filter is not title search.
+        let byArtist = try await client.searchRecordingsByArtist(
+            artist: "Artista Uno", limit: 500
+        )
+        precondition(byArtist.count == 1)
+        precondition(byArtist[0].id == recording.id)
+
         precondition(MusicBrainzEntityID(kind: .recording, mbid: "invalid") == nil)
         precondition(MusicBrainzEntityID(kind: .recording, mbid: mbid)?.storageKey
             != MusicBrainzEntityID(kind: .artist, mbid: mbid)?.storageKey)
@@ -103,8 +114,10 @@ struct MusicBrainzIdentityCatalogChecks {
         // Empty queries must not consume the network budget or emit a request.
         let emptyRecordings = try await client.searchRecordings(title: "   ", artist: "")
         let emptyArtists = try await client.searchArtists(query: "")
+        let emptyByArtist = try await client.searchRecordingsByArtist(artist: " ")
         let emptyAlbums = try await client.searchAlbums(title: "", artist: "")
-        precondition(emptyRecordings.isEmpty && emptyArtists.isEmpty && emptyAlbums.isEmpty)
+        precondition(emptyRecordings.isEmpty && emptyArtists.isEmpty
+            && emptyAlbums.isEmpty && emptyByArtist.isEmpty)
 
         let throttled = MusicBrainzIdentityCatalog(
             transport: { request in
