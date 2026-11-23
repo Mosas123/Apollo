@@ -211,6 +211,15 @@ struct TropLibraryV2MainStyleView: View {
                             }
                             .buttonStyle(.plain)
                             .disabled(isStartingPlayback)
+                            .contextMenu {
+                                Button {
+                                    audioSourceRequest = TropLibraryV2AudioSourceRequest(
+                                        recording: recording
+                                    )
+                                } label: {
+                                    Label("Review Audio Sources", systemImage: "link")
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal, 16)
@@ -299,11 +308,7 @@ struct TropLibraryV2MainStyleView: View {
         } catch is CancellationError {
             return
         } catch let error as TropLibraryV2PlaybackSourceError {
-            if error == .unavailable {
-                audioSourceRequest = TropLibraryV2AudioSourceRequest(recording: recording)
-            } else {
-                playbackMessage = error.localizedDescription
-            }
+            playbackMessage = error.localizedDescription
         } catch {
             playbackMessage = "Could not start this audio source. The song remains saved."
         }
@@ -446,6 +451,15 @@ private struct TropLibraryV2SongCollectionView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(isStartingPlayback)
+                    .contextMenu {
+                        Button {
+                            audioSourceRequest = TropLibraryV2AudioSourceRequest(
+                                recording: recording
+                            )
+                        } label: {
+                            Label("Review Audio Sources", systemImage: "link")
+                        }
+                    }
                     Button {
                         Task { await setLiked(recording, liked: !recording.isLiked) }
                     } label: {
@@ -508,11 +522,7 @@ private struct TropLibraryV2SongCollectionView: View {
         } catch is CancellationError {
             return
         } catch let error as TropLibraryV2PlaybackSourceError {
-            if error == .unavailable {
-                audioSourceRequest = TropLibraryV2AudioSourceRequest(recording: recording)
-            } else {
-                playbackMessage = error.localizedDescription
-            }
+            playbackMessage = error.localizedDescription
         } catch {
             playbackMessage = "Could not start this source. The song remains saved."
         }
