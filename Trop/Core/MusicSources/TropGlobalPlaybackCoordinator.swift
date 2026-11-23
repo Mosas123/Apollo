@@ -91,7 +91,8 @@ enum TropGlobalPlaybackCoordinator {
         }
         _ = try await TropLibraryV2Store.createItem(
             kind: .recording, title: recording.title,
-            artistOrAuthor: recording.artist
+            artistOrAuthor: recording.artist,
+            durationSeconds: max(0, recording.durationSeconds ?? 0)
         )
     }
 }
