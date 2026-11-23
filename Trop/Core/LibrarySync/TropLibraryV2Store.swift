@@ -48,6 +48,9 @@ enum TropLibraryV2Store {
                 ]
             )
         }
+        if kind == .recording {
+            await TropLibraryV2Prelinker.shared.schedule(recordingID: id)
+        }
         return id
     }
 
@@ -202,7 +205,7 @@ enum TropLibraryV2Store {
             newPlaylistName = try TropLibraryV2IdentityPolicy.checkedTitle(name)
         }
         let now = Date()
-        return try await DatabaseService.shared.writeReturning { db in
+        let saved = try await DatabaseService.shared.writeReturning { db in
             let playlistID: String
             if let existingPlaylistID {
                 let kind = try String.fetchOne(
@@ -287,8 +290,12 @@ enum TropLibraryV2Store {
                     """,
                 arguments: [entryID, playlistID, recordingID, position, now]
             )
-            return playlistID
+            return (playlistID: playlistID, recordingID: recordingID)
         }
+        await TropLibraryV2Prelinker.shared.schedule(
+            recordingID: saved.recordingID
+        )
+        return saved.playlistID
     }
 
     static func playlists() async throws -> [PlaylistSummary] {
@@ -373,7 +380,7 @@ enum TropLibraryV2Store {
         let newID = TropLibraryV2IdentityPolicy.newID()
         let aliasID = TropLibraryV2IdentityPolicy.newID()
         let now = Date()
-        return try await DatabaseService.shared.writeReturning { db in
+        let savedID = try await DatabaseService.shared.writeReturning { db in
             if let existingID = try String.fetchOne(
                 db,
                 sql: """
@@ -417,6 +424,8 @@ enum TropLibraryV2Store {
             )
             return newID
         }
+        await TropLibraryV2Prelinker.shared.schedule(recordingID: savedID)
+        return savedID
     }
 
     /// The user explicitly chose one provider result found using saved
@@ -530,6 +539,33 @@ enum TropLibraryV2Store {
                     isLiked: row["is_liked"]
                 )
             }
+        }
+    }
+
+    /// Read one saved recording without scanning the full library. Used by
+    /// the prelink worker after a completed local save transaction.
+    static func recording(
+        withID rawID: String
+    ) async throws -> RecordingSummary? {
+        let id = try TropLibraryV2IdentityPolicy.checkedID(rawID)
+        return try await DatabaseService.shared.read { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT id, title, artist_or_author, duration_seconds,
+                           (liked_at IS NOT NULL) AS is_liked
+                    FROM trop_v2_item
+                    WHERE kind = 'recording' AND saved_at IS NOT NULL
+                      AND id = ?
+                    """,
+                arguments: [id]
+            ) else { return nil }
+            return RecordingSummary(
+                id: row["id"], title: row["title"],
+                artist: row["artist_or_author"],
+                durationSeconds: row["duration_seconds"],
+                isLiked: row["is_liked"]
+            )
         }
     }
 
