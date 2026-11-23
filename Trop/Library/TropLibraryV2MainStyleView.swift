@@ -14,6 +14,7 @@ struct TropLibraryV2MainStyleView: View {
     @State private var headerHeight: CGFloat = 60
     @State private var message: String?
     @State private var playbackMessage: String?
+    @State private var audioSourceRequest: TropLibraryV2AudioSourceRequest?
     @State private var isSaving = false
     @State private var isStartingPlayback = false
 
@@ -79,6 +80,9 @@ struct TropLibraryV2MainStyleView: View {
                 Task { await refresh() }
             }
             .refreshable { await refresh() }
+            .sheet(item: $audioSourceRequest) { request in
+                TropLibraryV2AudioSourceSheet(recording: request.recording)
+            }
             .alert("Audio unavailable", isPresented: Binding(
                 get: { playbackMessage != nil },
                 set: { if !$0 { playbackMessage = nil } }
@@ -295,7 +299,11 @@ struct TropLibraryV2MainStyleView: View {
         } catch is CancellationError {
             return
         } catch let error as TropLibraryV2PlaybackSourceError {
-            playbackMessage = error.localizedDescription
+            if error == .unavailable {
+                audioSourceRequest = TropLibraryV2AudioSourceRequest(recording: recording)
+            } else {
+                playbackMessage = error.localizedDescription
+            }
         } catch {
             playbackMessage = "Could not start this audio source. The song remains saved."
         }
@@ -392,6 +400,7 @@ private struct TropLibraryV2SongCollectionView: View {
     let likedOnly: Bool
     @State private var recordings: [TropLibraryV2Store.RecordingSummary] = []
     @State private var playbackMessage: String?
+    @State private var audioSourceRequest: TropLibraryV2AudioSourceRequest?
     @State private var isStartingPlayback = false
     @State private var message: String?
 
@@ -466,6 +475,9 @@ private struct TropLibraryV2SongCollectionView: View {
                 for: Notification.Name("trop.likeChanged")
             )
         ) { _ in Task { await refresh() } }
+        .sheet(item: $audioSourceRequest) { request in
+            TropLibraryV2AudioSourceSheet(recording: request.recording)
+        }
         .alert("Audio unavailable", isPresented: Binding(
             get: { playbackMessage != nil },
             set: { if !$0 { playbackMessage = nil } }
@@ -496,7 +508,11 @@ private struct TropLibraryV2SongCollectionView: View {
         } catch is CancellationError {
             return
         } catch let error as TropLibraryV2PlaybackSourceError {
-            playbackMessage = error.localizedDescription
+            if error == .unavailable {
+                audioSourceRequest = TropLibraryV2AudioSourceRequest(recording: recording)
+            } else {
+                playbackMessage = error.localizedDescription
+            }
         } catch {
             playbackMessage = "Could not start this source. The song remains saved."
         }
