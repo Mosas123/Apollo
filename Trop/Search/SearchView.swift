@@ -483,8 +483,12 @@ struct SearchView: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                Image(systemName: "play.fill")
-                    .foregroundStyle(.secondary)
+                if globalPlayingID == recording.id {
+                    ProgressView()
+                } else {
+                    Image(systemName: "play.fill")
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
