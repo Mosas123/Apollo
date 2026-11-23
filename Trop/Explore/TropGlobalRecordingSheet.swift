@@ -47,10 +47,10 @@ struct TropGlobalRecordingSheet: View {
                     .disabled(isSaving || isSearching)
                 } footer: {
                     Text(
-                        "The song is discovered using public ListenBrainz "
-                            + "statistics. Playback uses Trop Match and an "
-                            + "available independent audio provider. "
-                            + "Saving creates a Trop-owned library item."
+                        "Metadata from " + recording.source
+                            + ". Playback uses Trop Match and an available "
+                            + "independent audio provider. Saving creates "
+                            + "a Trop-owned library item."
                     )
                 }
 
