@@ -41,6 +41,8 @@ struct HomeScreenView: View {
     @State private var v2PlaybackMessage: String?
     @State private var v2GlobalPlayInFlight: String?
     @State private var v2GlobalRecordings: [TropGlobalRecording] = []
+    @State private var v2GlobalArtists: [TropGlobalArtist] = []
+    @State private var v2GlobalAlbums: [TropGlobalReleaseGroup] = []
     @State private var v2GlobalLoading = false
     @State private var v2GlobalError: String?
 
@@ -136,7 +138,10 @@ struct HomeScreenView: View {
                 Color.clear.frame(height: headerHeight)
                 v2DiscoveryCard
                 v2GlobalDiscoveryShelf
+                v2GlobalArtistsShelf
+                v2GlobalAlbumsShelf
                 if !v2GlobalLoading && v2GlobalRecordings.isEmpty
+                    && v2GlobalArtists.isEmpty && v2GlobalAlbums.isEmpty
                     && v2GlobalError == nil {
                     ContentUnavailableView(
                         "Discovery temporarily empty",
@@ -211,22 +216,101 @@ struct HomeScreenView: View {
         }
     }
 
+    private var v2GlobalArtistsShelf: some View {
+        Group {
+            if !v2GlobalArtists.isEmpty {
+                HorizontalSection(title: "Artists on ListenBrainz", vSpacing: 8) {
+                    LazyHStack(alignment: .top, spacing: 12) {
+                        ForEach(v2GlobalArtists.prefix(12)) { artist in
+                            NavigationLink {
+                                TropCatalogArtistPage(
+                                    id: artist.id, name: artist.name
+                                )
+                            } label: {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    ArtistAvatarImageView(
+                                        name: artist.name, fallbackURL: nil,
+                                        artistID: artist.id
+                                    )
+                                    .frame(width: 140, height: 140)
+                                    .clipShape(Circle())
+                                    Text(artist.name)
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(2)
+                                }
+                                .frame(width: 140, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var v2GlobalAlbumsShelf: some View {
+        Group {
+            if !v2GlobalAlbums.isEmpty {
+                HorizontalSection(title: "Albums on ListenBrainz", vSpacing: 8) {
+                    LazyHStack(alignment: .top, spacing: 12) {
+                        ForEach(v2GlobalAlbums.prefix(12)) { album in
+                            NavigationLink {
+                                TropCatalogAlbumPage(
+                                    id: album.id, title: album.title,
+                                    artist: album.artist
+                                )
+                            } label: {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    TropCatalogAlbumCover(
+                                        title: album.title, artist: album.artist
+                                    )
+                                    .frame(width: 140, height: 140)
+                                    Text(album.title)
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(2)
+                                    Text(album.artist)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                                .frame(width: 140, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     @MainActor
     private func refreshV2GlobalCatalog(force: Bool = false) async {
         guard libraryV2PreviewEnabled else { return }
         v2GlobalLoading = true
         defer { v2GlobalLoading = false }
-        do {
-            let recordings = try await TropGlobalMusicCatalog.shared
-                .popularRecordings(forceRefresh: force)
-            guard !Task.isCancelled, libraryV2PreviewEnabled else { return }
-            v2GlobalRecordings = recordings
-            v2GlobalError = recordings.isEmpty
-                ? "No public recordings available right now." : nil
-        } catch {
-            guard !Task.isCancelled, libraryV2PreviewEnabled else { return }
-            v2GlobalError = "Could not reach the public music catalogue."
-        }
+        // Public sitewide recordings, artists and releases are independent
+        // feeds. One failing service must not hide the other working shelves.
+        async let songs = TropGlobalMusicCatalog.shared.popularRecordings(
+            forceRefresh: force
+        )
+        async let artists = TropGlobalMusicCatalog.shared.popularArtists(
+            forceRefresh: force
+        )
+        async let albums = TropGlobalMusicCatalog.shared.popularReleaseGroups(
+            forceRefresh: force
+        )
+        let foundSongs = try? await songs
+        let foundArtists = try? await artists
+        let foundAlbums = try? await albums
+        guard !Task.isCancelled, libraryV2PreviewEnabled else { return }
+        v2GlobalRecordings = foundSongs ?? []
+        v2GlobalArtists = foundArtists ?? []
+        v2GlobalAlbums = foundAlbums ?? []
+        v2GlobalError = (foundSongs == nil && foundArtists == nil
+            && foundAlbums == nil)
+            ? "Could not reach public music discovery." : nil
     }
 
     /// Visual sibling of main's feature card. It opens our independent
