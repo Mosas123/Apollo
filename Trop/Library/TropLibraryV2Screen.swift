@@ -13,6 +13,7 @@ struct TropLibraryV2Screen: View {
     @State private var newPlaylistName = ""
     @State private var feedback: String?
     @State private var playbackMessage: String?
+    @State private var audioSourceRequest: TropLibraryV2AudioSourceRequest?
     @State private var isStartingPlayback = false
 
     var body: some View {
@@ -102,6 +103,9 @@ struct TropLibraryV2Screen: View {
                         Text(feedback).font(.footnote).foregroundStyle(.secondary)
                     }
                 }
+            }
+            .sheet(item: $audioSourceRequest) { request in
+                TropLibraryV2AudioSourceSheet(recording: request.recording)
             }
             .alert("Audio unavailable", isPresented: Binding(
                 get: { playbackMessage != nil },
@@ -196,7 +200,11 @@ struct TropLibraryV2Screen: View {
         } catch is CancellationError {
             return
         } catch let error as TropLibraryV2PlaybackSourceError {
-            playbackMessage = error.localizedDescription
+            if error == .unavailable {
+                audioSourceRequest = TropLibraryV2AudioSourceRequest(recording: recording)
+            } else {
+                playbackMessage = error.localizedDescription
+            }
         } catch {
             playbackMessage = "Could not start this source. The saved song was not changed."
         }
@@ -286,6 +294,7 @@ struct TropLibraryV2PlaylistScreen: View {
     @State private var isAdding = false
     @State private var isStartingPlayback = false
     @State private var playbackMessage: String?
+    @State private var audioSourceRequest: TropLibraryV2AudioSourceRequest?
 
     var body: some View {
         List {
@@ -333,6 +342,21 @@ struct TropLibraryV2PlaylistScreen: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(isStartingPlayback)
+                    .contextMenu {
+                        Button {
+                            audioSourceRequest = TropLibraryV2AudioSourceRequest(
+                                recording: TropLibraryV2Store.RecordingSummary(
+                                    id: track.recordingID,
+                                    title: track.title,
+                                    artist: track.artist,
+                                    durationSeconds: track.durationSeconds,
+                                    isLiked: false
+                                )
+                            )
+                        } label: {
+                            Label("Find Audio Source", systemImage: "link")
+                        }
+                    }
                 }
             }
             if let message {
@@ -342,6 +366,9 @@ struct TropLibraryV2PlaylistScreen: View {
         .navigationTitle(playlist.name)
         .task { await refresh() }
         .refreshable { await refresh() }
+        .sheet(item: $audioSourceRequest) { request in
+            TropLibraryV2AudioSourceSheet(recording: request.recording)
+        }
         .alert("Audio unavailable", isPresented: Binding(
             get: { playbackMessage != nil },
             set: { if !$0 { playbackMessage = nil } }
