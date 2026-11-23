@@ -41,41 +41,53 @@ grep -Fq "guard !TropLibraryV2AccountIsolation.isEnabled else { return }" Trop/H
 grep -Fq "if libraryV2PreviewEnabled {" Trop/Explore/ExploreView.swift
 grep -Fq "guard !TropLibraryV2AccountIsolation.isEnabled else { return }" Trop/Explore/ExploreViewModel.swift
 
-# Explore V2 selects a small number of saved artists locally and searches
-# independent providers only after the user chooses one. No YouTube feed,
-# automatic mass matching, or unverified claim of official chart rankings.
+# Global music discovery is separate from Library V2 and requires no
+# saved artists or recordings. Its data comes from public ListenBrainz stats.
 swiftc -swift-version 6 -strict-concurrency=complete \
-  Trop/Explore/ExploreV2DiscoveryPolicy.swift \
-  tests/Explore/ExploreV2DiscoveryPolicyChecks.swift \
-  -o "$temp_dir/explore-v2-discovery-checks"
-"$temp_dir/explore-v2-discovery-checks"
+  Trop/Core/MusicSources/TropGlobalMusicCatalog.swift \
+  tests/MusicSources/TropGlobalMusicCatalogChecks.swift \
+  -o "$temp_dir/trop-global-catalog"
+"$temp_dir/trop-global-catalog"
 swiftc -frontend -parse Trop/Explore/ExploreView.swift
-swiftc -frontend -parse Trop/Explore/ExploreViewModel.swift
-grep -Fq 'TropLibraryV2Store.savedCatalogItems(kind: .artist)' \
-  Trop/Explore/ExploreView.swift
-grep -Fq 'ExploreV2ProviderDiscovery.tracks(for: artist)' \
-  Trop/Explore/ExploreView.swift
-grep -Fq 'PlaybackQueue.play(' Trop/Explore/ExploreView.swift
-grep -Fq 'MusicAddonsStore.shared.enabledStremioInstallations.prefix(' \
-  Trop/Explore/ExploreViewModel.swift
+swiftc -frontend -parse Trop/Home/HomeScreenView.swift
+swiftc -frontend -parse Trop/Explore/TropGlobalRecordingSheet.swift
+swiftc -frontend -parse Trop/ContentView.swift
+
+# Buttons from Home must change the actual TabView selection, including
+# when the Explore tab is hidden for legacy users.
+grep -Fq 'router.selectedTabIndex = 4' Trop/Home/HomeScreenView.swift
+grep -Fq 'AppRouter.shared.$selectedTabIndex.dropFirst()' Trop/ContentView.swift
+grep -Fq 'if settings.showExploreTab || libraryV2PreviewEnabled {' Trop/ContentView.swift
+grep -Fq 'TropGlobalMusicCatalog.shared' Trop/Home/HomeScreenView.swift
+grep -Fq 'TropGlobalMusicCatalog.shared' Trop/Explore/ExploreView.swift
+grep -Fq 'TropGlobalRecordingSheet(recording: recording)' Trop/Home/HomeScreenView.swift
+grep -Fq 'TropGlobalRecordingSheet(recording: recording)' Trop/Explore/ExploreView.swift
+grep -Fq 'TropLibraryV2AudioDiscovery.inspect(' Trop/Explore/TropGlobalRecordingSheet.swift
+grep -Fq 'TropLibraryV2Store.createItem(' Trop/Explore/TropGlobalRecordingSheet.swift
+grep -Fq 'thumbnailUrl: artworkURL' Trop/Core/LibrarySync/TropLibraryV2PlaybackRouter.swift
+
 python3 - <<'EXPLORE_SOURCE_CHECK'
 from pathlib import Path
 view = Path("Trop/Explore/ExploreView.swift").read_text()
-model = Path("Trop/Explore/ExploreViewModel.swift").read_text()
+home = Path("Trop/Home/HomeScreenView.swift").read_text()
+catalog = Path("Trop/Core/MusicSources/TropGlobalMusicCatalog.swift").read_text()
 v2_view = view.split("private var v2AudioExplore:", 1)[1].split(
     "private var content:", 1
 )[0]
-v2_model = model.split("enum ExploreV2ProviderDiscovery", 1)[1]
+v2_home = home.split("private var v2HomeContent:", 1)[1].split(
+    "private var homescreenContent:", 1
+)[0]
 assert all(word not in v2_view for word in [
-    "InnerTubeClient", "YouTubeListItemView", "SyncBridge", "FEmusic_explore"
+    "InnerTubeClient", "YouTubeListItemView", "SyncBridge",
+    "TropLibraryV2Store.recordings()", "selectedV2Artist"
 ])
-assert all(word not in v2_model for word in [
-    "InnerTubeClient", "SyncBridge", "youtube", "FEmusic_explore"
+assert all(word not in v2_home for word in [
+    "InnerTubeClient", "YouTubeListItemView", "SyncBridge.mutations"
 ])
-assert "withTaskGroup" in v2_model
-assert "isStreamable" in v2_model
-assert "seen.insert($0.id)" in v2_model
-assert "guard !Task.isCancelled" in v2_model
-assert "selectedV2Artist == artist" in v2_view
-print("Explore V2 independent, user-initiated, cancellable search wiring passed")
+assert "api.listenbrainz.org/1/stats/sitewide/recordings" in catalog
+assert "URLSession.shared.data(for:" in catalog
+assert "TropGlobalRecording" in v2_home
+assert "TropGlobalRecording" in v2_view
+assert "popularRecordings(forceRefresh: force)" in v2_view
+print("Home + Explore V2: global metadata, real navigation and no YouTube feed passed")
 EXPLORE_SOURCE_CHECK
