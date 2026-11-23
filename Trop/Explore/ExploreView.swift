@@ -15,7 +15,8 @@ struct ExploreView: View {
     @State private var v2GlobalRecordings: [TropGlobalRecording] = []
     @State private var isLoadingGlobal = false
     @State private var globalError: String?
-    @State private var selectedGlobalRecording: TropGlobalRecording?
+    @State private var globalPlayingID: String?
+    @State private var globalPlaybackMessage: String?
 
     private let accountState = AccountSheetState.shared
     @AppStorage("trop.library.v2.previewEnabled")
@@ -40,8 +41,13 @@ struct ExploreView: View {
             .frame(maxHeight: .infinity, alignment: .top)
             .toolbar(.hidden, for: .navigationBar)
             .detailRouteDestinations()
-            .sheet(item: $selectedGlobalRecording) { recording in
-                TropGlobalRecordingSheet(recording: recording)
+            .alert("Audio unavailable", isPresented: Binding(
+                get: { globalPlaybackMessage != nil },
+                set: { if !$0 { globalPlaybackMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(globalPlaybackMessage ?? "No compatible audio found.")
             }
             .navigationDestination(for: MoodItem.self) { mood in
                 MoodDetailView(mood: mood)
@@ -96,7 +102,7 @@ struct ExploreView: View {
                     Text("Popular on ListenBrainz").font(.headline)
                     ForEach(v2GlobalRecordings) { recording in
                         Button {
-                            selectedGlobalRecording = recording
+                            Task { await playGlobalRecording(recording) }
                         } label: {
                             HStack(spacing: 12) {
                                 TropLibraryV2ArtworkView(
@@ -128,6 +134,14 @@ struct ExploreView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .disabled(globalPlayingID != nil)
+                        .contextMenu {
+                            Button {
+                                Task { await saveGlobalRecording(recording) }
+                            } label: {
+                                Label("Save to Library", systemImage: "plus")
+                            }
+                        }
                     }
                 } else if let globalError {
                     ContentUnavailableView(
@@ -169,6 +183,29 @@ struct ExploreView: View {
         .refreshable { await refreshGlobal(force: true) }
         .miniPlayerTracksScroll()
         .scrollEdgeEffectHidden(true, for: .bottom)
+    }
+
+    @MainActor
+    private func playGlobalRecording(_ recording: TropGlobalRecording) async {
+        guard libraryV2PreviewEnabled, globalPlayingID == nil else { return }
+        globalPlayingID = recording.id
+        defer { globalPlayingID = nil }
+        do {
+            try await TropGlobalPlaybackCoordinator.play(recording)
+        } catch is CancellationError {
+            return
+        } catch {
+            globalPlaybackMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func saveGlobalRecording(_ recording: TropGlobalRecording) async {
+        do {
+            try await TropGlobalPlaybackCoordinator.save(recording)
+        } catch {
+            globalPlaybackMessage = "Could not save. Your collection was not changed."
+        }
     }
 
     @MainActor
