@@ -53,7 +53,36 @@ struct StremioDescriptor: Codable, Sendable, Equatable {
         let type: String?
         let label: String?
         let options: [Option]?
+        /// Stremio/Eclipse addons may declare toggle defaults as JSON booleans,
+        /// not strings (e.g. NullBeat Atmos). Normalize scalar values so an
+        /// optional setting never invalidates the entire addon manifest.
         let `default`: String?
+
+        enum CodingKeys: String, CodingKey {
+            case key, type, label, options, `default`
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            key = try container.decode(String.self, forKey: .key)
+            type = try container.decodeIfPresent(String.self, forKey: .type)
+            label = try container.decodeIfPresent(String.self, forKey: .label)
+            options = try container.decodeIfPresent([Option].self, forKey: .options)
+            if let string = try? container.decode(String.self, forKey: .default) {
+                self.default = string
+            } else if let boolean = try? container.decode(Bool.self, forKey: .default) {
+                self.default = boolean ? "true" : "false"
+            } else if let integer = try? container.decode(Int.self, forKey: .default) {
+                self.default = String(integer)
+            } else if let number = try? container.decode(Double.self, forKey: .default),
+                      number.isFinite {
+                self.default = String(number)
+            } else {
+                // Unsupported optional default types must not block the
+                // provider's validated capabilities and required fields.
+                self.default = nil
+            }
+        }
     }
     let resources: [Resource]
     let types: [String]
@@ -62,6 +91,18 @@ struct StremioDescriptor: Codable, Sendable, Equatable {
     /// the declared content type is the only way to tell them apart.
     var contentType: String? = nil
     var settings: [Setting]? = nil
+
+    /// Eclipse offers direct /search and /resolve resources. A manifest may
+    /// advertise these alongside browse catalogs; Stremio's search= catalog
+    /// extra must not override the explicit Eclipse resource contract.
+    var usesEclipseRouting: Bool {
+        let names = Set(resources.map { $0.name.lowercased() })
+        return !names.isDisjoint(with: ["search", "resolve", "isrc"])
+    }
+
+    func offers(_ resource: String) -> Bool {
+        resources.contains { $0.name.caseInsensitiveCompare(resource) == .orderedSame }
+    }
 }
 
 /// Audio tiers an addon says it can serve. The manifest settings are the only
