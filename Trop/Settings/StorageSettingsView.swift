@@ -23,6 +23,11 @@ struct StorageSettingsView: View {
             }
 
             Section {
+                NavigationLink {
+                    TropFilesExportView()
+                } label: {
+                    Label("Export Logs & Downloaded Music", systemImage: "square.and.arrow.up")
+                }
                 Button(role: .destructive) {
                     Task { await clear() }
                 } label: {
