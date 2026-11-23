@@ -169,8 +169,8 @@ struct TropLibraryV2MainStyleView: View {
         .buttonStyle(.plain)
     }
 
-    /// V2 has no saved cover-art URL by design. Use honest placeholders
-    /// rather than pulling artwork or album IDs from YouTube/legacy tables.
+    /// Rebuild display artwork from independent music catalogues. Saved V2
+    /// identities and audio sources remain separate from these image lookups.
     private var recentlyAddedSection: some View {
         let recent = Array(recordings.prefix(8))
         return Group {
@@ -187,17 +187,11 @@ struct TropLibraryV2MainStyleView: View {
                                 Task { await playSavedRecording(recording) }
                             } label: {
                                 VStack(alignment: .leading, spacing: 6) {
-                                    ZStack {
-                                        RoundedRectangle(cornerRadius: 10)
-                                            .fill(
-                                                Color(
-                                                    uiColor: .secondarySystemGroupedBackground
-                                                )
-                                            )
-                                        Image(systemName: "music.note")
-                                            .font(.largeTitle)
-                                            .foregroundStyle(settings.accentColor)
-                                    }
+                                    TropLibraryV2ArtworkView(
+                                        title: recording.title,
+                                        artist: recording.artist,
+                                        durationSeconds: recording.durationSeconds
+                                    )
                                     .aspectRatio(1, contentMode: .fit)
                                     Text(recording.title)
                                         .font(.callout)
@@ -421,9 +415,12 @@ private struct TropLibraryV2SongCollectionView: View {
                         Task { await play(recording) }
                     } label: {
                         HStack(spacing: 12) {
-                            Image(systemName: "music.note")
-                                .foregroundStyle(.secondary)
-                                .frame(width: 30)
+                            TropLibraryV2ArtworkView(
+                                title: recording.title,
+                                artist: recording.artist,
+                                durationSeconds: recording.durationSeconds
+                            )
+                            .frame(width: 40, height: 40)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(recording.title).lineLimit(1)
                                 if let artist = recording.artist {
