@@ -542,6 +542,45 @@ enum TropLibraryV2Store {
         }
     }
 
+    /// Local-only summary of saved recording references from audio providers
+    /// other than YouTube. These are metadata links, NOT playback guarantees.
+    struct IndependentSourceCoverage: Sendable {
+        let savedRecordings: Int
+        let withIndependentReference: Int
+    }
+
+    static func independentSourceCoverage() async throws -> IndependentSourceCoverage {
+        try await DatabaseService.shared.read { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT COUNT(DISTINCT item.id) AS saved_count,
+                           COUNT(DISTINCT CASE
+                               WHEN alias.provider IN (
+                                   'addon', 'qobuz', 'audius', 'jiosaavn'
+                               ) AND alias.source_scope IN (
+                                   'global', 'user-approved-alt'
+                               ) THEN item.id
+                               ELSE NULL
+                           END) AS independent_count
+                    FROM trop_v2_item AS item
+                    LEFT JOIN trop_v2_source_alias AS alias
+                      ON alias.item_id = item.id AND alias.kind = 'recording'
+                    WHERE item.kind = 'recording' AND item.saved_at IS NOT NULL
+                    """
+            ) else {
+                return IndependentSourceCoverage(
+                    savedRecordings: 0, withIndependentReference: 0
+                )
+            }
+            let saved: Int = row["saved_count"]
+            let linked: Int = row["independent_count"]
+            return IndependentSourceCoverage(
+                savedRecordings: saved, withIndependentReference: linked
+            )
+        }
+    }
+
     /// Read one saved recording without scanning the full library. Used by
     /// the prelink worker after a completed local save transaction.
     static func recording(
