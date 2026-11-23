@@ -120,3 +120,100 @@ final class ExploreViewModel {
     }
 
 }
+
+
+/// Explore's explicit artist tap makes a bounded, ephemeral provider search.
+/// This does not read InnerTube, persist aliases, build recommendations,
+/// fetch streams, or automatically scan the user's whole saved library.
+@MainActor
+enum ExploreV2ProviderDiscovery {
+    static func tracks(for artist: String) async -> [MusicCatalogTrack] {
+        guard ExploreV2DiscoveryPolicy.artistSeeds([artist]).count == 1 else {
+            return []
+        }
+        let installs = Array(
+            MusicAddonsStore.shared.enabledStremioInstallations.prefix(
+                ExploreV2DiscoveryPolicy.maximumAddonInstallations
+            )
+        )
+        let limit = ExploreV2DiscoveryPolicy.resultsPerProvider
+        var found: [MusicCatalogTrack] = []
+        await withTaskGroup(of: [MusicCatalogTrack].self) { group in
+            group.addTask {
+                (try? await AudiusClient().searchTracks(
+                    query: artist, limit: limit
+                )) ?? []
+            }
+            group.addTask {
+                await QobuzCatalogService.shared.searchIfConfigured(
+                    query: artist, limit: limit
+                )
+            }
+            group.addTask {
+                (try? await JioSaavnClient().search(
+                    query: artist, limit: limit
+                )) ?? []
+            }
+            for installation in installs {
+                group.addTask {
+                    guard let client = try? MusicAddonClient(
+                        installation: installation
+                    ), let items = try? await client.search(
+                        artist, limit: limit
+                    ) else { return [] }
+                    return items.map { item in
+                        var title = item.title
+                        var performer = item.artist ?? ""
+                        if performer.isEmpty,
+                           let split = title.range(of: " - ") {
+                            performer = String(title[..<split.lowerBound])
+                            title = String(title[split.upperBound...])
+                        }
+                        let playbackID = AddonPlaybackID.encode(
+                            key: item.installationKey,
+                            type: item.type, id: item.id
+                        )
+                        let raw = String(
+                            playbackID.dropFirst(AddonPlaybackID.prefix.count)
+                        )
+                        return MusicCatalogTrack(
+                            id: MusicCatalogID(source: .addon, rawValue: raw),
+                            title: title, artist: performer,
+                            durationSeconds: item.durationSeconds ?? 0,
+                            artworkURL: item.poster,
+                            permalinkURL: nil, isStreamable: true
+                        )
+                    }
+                }
+            }
+            for await tracks in group {
+                guard !Task.isCancelled else {
+                    group.cancelAll()
+                    return
+                }
+                found.append(contentsOf: tracks)
+            }
+        }
+        guard !Task.isCancelled else { return [] }
+
+        // Source IDs are meaningful only within the originating provider.
+        // Do not merge lookalikes from different addons or editions.
+        var seen = Set<MusicCatalogID>()
+        let priority: [MusicCatalogSource] = [
+            .addon, .qobuz, .audius, .jiosaavn
+        ]
+        return Array(
+            found.filter {
+                $0.isStreamable
+                    && ExploreV2DiscoveryPolicy.matchesArtist(
+                        $0.artist, selected: artist
+                    ) && seen.insert($0.id).inserted
+            }.sorted {
+                let first = priority.firstIndex(of: $0.id.source) ?? 9
+                let second = priority.firstIndex(of: $1.id.source) ?? 9
+                if first != second { return first < second }
+                return $0.id.rawValue < $1.id.rawValue
+            }.prefix(ExploreV2DiscoveryPolicy.maximumVisibleTracks)
+        )
+    }
+}
