@@ -175,7 +175,15 @@ struct MusicBrainzIdentityCatalog: Sendable {
         guard !title.isEmpty else { return [] }
         let term = "releasegroup:\(Self.quoted(title))"
             + (artist.isEmpty ? "" : " AND artist:\(Self.quoted(artist))")
-        let page: AlbumPage = try await search(entity: "release-group", term: term, limit: limit)
+        return try await matchingAlbums(term: term, limit: limit)
+    }
+
+    private func matchingAlbums(
+        term: String, limit: Int
+    ) async throws -> [MusicBrainzAlbum] {
+        let page: AlbumPage = try await search(
+            entity: "release-group", term: term, limit: limit
+        )
         var seen = Set<String>()
         return page.albums.compactMap { item in
             guard let id = MusicBrainzEntityID(kind: .releaseGroup, mbid: item.id),
@@ -189,6 +197,87 @@ struct MusicBrainzIdentityCatalog: Sendable {
                 score: item.score
             )
         }
+    }
+
+    /// Artist discography does not require knowledge of any album title.
+    func searchAlbumsByArtist(
+        artist: String, limit: Int = 25
+    ) async throws -> [MusicBrainzAlbum] {
+        let artist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard artist.count >= 2 else { return [] }
+        return try await matchingAlbums(
+            term: "artist:\(Self.quoted(artist))", limit: limit
+        )
+    }
+
+    /// Use release-group identity to retrieve the actual ordered tracks of
+    /// a selected MusicBrainz release, rather than guessing by song search.
+    func albumTracks(releaseGroupID: String) async throws -> [MusicBrainzAlbumTrack] {
+        guard let id = UUID(uuidString: releaseGroupID)?.uuidString.lowercased()
+        else { return [] }
+        guard var components = URLComponents(
+            string: "https://musicbrainz.org/ws/2/release"
+        ) else { throw MusicBrainzCatalogError.invalidRequest }
+        components.queryItems = [
+            URLQueryItem(name: "release-group", value: id),
+            URLQueryItem(name: "fmt", value: "json"),
+            URLQueryItem(name: "limit", value: "20")
+        ]
+        guard let url = components.url else {
+            throw MusicBrainzCatalogError.invalidRequest
+        }
+        let releases: MBReleaseBrowse = try await fetchURL(url)
+        let official = releases.releases.filter {
+            $0.status?.lowercased() == "official"
+        }
+        guard let release = (official.isEmpty ? releases.releases : official).first,
+              UUID(uuidString: release.id) != nil else { return [] }
+        guard var detail = URLComponents(
+            string: "https://musicbrainz.org/ws/2/release/\(release.id)"
+        ) else { throw MusicBrainzCatalogError.invalidRequest }
+        detail.queryItems = [
+            URLQueryItem(name: "inc", value: "recordings+artist-credits"),
+            URLQueryItem(name: "fmt", value: "json")
+        ]
+        guard let detailURL = detail.url else {
+            throw MusicBrainzCatalogError.invalidRequest
+        }
+        let album: MBReleaseDetail = try await fetchURL(detailURL)
+        var result: [MusicBrainzAlbumTrack] = []
+        for medium in album.media ?? [] {
+            for track in medium.tracks ?? [] {
+                guard let recording = track.recording,
+                      let uuid = UUID(uuidString: recording.id),
+                      !recording.title.isEmpty else { continue }
+                let credits = track.artistCredit?.rendered
+                    ?? recording.artistCredit?.rendered ?? ""
+                result.append(MusicBrainzAlbumTrack(
+                    id: uuid.uuidString.lowercased(), title: recording.title,
+                    artist: credits, durationSeconds: (track.length
+                        ?? recording.length).map { max(0, $0 / 1000) },
+                    position: result.count + 1
+                ))
+            }
+        }
+        return result
+    }
+
+    private func fetchURL<T: Decodable>(_ url: URL) async throws -> T {
+        var request = URLRequest(url: url, timeoutInterval: 12)
+        request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        try await limiter.waitForSlot()
+        let (data, response) = try await transport(request)
+        guard let http = response as? HTTPURLResponse else {
+            throw MusicBrainzCatalogError.invalidRequest
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw MusicBrainzCatalogError.httpStatus(http.statusCode)
+        }
+        guard data.count <= Self.maxResponseBytes else {
+            throw MusicBrainzCatalogError.oversizedResponse
+        }
+        return try JSONDecoder().decode(T.self, from: data)
     }
 
     private func search<T: Decodable>(entity: String, term: String, limit: Int) async throws -> T {
@@ -226,6 +315,48 @@ struct MusicBrainzIdentityCatalog: Sendable {
             .replacingOccurrences(of: "\"", with: "\\\"")
         return "\"\(escaped)\""
     }
+}
+
+struct MusicBrainzAlbumTrack: Sendable, Equatable, Identifiable {
+    let id: String
+    let title: String
+    let artist: String
+    let durationSeconds: Int?
+    let position: Int
+}
+
+private struct MBReleaseBrowse: Decodable {
+    struct Release: Decodable {
+        let id: String
+        let status: String?
+    }
+    let releases: [Release]
+}
+
+private struct MBReleaseDetail: Decodable {
+    struct Medium: Decodable {
+        let tracks: [Track]?
+    }
+    struct Track: Decodable {
+        let length: Int?
+        let artistCredit: [MBCreditPiece]?
+        let recording: Recording?
+        enum CodingKeys: String, CodingKey {
+            case length, recording
+            case artistCredit = "artist-credit"
+        }
+    }
+    struct Recording: Decodable {
+        let id: String
+        let title: String
+        let length: Int?
+        let artistCredit: [MBCreditPiece]?
+        enum CodingKeys: String, CodingKey {
+            case id, title, length
+            case artistCredit = "artist-credit"
+        }
+    }
+    let media: [Medium]?
 }
 
 private struct MBArtistStub: Decodable {
