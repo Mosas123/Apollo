@@ -89,6 +89,11 @@ grep -Fq '.recordingsMissingIndependentSources()' \
   Trop/Settings/TropLibraryV2BatchMatchView.swift
 grep -Fq 'TropLibraryV2AudioSourceSheet(recording:' \
   Trop/Settings/TropLibraryV2BatchMatchView.swift
+grep -Fq 'sourceName(for: track)' Trop/Library/TropLibraryV2AudioSourceSheet.swift
+grep -Fq 'MusicAddonsStore.shared.installation(key: ref.k)' \
+  Trop/Library/TropLibraryV2AudioSourceSheet.swift
+grep -Fq 'AddonPlaybackID.prefix + track.id.rawValue' \
+  Trop/Library/TropLibraryV2AudioSourceSheet.swift
 # Read-only coverage counts saved recordings, not aliases, ignores YouTube
 # and unapproved scopes, and does not mistake a link for playable audio.
 python3 - <<'COVERAGE_CHECK'
