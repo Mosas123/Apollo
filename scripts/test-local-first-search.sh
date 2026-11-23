@@ -100,9 +100,9 @@ grep -Fq 'catalogRecordings' Trop/Search/SearchViewModel.swift
 grep -Fq 'catalogAlbums' Trop/Search/SearchViewModel.swift
 grep -Fq 'catalogArtists' Trop/Search/SearchViewModel.swift
 grep -Fq 'TropGlobalRecordingSheet(recording: recording)' Trop/Search/SearchView.swift
-grep -Fq 'v2SectionHeader("Songs · MusicBrainz")' Trop/Search/SearchView.swift
-grep -Fq 'v2SectionHeader("Albums · MusicBrainz")' Trop/Search/SearchView.swift
-grep -Fq 'v2SectionHeader("Artists · MusicBrainz")' Trop/Search/SearchView.swift
+grep -Fq 'v2SectionHeader("Songs")' Trop/Search/SearchView.swift
+grep -Fq 'v2SectionHeader("Albums")' Trop/Search/SearchView.swift
+grep -Fq 'v2SectionHeader("Artists")' Trop/Search/SearchView.swift
 swiftc -frontend -parse Trop/Search/SearchViewModel.swift
 swiftc -frontend -parse Trop/Search/SearchView.swift
 python3 - <<'GLOBAL_SEARCH_ASSERTIONS'
@@ -127,3 +127,31 @@ assert "if viewModel.showsCatalogRecordings" in view
 assert "if viewModel.displaysV2LibraryResults" in view
 print("Global V2 Search and optional Library scope wiring passed")
 GLOBAL_SEARCH_ASSERTIONS
+
+# Apple-like mixed Top Results is a presentation pattern, never a feed source.
+grep -Fq 'var showsV2TopResults: Bool' Trop/Search/SearchViewModel.swift
+grep -Fq 'v2SectionHeader("Top Results")' Trop/Search/SearchView.swift
+grep -Fq 'V2CatalogArtistArtwork(' Trop/Search/SearchView.swift
+grep -Fq 'V2CatalogAlbumArtwork(title:' Trop/Search/SearchView.swift
+grep -Fq 'TropLibraryV2ArtworkView(' Trop/Search/SearchView.swift
+python3 - <<'MIXED_RESULTS_TEST'
+from pathlib import Path
+view = Path("Trop/Search/SearchView.swift").read_text()
+model = Path("Trop/Search/SearchViewModel.swift").read_text()
+top = view.split('if viewModel.showsV2TopResults {', 1)[1].split(
+    'if viewModel.showsCatalogArtists {', 1
+)[0]
+assert top.index('catalogArtists.prefix(1)') < top.index(
+    'catalogRecordings.prefix(5)'
+) < top.index('catalogAlbums.prefix(2)')
+assert 'v2CatalogArtistRow' in top
+assert 'v2CatalogRecordingRow' in top
+assert 'v2CatalogAlbumRow' in top
+assert view.count('if filter == "All Results" || filter == "Top Results"') == 2
+assert 'filters = ["Artists", "Albums", "Songs"]' in model
+assert 'filters.append("Library")' in model
+for s in ['var showsCatalogArtists: Bool', 'var showsCatalogAlbums: Bool',
+          'var showsCatalogRecordings: Bool']:
+    assert s in model
+print("Search V2 Top Results ordering, category chips and safe artworks passed")
+MIXED_RESULTS_TEST
