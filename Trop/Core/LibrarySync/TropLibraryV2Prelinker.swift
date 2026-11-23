@@ -30,7 +30,8 @@ final class TropLibraryV2Prelinker {
         pendingIDs.append(recordingID)
         if worker == nil {
             worker = Task(priority: .utility) { [weak self] in
-                await self?.drain()
+                guard let self else { return }
+                await self.drain()
             }
         }
     }
