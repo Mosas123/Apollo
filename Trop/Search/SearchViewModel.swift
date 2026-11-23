@@ -88,19 +88,24 @@ final class SearchViewModel {
         TropLibraryV2AccountIsolation.isEnabled && isShowingLibrary
     }
 
+    var showsV2TopResults: Bool {
+        TropLibraryV2AccountIsolation.isEnabled && !isShowingLibrary
+            && selectedSectionFilter == nil
+    }
+
     var showsCatalogRecordings: Bool {
         TropLibraryV2AccountIsolation.isEnabled && !isShowingLibrary
-            && (selectedSectionFilter == nil || selectedSectionFilter == "Songs")
+            && selectedSectionFilter == "Songs"
     }
 
     var showsCatalogAlbums: Bool {
         TropLibraryV2AccountIsolation.isEnabled && !isShowingLibrary
-            && (selectedSectionFilter == nil || selectedSectionFilter == "Albums")
+            && selectedSectionFilter == "Albums"
     }
 
     var showsCatalogArtists: Bool {
         TropLibraryV2AccountIsolation.isEnabled && !isShowingLibrary
-            && (selectedSectionFilter == nil || selectedSectionFilter == "Artists")
+            && selectedSectionFilter == "Artists"
     }
 
     /// Each provider reports as soon as its own request finishes. Never
@@ -195,16 +200,20 @@ final class SearchViewModel {
     static let displayOrder = ["Songs", "Albums", "Artists", "Videos", "Playlists", "Podcasts", "Episodes"]
 
     var availableFilters: [String] {
-        var filters = ["Library"]
-        if !TropLibraryV2AccountIsolation.isEnabled {
-            let titles = Set(results.map(\.title))
-            filters.append(contentsOf: Self.displayOrder.filter { titles.contains($0) })
-        }
+        // The global catalogue is the default. Library is an explicit
+        // collection filter, never an implicit search scope.
         if TropLibraryV2AccountIsolation.isEnabled {
-            if !catalogRecordings.isEmpty { filters.append("Songs") }
-            if !catalogAlbums.isEmpty { filters.append("Albums") }
-            if !catalogArtists.isEmpty { filters.append("Artists") }
+            var filters = ["Artists", "Albums", "Songs"]
+            if !audiusTracks.isEmpty { filters.append("Audius") }
+            if !qobuzTracks.isEmpty { filters.append("Qobuz") }
+            if !jiosaavnTracks.isEmpty { filters.append("JioSaavn") }
+            if !addonTracks.isEmpty { filters.append("Add-ons") }
+            filters.append("Library")
+            return filters
         }
+        var filters = ["Library"]
+        let titles = Set(results.map(\.title))
+        filters.append(contentsOf: Self.displayOrder.filter { titles.contains($0) })
         if !audiusTracks.isEmpty { filters.append("Audius") }
         if !qobuzTracks.isEmpty { filters.append("Qobuz") }
         if !jiosaavnTracks.isEmpty { filters.append("JioSaavn") }
