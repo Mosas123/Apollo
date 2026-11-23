@@ -45,6 +45,9 @@ struct MusicCatalogTrack: Hashable, Sendable {
     let artworkURL: URL?
     let permalinkURL: URL?
     let isStreamable: Bool
+    /// Display release when provided by the catalogue. Used only to detect
+    /// alternate editions; it must not replace a Trop recording identity.
+    var albumTitle: String? = nil
 }
 
 enum MusicCatalogError: Error, Equatable {
