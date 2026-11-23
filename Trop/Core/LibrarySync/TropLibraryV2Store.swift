@@ -581,6 +581,49 @@ enum TropLibraryV2Store {
         }
     }
 
+    /// Small read-only queue for reviewing recordings that have no known
+    /// independent audio reference. This never searches or mutates a provider,
+    /// and must not expose private source IDs in the UI or logs.
+    static func recordingsMissingIndependentSources(
+        limit: Int = 12
+    ) async throws -> [RecordingSummary] {
+        let safeLimit = min(max(1, limit), 20)
+        return try await DatabaseService.shared.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT item.id, item.title, item.artist_or_author,
+                           item.duration_seconds,
+                           (item.liked_at IS NOT NULL) AS is_liked
+                    FROM trop_v2_item AS item
+                    WHERE item.kind = 'recording'
+                      AND item.saved_at IS NOT NULL
+                      AND NOT EXISTS (
+                        SELECT 1 FROM trop_v2_source_alias AS alias
+                        WHERE alias.item_id = item.id
+                          AND alias.kind = 'recording'
+                          AND alias.provider IN (
+                            'addon', 'qobuz', 'audius', 'jiosaavn'
+                          )
+                          AND alias.source_scope IN (
+                            'global', 'user-approved-alt'
+                          )
+                      )
+                    ORDER BY item.saved_at DESC, item.id
+                    LIMIT ?
+                    """,
+                arguments: [safeLimit]
+            ).map { row in
+                RecordingSummary(
+                    id: row["id"], title: row["title"],
+                    artist: row["artist_or_author"],
+                    durationSeconds: row["duration_seconds"],
+                    isLiked: row["is_liked"]
+                )
+            }
+        }
+    }
+
     /// Read one saved recording without scanning the full library. Used by
     /// the prelink worker after a completed local save transaction.
     static func recording(
