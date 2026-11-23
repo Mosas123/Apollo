@@ -5,14 +5,14 @@ import Foundation
 /// The user must approve the exact resulting provider track before linking.
 @MainActor
 enum TropLibraryV2AudioDiscovery {
-    static func find(
+    static func inspect(
         for recording: TropLibraryV2Store.RecordingSummary,
         requiresLossless: Bool
-    ) async -> [MusicCatalogTrack] {
+    ) async -> TropMatchSearchResult {
         guard let artist = recording.artist,
               !TextMatch.normalizeArtist(artist).isEmpty,
               !TextMatch.recordingTitle(recording.title).isEmpty else {
-            return []
+            return TropMatchSearchResult(exact: [], review: [])
         }
         let query = TextMatch.queryArtist(artist)
             + " " + TextMatch.recordingTitle(recording.title)
@@ -53,13 +53,15 @@ enum TropLibraryV2AudioDiscovery {
                         let encoded = String(
                             playbackID.dropFirst(AddonPlaybackID.prefix.count)
                         )
-                        return MusicCatalogTrack(
+                        var candidate = MusicCatalogTrack(
                             id: MusicCatalogID(source: .addon, rawValue: encoded),
                             title: title, artist: performer,
                             durationSeconds: item.durationSeconds ?? 0,
                             artworkURL: item.poster, permalinkURL: nil,
                             isStreamable: true
                         )
+                        candidate.albumTitle = item.album
+                        return candidate
                     }
                 }
             }
@@ -68,31 +70,43 @@ enum TropLibraryV2AudioDiscovery {
                     group.cancelAll()
                     return
                 }
-                found.append(contentsOf: tracks.filter {
-                    TropLibraryV2AudioMatchPolicy.accepts(
-                        title: recording.title,
-                        artist: artist,
-                        durationSeconds: recording.durationSeconds,
-                        track: $0,
-                        requiresLossless: requiresLossless
-                    )
-                })
+                found.append(contentsOf: tracks)
             }
         }
-        guard !Task.isCancelled else { return [] }
-        // Stable provider order makes results predictable across searches.
+        guard !Task.isCancelled else {
+            return TropMatchSearchResult(exact: [], review: [])
+        }
         let priority: [MusicCatalogSource] = [
             .addon, .qobuz, .audius, .jiosaavn
         ]
         var unique = Set<MusicCatalogID>()
-        return found.filter { unique.insert($0.id).inserted }
+        let sorted = found.filter { unique.insert($0.id).inserted }
             .sorted {
                 let a = priority.firstIndex(of: $0.id.source) ?? priority.count
                 let b = priority.firstIndex(of: $1.id.source) ?? priority.count
                 if a != b { return a < b }
                 return $0.id.rawValue < $1.id.rawValue
             }
-            .prefix(20)
-            .map { $0 }
+        var exact: [MusicCatalogTrack] = []
+        var review: [MusicCatalogTrack] = []
+        for track in sorted {
+            switch TropMatchCandidatePolicy.classify(
+                title: recording.title, artist: recording.artist,
+                durationSeconds: recording.durationSeconds,
+                track: track, requiresLossless: requiresLossless
+            ) {
+            case .exact where exact.count < 20: exact.append(track)
+            case .review where review.count < 20: review.append(track)
+            default: break
+            }
+        }
+        return TropMatchSearchResult(exact: exact, review: review)
+    }
+
+    static func find(
+        for recording: TropLibraryV2Store.RecordingSummary,
+        requiresLossless: Bool
+    ) async -> [MusicCatalogTrack] {
+        await inspect(for: recording, requiresLossless: requiresLossless).exact
     }
 }
