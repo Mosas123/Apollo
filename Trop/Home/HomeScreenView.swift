@@ -355,7 +355,7 @@ struct HomeScreenView: View {
     /// Explore surface; it must never invoke the legacy surprise queue.
     private var v2DiscoveryCard: some View {
         Button {
-            router.selectedTabIndex = 1
+            router.selectedTabIndex = 4
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "sparkles")
