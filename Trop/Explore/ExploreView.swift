@@ -128,8 +128,12 @@ struct ExploreView: View {
                                     }
                                 }
                                 Spacer()
-                                Image(systemName: "chevron.right")
-                                    .foregroundStyle(.secondary)
+                                if globalPlayingID == recording.id {
+                                    ProgressView()
+                                } else {
+                                    Image(systemName: "play.fill")
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                             .contentShape(Rectangle())
                         }
