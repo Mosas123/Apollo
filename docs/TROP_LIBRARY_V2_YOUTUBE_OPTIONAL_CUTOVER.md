@@ -219,6 +219,47 @@ not a failure of the successful Fénix metadata restore.
   IPA until a new CI-validated beta is installed and tested.** Never clear the
   restored database or silently re-enable YouTube fallback.
 
+## Trop Match — saved-library prelink slice (22 Nov 2026, PR #80 DRAFT)
+
+**Source of truth remains Library V2 metadata and UUID; these prelinks are
+best-effort provider associations, not downloaded audio or codec proof.**
+
+- After a successful `createItem(recording)`, `savePlaybackRecording`, or
+  `saveToPlaylist` GRDB transaction, Trop schedules an asynchronous prelink
+  of the saved recording. Save/Like/Playlist operations succeed without
+  waiting for any network request; provider failures cannot roll back them.
+- Opening Library V2 or its Songs screen schedules **at most six recent saved
+  recordings**; the coordinator caps its queued IDs at 16, runs one provider
+  search at a time, remembers recent attempts for 30 minutes per app process,
+  and does **not** iterate a 480+ song archive or the Home feed.
+- No prelink without valid normalized performer/title and **known duration
+  (at least 30 seconds)**. Only `TropMatchCandidatePolicy.exact` is eligible:
+  edition hints such as live/remix, ambiguous timing, wrong artist and
+  YouTube-catalogue candidates are excluded from automatic linking.
+- Existing provider references are never deleted or replaced. Up to **two**
+  candidate aliases can be added per pass, with a cap of three automatic
+  independent source aliases per recording and per-provider duplicate limits.
+  A stored YouTube video ID may be retained as an optional audio source but
+  is never queried to construct the catalogue.
+- Every candidate goes through `TropLibraryV2Store.linkConfirmedAudioSource`,
+  which re-reads the current GRDB row and checks provider-ID ownership in
+  the write transaction. If a recording changes, disappears or collides with
+  an existing owner, linking fails without losing the song, like, playlist
+  or downloaded file. No popup and no autoplay on prelink failure.
+- Library V2 prelinks persist as safe provider IDs, **not** expiring signed
+  playback URLs; future dynamic resolution still applies the *current*
+  quality setting and verifies actual addon audio. No Hi-Res/Dolby
+  representation is inferred from a search label.
+- Home, Explore and Search remain **dynamic**. They MUST NOT call the
+  persistent V2 prelinker while rendering/recommending transient items;
+  temporary queue prefetch and on-demand resolution are separate work.
+- **Still pending:** true resumable background/batch import matcher,
+  incremental rechecks after addon installation/quality changes, source
+  health/expiry records, Stream-first recovery, robust switching across
+  failed sources, metadata collision auditing, audio startup latency,
+  and physical iPhone QA. CI covers policy; never call this a release
+  or full Library V2 independence before the integration gates pass.
+
 ## Trop Match — first integrated implementation (22 Nov 2026, PR #80 DRAFT)
 
 Trop Match is distinct from a music catalogue, source transport and ApoloEngine:
