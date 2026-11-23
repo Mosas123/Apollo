@@ -54,6 +54,12 @@ jobs:
       - name: Make build script executable
         run: chmod +x ./build_ipa.sh
 
+      - name: Validate logging and source-scoped playback before IPA
+        run: |
+          bash scripts/test-trop-log-session.sh
+          bash scripts/test-sponsorblock-source-scope.sh
+          bash scripts/test-eclipse-addon-url.sh
+
       - name: Build iOS IPA
         run: ./build_ipa.sh
         env:
