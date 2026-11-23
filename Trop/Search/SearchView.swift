@@ -27,6 +27,17 @@ struct SearchView: View {
     @State private var playlistPickerSelection: PlaylistPickerSelection?
     @State private var v2PlaybackMessage: String?
     @State private var isStartingV2Playback = false
+    @State private var selectedCatalogRecording: TropGlobalRecording?
+    @State private var selectedCatalogDetail: CatalogDetail?
+
+    /// Album and artist results are public identities, not playable IDs.
+    private struct CatalogDetail: Identifiable {
+        let id = UUID()
+        let name: String
+        let subtitle: String
+        let note: String
+        let searchQuery: String
+    }
     @State private var headerHidden = false
     @State private var headerHeight: CGFloat = 60
     @State private var searchBarHeight: CGFloat = 60
@@ -79,6 +90,37 @@ struct SearchView: View {
             .frame(maxHeight: .infinity, alignment: .top)
             .toolbar(.hidden, for: .navigationBar)
             .detailRouteDestinations()
+            .sheet(item: $selectedCatalogRecording) { recording in
+                TropGlobalRecordingSheet(recording: recording)
+            }
+            .sheet(item: $selectedCatalogDetail) { detail in
+                NavigationStack {
+                    List {
+                        Section("Public music catalogue") {
+                            LabeledContent("Name", value: detail.name)
+                            LabeledContent("Artist", value: detail.subtitle)
+                            Text(detail.note)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        Section {
+                            Button {
+                                selectedCatalogDetail = nil
+                                viewModel.submit(detail.searchQuery)
+                            } label: {
+                                Label("Search related music", systemImage: "magnifyingglass")
+                            }
+                        }
+                    }
+                    .navigationTitle(detail.name)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { selectedCatalogDetail = nil }
+                        }
+                    }
+                }
+            }
             .sheet(item: $playlistPickerSelection) { selection in
                 AddSongToPlaylistSheet(song: selection.song)
             }
@@ -303,7 +345,106 @@ struct SearchView: View {
                     }
                 }
 
-                // Saved Trop UUIDs are metadata, not implicit YouTube playback IDs.
+                // Global artist, album and recording identities must appear
+                // without requiring anything to be saved in Library V2.
+                if viewModel.showsCatalogArtists && !viewModel.catalogArtists.isEmpty {
+                    v2SectionHeader("Artists · MusicBrainz")
+                    ForEach(viewModel.catalogArtists, id: \.id.storageKey) { artist in
+                        Button {
+                            selectedCatalogDetail = CatalogDetail(
+                                name: artist.name,
+                                subtitle: artist.disambiguation ?? "MusicBrainz artist",
+                                note: "Artist identity from MusicBrainz. Audio tracks are "
+                                    + "searched separately in the enabled providers.",
+                                searchQuery: artist.name
+                            )
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "person.crop.circle")
+                                    .font(.title2)
+                                    .frame(width: 52, height: 52)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(artist.name).foregroundStyle(.primary)
+                                    if let note = artist.disambiguation {
+                                        Text(note).font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 16)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                if viewModel.showsCatalogAlbums && !viewModel.catalogAlbums.isEmpty {
+                    v2SectionHeader("Albums · MusicBrainz")
+                    ForEach(viewModel.catalogAlbums, id: \.id.storageKey) { album in
+                        Button {
+                            selectedCatalogDetail = CatalogDetail(
+                                name: album.title, subtitle: album.artist,
+                                note: "Album identity from MusicBrainz. "
+                                    + "This is metadata, not a verified audio release.",
+                                searchQuery: album.artist + " " + album.title
+                            )
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "square.stack")
+                                    .font(.title2)
+                                    .frame(width: 52, height: 52)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(album.title).foregroundStyle(.primary)
+                                    Text(album.artist).font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 16)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                if viewModel.showsCatalogRecordings
+                    && !viewModel.catalogRecordings.isEmpty {
+                    v2SectionHeader("Songs · MusicBrainz")
+                    ForEach(viewModel.catalogRecordings) { recording in
+                        Button {
+                            selectedCatalogRecording = recording
+                        } label: {
+                            HStack(spacing: 12) {
+                                TropLibraryV2ArtworkView(
+                                    title: recording.title,
+                                    artist: recording.artist,
+                                    durationSeconds: 0
+                                )
+                                .frame(width: 52, height: 52)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(recording.title).foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                    Text(recording.artist)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 16)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                // The local collection belongs only to the Library filter;
+                // never use saved UUID rows as the default global catalogue.
                 if viewModel.displaysV2LibraryResults {
                     v2LocalResults
                 }
