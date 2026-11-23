@@ -11,6 +11,7 @@ final class TropLibraryV2Prelinker {
     private var queuedIDs = Set<String>()
     private var lastAttempt: [String: Date] = [:]
     private var worker: Task<Void, Never>?
+    private var isManualBatchRunning = false
 
     private init() {}
 
@@ -28,12 +29,7 @@ final class TropLibraryV2Prelinker {
         }
         queuedIDs.insert(recordingID)
         pendingIDs.append(recordingID)
-        if worker == nil {
-            worker = Task(priority: .utility) { [weak self] in
-                guard let self else { return }
-                await self.drain()
-            }
-        }
+        startWorkerIfNeeded()
     }
 
     /// The most recent few saved songs receive a best-effort prelink when the
@@ -53,6 +49,15 @@ final class TropLibraryV2Prelinker {
         }
     }
 
+    private func startWorkerIfNeeded() {
+        guard worker == nil, !isManualBatchRunning,
+              !pendingIDs.isEmpty else { return }
+        worker = Task(priority: .utility) { [weak self] in
+            guard let self else { return }
+            await self.drain()
+        }
+    }
+
     private func drain() async {
         defer { worker = nil }
         while !Task.isCancelled, !pendingIDs.isEmpty {
@@ -61,6 +66,84 @@ final class TropLibraryV2Prelinker {
             lastAttempt[id] = Date()
             await inspectOneSavedRecording(id)
         }
+    }
+
+    struct BatchProgress: Sendable {
+        let processed: Int
+        let total: Int
+        let hasMore: Bool
+    }
+
+    enum BatchError: Error, LocalizedError {
+        case alreadyRunning
+
+        var errorDescription: String? {
+            "A saved-music matching batch is already running."
+        }
+    }
+
+    /// Only called from an explicit Library V2 Settings action.
+    /// One tap inspects at most eight SAVED recordings; cursor state is saved
+    /// after each completed attempt so an app restart never restarts a long
+    /// batch from scratch. No background scan or automatic bulk import.
+    func scanNextBatch() async throws -> BatchProgress {
+        guard !isManualBatchRunning else { throw BatchError.alreadyRunning }
+        isManualBatchRunning = true
+        defer {
+            isManualBatchRunning = false
+            startWorkerIfNeeded()
+        }
+        // Prevent two independent search pipelines from hammering providers.
+        if let worker { await worker.value }
+        try Task.checkCancellation()
+        let recordings = try await TropLibraryV2Store.recordings()
+        let cursor = UserDefaults.standard.string(
+            forKey: TropLibraryV2PrelinkBatchPolicy.cursorKey
+        )
+        let page = TropLibraryV2PrelinkBatchPolicy.page(
+            savedIDs: recordings.map(\.id), after: cursor
+        )
+        var processed = page.completedBefore
+        for id in page.recordingIDs {
+            try Task.checkCancellation()
+            lastAttempt[id] = Date()
+            await inspectOneSavedRecording(id)
+            try Task.checkCancellation()
+            UserDefaults.standard.set(
+                id, forKey: TropLibraryV2PrelinkBatchPolicy.cursorKey
+            )
+            processed += 1
+            // Add breathing room between searches even on fast networks.
+            if processed < page.total {
+                try await Task.sleep(nanoseconds: 350_000_000)
+            }
+        }
+        return BatchProgress(
+            processed: processed, total: page.total,
+            hasMore: processed < page.total
+        )
+    }
+
+    func batchProgress() async throws -> BatchProgress {
+        let recordings = try await TropLibraryV2Store.recordings()
+        let cursor = UserDefaults.standard.string(
+            forKey: TropLibraryV2PrelinkBatchPolicy.cursorKey
+        )
+        let state = TropLibraryV2PrelinkBatchPolicy.status(
+            savedIDs: recordings.map(\.id), after: cursor
+        )
+        return BatchProgress(
+            processed: state.completed, total: state.total,
+            hasMore: state.completed < state.total
+        )
+    }
+
+    /// Re-run already examined recordings only after a user confirmation.
+    func restartManualScan() {
+        guard !isManualBatchRunning else { return }
+        UserDefaults.standard.removeObject(
+            forKey: TropLibraryV2PrelinkBatchPolicy.cursorKey
+        )
     }
 
     private func inspectOneSavedRecording(_ id: String) async {
