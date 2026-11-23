@@ -7,6 +7,8 @@ struct TropLibraryV2BatchMatchView: View {
     @State private var total = 0
     @State private var independentlyLinked = 0
     @State private var coverageAvailable = false
+    @State private var missingSources: [TropLibraryV2Store.RecordingSummary] = []
+    @State private var audioSourceRequest: TropLibraryV2AudioSourceRequest?
     @State private var isRunning = false
     @State private var showingRestartConfirmation = false
     @State private var message: String?
@@ -70,6 +72,37 @@ struct TropLibraryV2BatchMatchView: View {
                 )
             }
 
+            if !missingSources.isEmpty {
+                Section {
+                    ForEach(missingSources, id: \.id) { recording in
+                        Button {
+                            audioSourceRequest = TropLibraryV2AudioSourceRequest(
+                                recording: recording
+                            )
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(recording.title)
+                                    .foregroundStyle(.primary)
+                                if let artist = recording.artist {
+                                    Text(artist)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                } header: {
+                    Text("Review songs without independent links")
+                } footer: {
+                    Text(
+                        "These songs have no saved non-YouTube audio reference. "
+                            + "Tap one to search enabled providers. They remain "
+                            + "in your library even if no match is found."
+                    )
+                }
+            }
+
             Section {
                 Button("Restart Scan from Beginning") {
                     showingRestartConfirmation = true
@@ -86,6 +119,11 @@ struct TropLibraryV2BatchMatchView: View {
         .navigationBarTitleDisplayMode(.inline)
         .miniPlayerTracksScroll()
         .task { await refresh() }
+        .sheet(item: $audioSourceRequest, onDismiss: {
+            Task { await refresh() }
+        }) { request in
+            TropLibraryV2AudioSourceSheet(recording: request.recording)
+        }
         .onDisappear { scanTask?.cancel() }
         .confirmationDialog(
             "Recheck your saved recordings?",
@@ -112,9 +150,12 @@ struct TropLibraryV2BatchMatchView: View {
             total = state.total
             let coverage = try await TropLibraryV2Store.independentSourceCoverage()
             independentlyLinked = coverage.withIndependentReference
+            missingSources = try await TropLibraryV2Store
+                .recordingsMissingIndependentSources()
             coverageAvailable = true
         } catch {
             coverageAvailable = false
+            missingSources = []
             message = "Could not read your saved Library V2 recordings."
         }
     }
