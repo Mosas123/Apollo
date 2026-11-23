@@ -20,6 +20,28 @@ swiftc -swift-version 6 -strict-concurrency=complete \
   tests/LibrarySync/TropLibraryV2ArtworkChecks.swift \
   -o "$tmp_dir/v2-artwork-checks"
 "$tmp_dir/v2-artwork-checks"
+
+# Search-by-metadata only returns user-selectable, verified provider IDs.
+swiftc -swift-version 6 -strict-concurrency=complete \
+  Trop/Core/Metadata/TextMatch.swift \
+  Trop/Core/MusicSources/MusicCatalog.swift \
+  Trop/Core/LibrarySync/TropLibraryV2IdentityPolicy.swift \
+  Trop/Core/LibrarySync/TropLibraryV2AudioMatchPolicy.swift \
+  tests/LibrarySync/TropLibraryV2AudioSourceChecks.swift \
+  -o "$tmp_dir/v2-audio-source-checks"
+"$tmp_dir/v2-audio-source-checks"
+swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2AudioDiscovery.swift
+swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2AudioLinkError.swift
+swiftc -frontend -parse Trop/Library/TropLibraryV2AudioSourceSheet.swift
+swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2Store.swift
+grep -Fq 'TropLibraryV2AudioSourceSheet(recording:' \
+  Trop/Library/TropLibraryV2MainStyleView.swift
+grep -Fq 'TropLibraryV2AudioSourceSheet(recording:' \
+  Trop/Library/TropLibraryV2Screen.swift
+grep -Fq 'linkConfirmedAudioSource(' Trop/Core/LibrarySync/TropLibraryV2Store.swift
+grep -Fq "currentOwner == id" Trop/Core/LibrarySync/TropLibraryV2Store.swift
+grep -Fq "throw TropLibraryV2AudioLinkError.existingSource" \
+  Trop/Core/LibrarySync/TropLibraryV2Store.swift
 swiftc -frontend -parse Trop/Library/TropLibraryV2ArtworkView.swift
 swiftc -frontend -parse Trop/Library/TropLibraryV2MainStyleView.swift
 swiftc -frontend -parse Trop/Library/TropLibraryV2Screen.swift
