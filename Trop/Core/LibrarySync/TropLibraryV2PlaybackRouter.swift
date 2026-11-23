@@ -8,8 +8,17 @@ enum TropLibraryV2PlaybackRouter {
     private static var requestGeneration = 0
 
     private static var requiresLossless: Bool {
-        let mode = SettingsStore.shared.musicQualityMode
-        return mode == .cd || mode == .lossless
+        SettingsStore.shared.musicQualityMode.prefersLossless
+    }
+
+    /// YouTube can play only a saved, known music video ID when enabled by
+    /// the user. The V2 matcher never asks YouTube for a music catalogue.
+    private static var youtubeAudioEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "trop.match.youtubeAudioEnabled")
+    }
+
+    private static var prefersHigh: Bool {
+        SettingsStore.shared.musicQualityMode == .high
     }
 
     static func playSaved(_ recording: TropLibraryV2Store.RecordingSummary) async throws {
@@ -22,7 +31,8 @@ enum TropLibraryV2PlaybackRouter {
         let key: String
         do {
             key = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
-                for: currentAliases, requiresLossless: requiresLossless
+                for: currentAliases, requiresLossless: requiresLossless,
+                allowYouTubeAudio: youtubeAudioEnabled, preferHigh: prefersHigh
             )
         } catch let error as TropLibraryV2PlaybackSourceError
             where error == .unavailable || error == .incompatibleQuality {
@@ -56,7 +66,8 @@ enum TropLibraryV2PlaybackRouter {
                 forRecordingID: recording.id
             )
             key = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
-                for: aliases, requiresLossless: requiresLossless
+                for: aliases, requiresLossless: requiresLossless,
+                allowYouTubeAudio: youtubeAudioEnabled, preferHigh: prefersHigh
             )
         }
         guard !Task.isCancelled, request == requestGeneration,
@@ -92,7 +103,8 @@ enum TropLibraryV2PlaybackRouter {
                 forRecordingID: track.recordingID
             )
             let key = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
-            for: aliases, requiresLossless: requiresLossless
+            for: aliases, requiresLossless: requiresLossless,
+                allowYouTubeAudio: youtubeAudioEnabled, preferHigh: prefersHigh
         )
             queue.append(makeSong(
                 playbackKey: key, title: track.title,
