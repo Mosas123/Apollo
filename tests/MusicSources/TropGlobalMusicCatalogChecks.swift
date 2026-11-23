@@ -81,6 +81,46 @@ struct TropGlobalMusicCatalogChecks {
         precondition(!items.contains { $0.title == "Fourth Song" })
         let cached = try await catalog.popularRecordings()
         precondition(cached == items)
-        print("Global metadata discovery: public source, validation and cache passed")
+        let artistID = "552eeb1f-374d-49d7-b18f-e226a326b9b7"
+        let albumID = "e3ee4939-237f-4d20-b4e8-4d3d77ea9f45"
+        let artistFixture = """
+        {"payload":{"artists":[
+          {"artist_mbid":"\(artistID)","artist_name":"Example Artist","listen_count":100},
+          {"artist_mbid":null,"artist_name":"Unverified Artist","listen_count":99}
+        ]}}
+        """
+        let albumFixture = """
+        {"payload":{"release_groups":[
+          {"release_group_mbid":"\(albumID)","release_group_name":"Album One",
+           "artist_name":"Example Artist","listen_count":99},
+          {"release_group_mbid":"","release_group_name":"Unverified",
+           "artist_name":"Example Artist","listen_count":98}
+        ]}}
+        """
+        let expanded = TropGlobalMusicCatalog(transport: { request in
+            guard let url = request.url,
+                  let response = HTTPURLResponse(
+                    url: url, statusCode: 200, httpVersion: nil,
+                    headerFields: nil
+                  ) else { throw TropGlobalCatalogError.invalidResponse }
+            precondition(url.host == "api.listenbrainz.org")
+            precondition(url.absoluteString.contains("range=week"))
+            switch url.path {
+            case "/1/stats/sitewide/artists":
+                return (Data(artistFixture.utf8), response)
+            case "/1/stats/sitewide/release-groups":
+                return (Data(albumFixture.utf8), response)
+            default:
+                preconditionFailure("Unexpected ListenBrainz feed")
+            }
+        })
+        let publicArtists = try await expanded.popularArtists()
+        precondition(publicArtists.count == 1)
+        precondition(publicArtists[0].id == artistID)
+        let publicAlbums = try await expanded.popularReleaseGroups()
+        precondition(publicAlbums.count == 1)
+        precondition(publicAlbums[0].id == albumID)
+        precondition(publicAlbums[0].title == "Album One")
+        print("Public global music: tracks, artist identities and release groups passed")
     }
 }
