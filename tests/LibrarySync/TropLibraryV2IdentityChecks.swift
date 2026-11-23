@@ -71,7 +71,7 @@ enum TropLibraryV2IdentityChecks {
             provider: "addon", externalID: "install:movie:id"
         )
         let youtube = try TropLibraryV2SourceAlias(
-            provider: "youtube", externalID: "legacy-video"
+            provider: "youtube", externalID: "DCEVC_sr5Go"
         )
         let mb = try TropLibraryV2SourceAlias(
             provider: "musicbrainz", externalID: "metadata-only"
@@ -114,12 +114,37 @@ enum TropLibraryV2IdentityChecks {
                 fatalError("Unverified source accepted")
             } catch TropLibraryV2PlaybackSourceError.unavailable {}
         }
+        // Several verified audio links do NOT create extra library songs.
+        // Resolve deterministically, with exact recordings ahead of alternates.
+        assert(try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+            for: [audius, qobuz]
+        ) == "qobuz:123")
+        assert(try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+            for: [audius, qobuz], requiresLossless: true
+        ) == "qobuz:123")
+        let approvedLive = try TropLibraryV2SourceAlias(
+            provider: "addon", scope: "user-approved-alt",
+            externalID: "approved-live"
+        )
+        assert(try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+            for: [approvedLive]
+        ) == "addon:approved-live")
+        assert(try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+            for: [approvedLive, qobuz]
+        ) == "qobuz:123")
+
+        // YouTube is not a hidden fallback, but saved IDs can play when the
+        // user explicitly enables the audio-only provider.
+        assert(try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+            for: [youtube], allowYouTubeAudio: true
+        ) == "DCEVC_sr5Go")
         do {
             _ = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
-                for: [audius, qobuz]
+                for: [youtube], requiresLossless: true,
+                allowYouTubeAudio: true
             )
-            fatalError("Ambiguous sources auto-selected")
-        } catch TropLibraryV2PlaybackSourceError.ambiguous {}
+            fatalError("YouTube must not pretend to supply lossless")
+        } catch TropLibraryV2PlaybackSourceError.incompatibleQuality {}
 
         assert(Set(TropLibraryV2Kind.allCases.map(\.rawValue)).count == 6)
         print("Trop Library V2 identity checks passed")
