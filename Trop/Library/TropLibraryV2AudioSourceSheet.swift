@@ -155,7 +155,7 @@ struct TropLibraryV2AudioSourceSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text(
-                    track.id.source.rawValue.capitalized
+                    sourceName(for: track)
                         + " · " + durationLabel(track.durationSeconds)
                 )
                 .font(.caption2)
@@ -192,6 +192,25 @@ struct TropLibraryV2AudioSourceSheet: View {
             dismiss()
         } catch {
             message = error.localizedDescription
+        }
+    }
+
+    /// Display a human-friendly enabled addon name, not its private
+    /// installation key, manifest URL, or encoded source ID.
+    private func sourceName(for track: MusicCatalogTrack) -> String {
+        if track.id.source == .addon,
+           let ref = AddonPlaybackID.decode(
+               AddonPlaybackID.prefix + track.id.rawValue
+           ),
+           let installation = MusicAddonsStore.shared.installation(key: ref.k) {
+            return installation.manifest.name
+        }
+        switch track.id.source {
+        case .qobuz: return "Qobuz"
+        case .audius: return "Audius"
+        case .jiosaavn: return "JioSaavn"
+        case .addon: return "Music Add-on"
+        default: return track.id.source.rawValue.capitalized
         }
     }
 
