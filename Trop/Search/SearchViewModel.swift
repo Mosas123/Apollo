@@ -727,13 +727,13 @@ final class SearchViewModel {
         } else {
             suggestions = []
         }
+        // Snapshot the search mode on the main actor before weak capture.
+        // Swift 6 disallows implicit access to self inside [weak self] tasks.
+        let debounceMilliseconds = requestsYouTubeCatalogue ? 350 : 850
         fetchTask = Task { [weak self] in
             do {
-                try await Task.sleep(
-                    for: .milliseconds(requestsYouTubeCatalogue ? 350 : 850)
-                )
-            }
-            catch { return }
+                try await Task.sleep(for: .milliseconds(debounceMilliseconds))
+            } catch { return }
             guard !Task.isCancelled else { return }
             await self?.fetchResults(for: query, includeProviders: false)
         }
