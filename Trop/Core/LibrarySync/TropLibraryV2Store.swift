@@ -464,14 +464,17 @@ enum TropLibraryV2Store {
                     || (userApprovedAlternate && classification == .review)
             else { throw TropLibraryV2AudioLinkError.notVerified }
 
+            // An audio ID may not point at two different Trop recordings
+            // merely because one user approved it as an alternate.
             let currentOwner = try String.fetchOne(
                 db,
                 sql: """
                     SELECT item_id FROM trop_v2_source_alias
                     WHERE kind = 'recording' AND provider = ?
-                      AND source_scope = ? AND external_id = ?
+                      AND external_id = ?
+                      AND source_scope IN ('global', 'user-approved-alt')
                     """,
-                arguments: [alias.provider, alias.scope, alias.externalID]
+                arguments: [alias.provider, alias.externalID]
             )
             if let currentOwner {
                 guard currentOwner == id else {
