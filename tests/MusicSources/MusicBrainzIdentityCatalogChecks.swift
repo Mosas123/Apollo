@@ -57,8 +57,8 @@ struct MusicBrainzIdentityCatalogChecks {
                 switch url.path {
                 case "/ws/2/recording":
                     precondition(
-                        params["query"] == "recording:\\"Canción & Jazz\\" AND artist:\\"Artista Uno\\""
-                            || params["query"] == "artist:\\"Artista Uno\\""
+                        params["query"] == "recording:\"Canción & Jazz\" AND artist:\"Artista Uno\""
+                            || params["query"] == "artist:\"Artista Uno\""
                     )
                     return (Data(recordingJSON.utf8), response)
                 case "/ws/2/artist":
