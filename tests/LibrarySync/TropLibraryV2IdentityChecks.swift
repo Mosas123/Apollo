@@ -116,28 +116,33 @@ enum TropLibraryV2IdentityChecks {
         }
         // Several verified audio links do NOT create extra library songs.
         // Resolve deterministically, with exact recordings ahead of alternates.
-        assert(try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+        let multiSource = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
             for: [audius, qobuz]
-        ) == "qobuz:123")
-        assert(try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+        )
+        assert(multiSource == "qobuz:123")
+        let multiLossless = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
             for: [audius, qobuz], requiresLossless: true
-        ) == "qobuz:123")
+        )
+        assert(multiLossless == "qobuz:123")
         let approvedLive = try TropLibraryV2SourceAlias(
             provider: "addon", scope: "user-approved-alt",
             externalID: "approved-live"
         )
-        assert(try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+        let approvedSource = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
             for: [approvedLive]
-        ) == "addon:approved-live")
-        assert(try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+        )
+        assert(approvedSource == "addon:approved-live")
+        let exactPreferred = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
             for: [approvedLive, qobuz]
-        ) == "qobuz:123")
+        )
+        assert(exactPreferred == "qobuz:123")
 
         // YouTube is not a hidden fallback, but saved IDs can play when the
         // user explicitly enables the audio-only provider.
-        assert(try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+        let optedInYouTube = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
             for: [youtube], allowYouTubeAudio: true
-        ) == "DCEVC_sr5Go")
+        )
+        assert(optedInYouTube == "DCEVC_sr5Go")
         do {
             _ = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
                 for: [youtube], requiresLossless: true,
