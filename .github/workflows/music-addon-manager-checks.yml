@@ -18,3 +18,5 @@ jobs:
       - uses: actions/checkout@v5
       - name: Validate addon manager ordering, state and approval rules
         run: bash scripts/test-music-addon-manager.sh
+      - name: Check Eclipse IDs are encoded once
+        run: bash scripts/test-eclipse-addon-url.sh
