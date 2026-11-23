@@ -30,7 +30,30 @@ swiftc -swift-version 6 -strict-concurrency=complete \
   tests/LibrarySync/TropLibraryV2AudioSourceChecks.swift \
   -o "$tmp_dir/v2-audio-source-checks"
 "$tmp_dir/v2-audio-source-checks"
+
+# Trop Match may auto-link studio recordings, but live/remix/unknown
+# editions must be excluded from automatic playback and kept for review.
+swiftc -swift-version 6 -strict-concurrency=complete \
+  Trop/Core/Metadata/TextMatch.swift \
+  Trop/Core/MusicSources/MusicCatalog.swift \
+  Trop/Core/LibrarySync/TropLibraryV2IdentityPolicy.swift \
+  Trop/Core/LibrarySync/TropLibraryV2AudioMatchPolicy.swift \
+  Trop/Core/LibrarySync/TropMatchCandidatePolicy.swift \
+  tests/LibrarySync/TropMatchCandidatePolicyChecks.swift \
+  -o "$tmp_dir/trop-match-candidate-checks"
+"$tmp_dir/trop-match-candidate-checks"
+
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2AudioDiscovery.swift
+swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2PlaybackRouter.swift
+swiftc -frontend -parse Trop/Core/MusicSources/QobuzClient.swift
+swiftc -frontend -parse Trop/Core/MusicSources/JioSaavnClient.swift
+grep -Fq 'TropLibraryV2AudioDiscovery.inspect(' \
+  Trop/Core/LibrarySync/TropLibraryV2PlaybackRouter.swift
+grep -Fq 'userApprovedAlternate: approvedAlternate' \
+  Trop/Library/TropLibraryV2AudioSourceSheet.swift
+grep -Fq 'Section("Review Alternatives")' \
+  Trop/Library/TropLibraryV2AudioSourceSheet.swift
+grep -Fq 'trop.match.youtubeAudioEnabled' Trop/Settings/SettingsView.swift
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2AudioLinkError.swift
 swiftc -frontend -parse Trop/Library/TropLibraryV2AudioSourceSheet.swift
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2Store.swift
