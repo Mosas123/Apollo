@@ -83,6 +83,42 @@ grep -Fq 'TropLibraryV2PrelinkBatchPolicy.cursorKey' \
 grep -Fq 'try Task.checkCancellation()' \
   Trop/Core/LibrarySync/TropLibraryV2Prelinker.swift
 grep -Fq 'scanNextBatch()' Trop/Settings/TropLibraryV2BatchMatchView.swift
+grep -Fq 'TropLibraryV2Store.independentSourceCoverage()' \
+  Trop/Settings/TropLibraryV2BatchMatchView.swift
+# Read-only coverage counts saved recordings, not aliases, ignores YouTube
+# and unapproved scopes, and does not mistake a link for playable audio.
+python3 - <<'COVERAGE_CHECK'
+import sqlite3
+from pathlib import Path
+
+store = Path("Trop/Core/LibrarySync/TropLibraryV2Store.swift").read_text()
+marker = "SELECT COUNT(DISTINCT item.id) AS saved_count,"
+assert marker in store
+query = marker + store.split(marker, 1)[1].split('"""', 1)[0]
+db = sqlite3.connect(":memory:")
+db.executescript("""
+CREATE TABLE trop_v2_item (
+    id TEXT PRIMARY KEY, kind TEXT, saved_at TEXT
+);
+CREATE TABLE trop_v2_source_alias (
+    item_id TEXT, kind TEXT, provider TEXT, source_scope TEXT
+);
+INSERT INTO trop_v2_item VALUES
+ ('a','recording','2026-11-22'), ('b','recording','2026-11-22'),
+ ('c','recording','2026-11-22'), ('d','recording','2026-11-22'),
+ ('e','recording',NULL), ('p','playlist','2026-11-22');
+INSERT INTO trop_v2_source_alias VALUES
+ ('a','recording','addon','global'),
+ ('a','recording','qobuz','global'),
+ ('b','recording','youtube','global'),
+ ('c','recording','audius','user-approved-alt'),
+ ('d','recording','addon','local-private'),
+ ('e','recording','jiosaavn','global'),
+ ('p','recording','addon','global');
+""")
+assert db.execute(query).fetchone() == (4, 2)
+print("Saved independent-audio reference coverage passed (4 saved, 2 linked)")
+COVERAGE_CHECK
 
 swiftc -frontend -parse Trop/Core/LibrarySync/TropLibraryV2Prelinker.swift
 grep -Fq 'TropLibraryV2Prelinker.shared.schedule(' \
