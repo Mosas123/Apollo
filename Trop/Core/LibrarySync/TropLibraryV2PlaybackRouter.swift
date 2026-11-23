@@ -74,9 +74,18 @@ enum TropLibraryV2PlaybackRouter {
               playerGeneration == NowPlaying.shared.playbackGeneration else {
             throw CancellationError()
         }
+        let artwork = await verifiedArtwork(
+            title: recording.title, artist: recording.artist,
+            duration: recording.durationSeconds
+        )
+        guard !Task.isCancelled, request == requestGeneration,
+              playerGeneration == NowPlaying.shared.playbackGeneration else {
+            throw CancellationError()
+        }
         let song = makeSong(
             playbackKey: key, title: recording.title,
-            artist: recording.artist, duration: recording.durationSeconds
+            artist: recording.artist, duration: recording.durationSeconds,
+            artworkURL: artwork
         )
         PlaybackQueue.play(
             [song], log: Log.libraryView, context: "Library V2 saved song"
@@ -115,17 +124,59 @@ enum TropLibraryV2PlaybackRouter {
               playerGeneration == NowPlaying.shared.playbackGeneration else {
             throw CancellationError()
         }
+        // The player artwork for the selected V2 recording must not be
+        // permanently nil just because its audio ID comes from an addon.
+        let selected = tracks[selectedIndex]
+        let artwork = await verifiedArtwork(
+            title: selected.title, artist: selected.artist,
+            duration: selected.durationSeconds
+        )
+        guard !Task.isCancelled, request == requestGeneration,
+              playerGeneration == NowPlaying.shared.playbackGeneration else {
+            throw CancellationError()
+        }
+        if let artwork {
+            let aliases = try await TropLibraryV2Store.sourceAliases(
+                forRecordingID: selected.recordingID
+            )
+            let key = try TropLibraryV2PlaybackSourcePolicy.playbackKey(
+                for: aliases, requiresLossless: requiresLossless,
+                allowYouTubeAudio: youtubeAudioEnabled, preferHigh: prefersHigh
+            )
+            queue[selectedIndex] = makeSong(
+                playbackKey: key, title: selected.title, artist: selected.artist,
+                duration: selected.durationSeconds, artworkURL: artwork
+            )
+        }
+        guard !Task.isCancelled, request == requestGeneration,
+              playerGeneration == NowPlaying.shared.playbackGeneration else {
+            throw CancellationError()
+        }
         PlaybackQueue.play(
             queue, startIndex: selectedIndex,
             log: Log.libraryView, context: "Library V2 playlist"
         )
     }
 
+    private static func verifiedArtwork(
+        title: String, artist: String?, duration: Int
+    ) async -> String? {
+        guard let artist, !artist.isEmpty else { return nil }
+        guard let metadata = await MetadataResolver.enrich(
+            title: title, artist: artist,
+            duration: duration > 0 ? duration : nil
+        ), let url = TropLibraryV2ArtworkSelectionPolicy.url(
+            title: title, artist: artist, metadata: metadata
+        ) else { return nil }
+        return url.absoluteString
+    }
+
     private static func makeSong(
         playbackKey: String,
         title: String,
         artist: String?,
-        duration: Int
+        duration: Int,
+        artworkURL: String? = nil
     ) -> SongItem {
         let performer = artist?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return SongItem(
@@ -135,7 +186,7 @@ enum TropLibraryV2PlaybackRouter {
             album: nil,
             albumId: nil,
             duration: max(0, duration),
-            thumbnailUrl: nil,
+            thumbnailUrl: artworkURL,
             isExplicit: false,
             playlistId: nil,
             likeStatus: nil,
