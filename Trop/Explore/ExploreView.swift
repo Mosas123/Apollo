@@ -12,6 +12,12 @@ struct ExploreView: View {
     @ObservedObject private var router = AppRouter.shared
 
     @State private var pendingRoute: DetailRoute?
+    @State private var v2ArtistSeeds: [String] = []
+    @State private var selectedV2Artist: String?
+    @State private var v2DiscoveredTracks: [MusicCatalogTrack] = []
+    @State private var isLoadingV2Artists = false
+    @State private var isSearchingV2Artist = false
+    @State private var v2ExploreMessage: String?
 
     private let accountState = AccountSheetState.shared
     @AppStorage("trop.library.v2.previewEnabled")
@@ -69,19 +75,100 @@ struct ExploreView: View {
 
     // MARK: - Content
 
-    /// The previous Explore shelves and mood feeds came exclusively from
-    /// YouTube Music. Do not relabel those as Trop's catalogue. While our
-    /// own discovery index is built, route users to the independent audio
-    /// provider search instead of fetching any InnerTube feed.
+    /// Explore V2 never loads YouTube Music's browse feeds. Artists come
+    /// from saved Trop UUID metadata; audio candidates are queried only after
+    /// an explicit tap, from enabled, independent source providers.
     private var v2AudioExplore: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            LazyVStack(alignment: .leading, spacing: 16) {
                 Label("Explore audio", systemImage: "music.magnifyingglass")
                     .font(.title2.weight(.bold))
                 Text(
-                    "Trop no longer uses YouTube Music's catalogue here. "
-                        + "Discover tracks from available audio providers through Search."
+                    "Browse artists from your Trop library and discover "
+                        + "audio from independent providers. No YouTube Music catalogue."
                 )
+                .foregroundStyle(.secondary)
+
+                if isLoadingV2Artists {
+                    ProgressView("Reading saved artists…")
+                } else if v2ArtistSeeds.isEmpty {
+                    Text("Save a song or artist to start exploring from your library.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Artists from your library").font(.headline)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(v2ArtistSeeds, id: \.self) { artist in
+                                Button(artist) {
+                                    guard selectedV2Artist != artist else { return }
+                                    v2DiscoveredTracks = []
+                                    selectedV2Artist = artist
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(selectedV2Artist == artist ? .accentColor : .secondary)
+                            }
+                        }
+                    }
+                }
+
+                if let selectedV2Artist {
+                    Text("From audio providers · " + selectedV2Artist)
+                        .font(.headline)
+                    if isSearchingV2Artist {
+                        ProgressView("Searching enabled audio providers…")
+                    } else if v2DiscoveredTracks.isEmpty {
+                        Text("No matching playable candidates found. Try another artist.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(v2DiscoveredTracks, id: \.id) { track in
+                            Button {
+                                let group = v2DiscoveredTracks.filter {
+                                    $0.id.source == track.id.source
+                                }.map { $0.asQueueSong() }
+                                PlaybackQueue.play(
+                                    track.asQueueSong(), in: group,
+                                    log: Log.explore,
+                                    context: "independent explore"
+                                )
+                            } label: {
+                                HStack(spacing: 12) {
+                                    AsyncImageView(url: track.artworkURL?.absoluteString)
+                                        .frame(width: 50, height: 50)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(track.title)
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(1)
+                                        Text(track.artist)
+                                            .foregroundStyle(.secondary)
+                                            .font(.caption)
+                                        Text(track.id.source == .addon
+                                             ? "Music Add-on"
+                                             : track.id.source.rawValue.capitalized)
+                                            .foregroundStyle(.secondary)
+                                            .font(.caption2)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "play.fill")
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                if let v2ExploreMessage {
+                    Text(v2ExploreMessage)
+                        .foregroundStyle(.secondary)
+                        .font(.footnote)
+                }
+                Text(
+                    "These are provider search candidates, not official charts "
+                        + "or personalized recommendations. Streams and quality "
+                        + "are verified when playback starts."
+                )
+                .font(.footnote)
                 .foregroundStyle(.secondary)
                 Button {
                     router.selectedTabIndex = 3
@@ -95,15 +182,45 @@ struct ExploreView: View {
                     Label("Your library", systemImage: "music.note.list")
                 }
                 .buttonStyle(.bordered)
-                Text("Independent charts and recommendations are still being built.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(20)
         }
+        .task { await loadV2ArtistSeeds() }
+        .task(id: selectedV2Artist) {
+            guard libraryV2PreviewEnabled, let artist = selectedV2Artist else {
+                return
+            }
+            isSearchingV2Artist = true
+            let matches = await ExploreV2ProviderDiscovery.tracks(for: artist)
+            guard !Task.isCancelled, libraryV2PreviewEnabled,
+                  selectedV2Artist == artist else { return }
+            v2DiscoveredTracks = matches
+            isSearchingV2Artist = false
+        }
         .miniPlayerTracksScroll()
         .scrollEdgeEffectHidden(true, for: .bottom)
+    }
+
+    @MainActor
+    private func loadV2ArtistSeeds() async {
+        guard libraryV2PreviewEnabled else { return }
+        isLoadingV2Artists = true
+        do {
+            async let saved = TropLibraryV2Store.recordings()
+            async let artists = TropLibraryV2Store.savedCatalogItems(kind: .artist)
+            let (recordings, artistItems) = try await (saved, artists)
+            guard !Task.isCancelled, libraryV2PreviewEnabled else { return }
+            v2ArtistSeeds = ExploreV2DiscoveryPolicy.artistSeeds(
+                artistItems.map { Optional($0.title) }
+                    + recordings.map(\.artist)
+            )
+            v2ExploreMessage = nil
+        } catch {
+            v2ArtistSeeds = []
+            v2ExploreMessage = "Could not load saved artists. Your library was not changed."
+        }
+        isLoadingV2Artists = false
     }
 
     @ViewBuilder
