@@ -11,6 +11,19 @@ struct TropGlobalRecording: Identifiable, Equatable, Sendable {
     let artist: String
     let album: String?
     let listenCount: Int
+    let source: String
+
+    init(
+        id: String, title: String, artist: String,
+        album: String?, listenCount: Int, source: String = "ListenBrainz"
+    ) {
+        self.id = id
+        self.title = title
+        self.artist = artist
+        self.album = album
+        self.listenCount = listenCount
+        self.source = source
+    }
 }
 
 enum TropGlobalCatalogError: Error {
