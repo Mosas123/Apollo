@@ -46,6 +46,10 @@ struct HomeScreenView: View {
     @State private var v2HomeMessage: String?
     @State private var v2PlaybackMessage: String?
     @State private var isStartingV2Playback = false
+    @State private var v2GlobalRecordings: [TropGlobalRecording] = []
+    @State private var v2GlobalLoading = false
+    @State private var v2GlobalError: String?
+    @State private var selectedGlobalRecording: TropGlobalRecording?
 
     var body: some View {
         NavigationStack(path: $router.homePath) {
@@ -74,6 +78,9 @@ struct HomeScreenView: View {
             .frame(maxHeight: .infinity, alignment: .top)
             .toolbar(.hidden, for: .navigationBar)
             .detailRouteDestinations()
+            .sheet(item: $selectedGlobalRecording) { recording in
+                TropGlobalRecordingSheet(recording: recording)
+            }
             .alert("Audio unavailable", isPresented: Binding(
                 get: { v2PlaybackMessage != nil },
                 set: { if !$0 { v2PlaybackMessage = nil } }
@@ -151,6 +158,9 @@ struct HomeScreenView: View {
                 Color.clear.frame(height: headerHeight)
                 v2CategoryChips
                 v2DiscoveryCard
+                if v2HomeFilter != .radio {
+                    v2GlobalDiscoveryShelf
+                }
 
                 if v2HomeLoading {
                     ProgressView().frame(maxWidth: .infinity)
@@ -318,8 +328,84 @@ struct HomeScreenView: View {
         .scrollIndicators(.automatic)
         .miniPlayerTracksScroll(headerOffset: quantizedHeaderOffset)
         .scrollEdgeEffectHidden(true, for: .bottom)
-        .task { await refreshV2Home() }
-        .refreshable { await refreshV2Home() }
+        .task {
+            async let saved = refreshV2Home()
+            async let global = refreshV2GlobalCatalog()
+            await (saved, global)
+        }
+        .refreshable {
+            async let saved = refreshV2Home()
+            async let global = refreshV2GlobalCatalog(force: true)
+            await (saved, global)
+        }
+    }
+
+    /// ListenBrainz sitewide recordings are unrelated to a user's saved
+    /// songs. The shelf can render on a fresh installation with an empty V2.
+    @ViewBuilder
+    private var v2GlobalDiscoveryShelf: some View {
+        if v2GlobalLoading && v2GlobalRecordings.isEmpty {
+            ProgressView("Discovering music…")
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+        }
+        if !v2GlobalRecordings.isEmpty {
+            HorizontalSection(title: "Popular on ListenBrainz", vSpacing: 8) {
+                LazyHStack(alignment: .top, spacing: 12) {
+                    ForEach(v2GlobalRecordings.prefix(15)) { recording in
+                        Button {
+                            selectedGlobalRecording = recording
+                        } label: {
+                            VStack(alignment: .leading, spacing: 7) {
+                                TropLibraryV2ArtworkView(
+                                    title: recording.title,
+                                    artist: recording.artist,
+                                    durationSeconds: 0
+                                )
+                                .frame(width: 140, height: 140)
+                                Text(recording.title)
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(2)
+                                Text(recording.artist)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            .frame(width: 140, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        } else if let v2GlobalError {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Music discovery unavailable").font(.headline)
+                Text(v2GlobalError).font(.footnote).foregroundStyle(.secondary)
+                Button("Retry") {
+                    Task { await refreshV2GlobalCatalog(force: true) }
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+    }
+
+    @MainActor
+    private func refreshV2GlobalCatalog(force: Bool = false) async {
+        guard libraryV2PreviewEnabled else { return }
+        v2GlobalLoading = true
+        defer { v2GlobalLoading = false }
+        do {
+            let recordings = try await TropGlobalMusicCatalog.shared
+                .popularRecordings(forceRefresh: force)
+            guard !Task.isCancelled, libraryV2PreviewEnabled else { return }
+            v2GlobalRecordings = recordings
+            v2GlobalError = recordings.isEmpty
+                ? "No public recordings available right now." : nil
+        } catch {
+            guard !Task.isCancelled, libraryV2PreviewEnabled else { return }
+            v2GlobalError = "Could not reach the public music catalogue."
+        }
     }
 
     private var v2CategoryChips: some View {
