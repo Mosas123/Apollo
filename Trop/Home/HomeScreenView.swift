@@ -189,6 +189,10 @@ struct HomeScreenView: View {
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
+                                if v2GlobalPlayInFlight == recording.id {
+                                    ProgressView("Finding audio…")
+                                        .font(.caption2)
+                                }
                             }
                             .frame(width: 140, alignment: .leading)
                         }
