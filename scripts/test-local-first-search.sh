@@ -91,3 +91,39 @@ assert "TropGlobalRecording" in v2_view
 assert "popularRecordings(forceRefresh: force)" in v2_view
 print("Home + Explore V2: global metadata, real navigation and no YouTube feed passed")
 EXPLORE_SOURCE_CHECK
+# Public V2 Search must query MusicBrainz identities regardless of local
+# saved rows and expose Library only when explicitly selected.
+grep -Fq 'searchRecordingsByArtist(' Trop/Search/SearchViewModel.swift
+grep -Fq 'MusicBrainzIdentityCatalog().searchAlbums(' Trop/Search/SearchViewModel.swift
+grep -Fq 'MusicBrainzIdentityCatalog().searchArtists(' Trop/Search/SearchViewModel.swift
+grep -Fq 'catalogRecordings' Trop/Search/SearchViewModel.swift
+grep -Fq 'catalogAlbums' Trop/Search/SearchViewModel.swift
+grep -Fq 'catalogArtists' Trop/Search/SearchViewModel.swift
+grep -Fq 'TropGlobalRecordingSheet(recording: recording)' Trop/Search/SearchView.swift
+grep -Fq 'v2SectionHeader("Songs · MusicBrainz")' Trop/Search/SearchView.swift
+grep -Fq 'v2SectionHeader("Albums · MusicBrainz")' Trop/Search/SearchView.swift
+grep -Fq 'v2SectionHeader("Artists · MusicBrainz")' Trop/Search/SearchView.swift
+swiftc -frontend -parse Trop/Search/SearchViewModel.swift
+swiftc -frontend -parse Trop/Search/SearchView.swift
+python3 - <<'GLOBAL_SEARCH_ASSERTIONS'
+from pathlib import Path
+model = Path("Trop/Search/SearchViewModel.swift").read_text()
+view = Path("Trop/Search/SearchView.swift").read_text()
+library_gate = model.split("var displaysV2LibraryResults:", 1)[1].split(
+    "var showsCatalogRecordings:", 1
+)[0]
+assert "&& isShowingLibrary" in library_gate
+assert "selectedSectionFilter == nil" not in library_gate
+metadata_search = model.split(
+    "// Search public MusicBrainz identities", 1
+)[1].split("// Music Add-ons (Stremio, read-only)", 1)[0]
+assert "MusicBrainzIdentityCatalog" in metadata_search
+assert "SearchService.shared.search" not in metadata_search
+assert "InnerTube" not in metadata_search
+assert "if includeProviders" in metadata_search
+assert "group.cancelAll()" in metadata_search
+assert "isShowingLibrary && (" in model
+assert "if viewModel.showsCatalogRecordings" in view
+assert "if viewModel.displaysV2LibraryResults" in view
+print("Global V2 Search and optional Library scope wiring passed")
+GLOBAL_SEARCH_ASSERTIONS
