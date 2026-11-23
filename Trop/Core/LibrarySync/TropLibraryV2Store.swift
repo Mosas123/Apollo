@@ -419,6 +419,87 @@ enum TropLibraryV2Store {
         }
     }
 
+    /// The user explicitly chose one provider result found using saved
+    /// metadata. Recheck the CURRENT SQLite row before linking: search results
+    /// could have become stale, another recording could own this provider ID,
+    /// or an older provider choice could already be active. No song, like,
+    /// playlist entry, download or source reference is removed.
+    static func linkConfirmedAudioSource(
+        toRecordingID rawID: String,
+        track: MusicCatalogTrack,
+        requiresLossless: Bool
+    ) async throws {
+        let id = try TropLibraryV2IdentityPolicy.checkedID(rawID)
+        guard let alias = TropLibraryV2AudioMatchPolicy.alias(for: track) else {
+            throw TropLibraryV2AudioLinkError.notVerified
+        }
+        let newAliasID = TropLibraryV2IdentityPolicy.newID()
+        try await DatabaseService.shared.write { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT kind, title, artist_or_author, duration_seconds
+                    FROM trop_v2_item WHERE id = ?
+                    """,
+                arguments: [id]
+            ) else { throw TropLibraryV2ValidationError.missingItem }
+            let kind: String = row["kind"]
+            guard kind == TropLibraryV2Kind.recording.rawValue else {
+                throw TropLibraryV2ValidationError.unexpectedItemKind
+            }
+            let title: String = row["title"]
+            let artist: String? = row["artist_or_author"]
+            let duration: Int = row["duration_seconds"]
+            guard TropLibraryV2AudioMatchPolicy.accepts(
+                title: title, artist: artist, durationSeconds: duration,
+                track: track, requiresLossless: requiresLossless
+            ) else { throw TropLibraryV2AudioLinkError.notVerified }
+
+            let currentOwner = try String.fetchOne(
+                db,
+                sql: """
+                    SELECT item_id FROM trop_v2_source_alias
+                    WHERE kind = 'recording' AND provider = ?
+                      AND source_scope = ? AND external_id = ?
+                    """,
+                arguments: [alias.provider, alias.scope, alias.externalID]
+            )
+            if let currentOwner {
+                guard currentOwner == id else {
+                    throw TropLibraryV2AudioLinkError.usedByAnotherRecording
+                }
+                return // Already linked: no duplicate row or side effects.
+            }
+
+            // Today the player accepts only a single independent source.
+            // Do not create an ambiguous set or erase an existing preference.
+            let other = try Int.fetchOne(
+                db,
+                sql: """
+                    SELECT COUNT(*) FROM trop_v2_source_alias
+                    WHERE item_id = ? AND kind = 'recording'
+                      AND source_scope = 'global'
+                      AND provider IN ('audius', 'qobuz', 'jiosaavn', 'addon')
+                    """,
+                arguments: [id]
+            ) ?? 0
+            guard other == 0 else {
+                throw TropLibraryV2AudioLinkError.existingSource
+            }
+            try db.execute(
+                sql: """
+                    INSERT INTO trop_v2_source_alias (
+                        id, item_id, kind, provider, source_scope, external_id
+                    ) VALUES (?, ?, 'recording', ?, ?, ?)
+                    """,
+                arguments: [
+                    newAliasID, id, alias.provider,
+                    alias.scope, alias.externalID
+                ]
+            )
+        }
+    }
+
     static func recordings() async throws -> [RecordingSummary] {
         try await DatabaseService.shared.read { db in
             try Row.fetchAll(
