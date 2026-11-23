@@ -69,7 +69,7 @@ struct QobuzClient: Sendable {
         let response = try JSONDecoder().decode(QobuzSearchResponse.self, from: data)
         return response.tracks.items.compactMap { track in
             guard track.streamable == true, track.id > 0, !track.title.isEmpty else { return nil }
-            return MusicCatalogTrack(
+            var result = MusicCatalogTrack(
                 id: MusicCatalogID(source: .qobuz, rawValue: String(track.id)),
                 title: track.title,
                 artist: track.performer?.name ?? track.album?.artist?.name ?? "Unknown Artist",
@@ -78,6 +78,8 @@ struct QobuzClient: Sendable {
                 permalinkURL: nil,
                 isStreamable: true
             )
+            result.albumTitle = track.album?.title
+            return result
         }
     }
 
@@ -162,6 +164,7 @@ private struct QobuzArtist: Decodable {
 }
 
 private struct QobuzAlbum: Decodable {
+    let title: String?
     let artist: QobuzArtist?
     let image: QobuzArtwork?
 }
