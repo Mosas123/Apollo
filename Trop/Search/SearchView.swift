@@ -852,7 +852,7 @@ struct SearchView: View {
                     : viewModel.selectedSectionFilter == filter
             },
             onTap: { filter in
-                if filter == "All Results" {
+                if filter == "All Results" || filter == "Top Results" {
                     viewModel.selectedSectionFilter = nil
                     viewModel.isShowingLibrary = false
                 } else if filter == "Library" {
