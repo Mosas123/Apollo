@@ -50,8 +50,19 @@ swiftc -swift-version 6 -strict-concurrency=complete \
 "$temp_dir/trop-global-catalog"
 swiftc -frontend -parse Trop/Explore/ExploreView.swift
 swiftc -frontend -parse Trop/Home/HomeScreenView.swift
-swiftc -frontend -parse Trop/Explore/TropGlobalRecordingSheet.swift
+swiftc -frontend -parse Trop/Core/MusicSources/TropGlobalPlaybackCoordinator.swift
+swiftc -frontend -parse Trop/Detail/TropCatalogDetailPages.swift
 swiftc -frontend -parse Trop/ContentView.swift
+
+# One-tap discovery policy is separate from the strict saved Library rules.
+swiftc -swift-version 6 -strict-concurrency=complete \
+  Trop/Core/Metadata/TextMatch.swift \
+  Trop/Core/MusicSources/MusicCatalog.swift \
+  Trop/Core/MusicSources/TropGlobalMusicCatalog.swift \
+  Trop/Core/MusicSources/TropGlobalAudioSelectionPolicy.swift \
+  tests/MusicSources/TropGlobalAudioSelectionPolicyChecks.swift \
+  -o "$temp_dir/trop-global-playback-policy"
+"$temp_dir/trop-global-playback-policy"
 
 # Buttons from Home must change the actual TabView selection, including
 # when the Explore tab is hidden for legacy users.
@@ -60,10 +71,10 @@ grep -Fq 'AppRouter.shared.$selectedTabIndex.dropFirst()' Trop/ContentView.swift
 grep -Fq 'if settings.showExploreTab || libraryV2PreviewEnabled {' Trop/ContentView.swift
 grep -Fq 'TropGlobalMusicCatalog.shared' Trop/Home/HomeScreenView.swift
 grep -Fq 'TropGlobalMusicCatalog.shared' Trop/Explore/ExploreView.swift
-grep -Fq 'TropGlobalRecordingSheet(recording: recording)' Trop/Home/HomeScreenView.swift
-grep -Fq 'TropGlobalRecordingSheet(recording: recording)' Trop/Explore/ExploreView.swift
-grep -Fq 'TropLibraryV2AudioDiscovery.inspect(' Trop/Explore/TropGlobalRecordingSheet.swift
-grep -Fq 'TropLibraryV2Store.createItem(' Trop/Explore/TropGlobalRecordingSheet.swift
+grep -Fq 'TropGlobalPlaybackCoordinator.play(recording)' Trop/Home/HomeScreenView.swift
+grep -Fq 'TropGlobalPlaybackCoordinator.play(recording)' Trop/Explore/ExploreView.swift
+grep -Fq 'TropLibraryV2AudioDiscovery.inspect(' Trop/Core/MusicSources/TropGlobalPlaybackCoordinator.swift
+grep -Fq 'TropLibraryV2Store.createItem(' Trop/Core/MusicSources/TropGlobalPlaybackCoordinator.swift
 grep -Fq 'thumbnailUrl: artworkURL' Trop/Core/LibrarySync/TropLibraryV2PlaybackRouter.swift
 
 python3 - <<'EXPLORE_SOURCE_CHECK'
@@ -89,6 +100,11 @@ assert "URLSession.shared.data(for:" in catalog
 assert "TropGlobalRecording" in v2_home
 assert "TropGlobalRecording" in v2_view
 assert "popularRecordings(forceRefresh: force)" in v2_view
+assert "Your playlists" not in v2_home
+assert "Recently saved" not in v2_home
+assert "Your radio stations" not in v2_home
+assert "TropGlobalRecordingSheet" not in v2_home
+assert "TropGlobalRecordingSheet" not in v2_view
 print("Home + Explore V2: global metadata, real navigation and no YouTube feed passed")
 EXPLORE_SOURCE_CHECK
 # Public V2 Search must query MusicBrainz identities regardless of local
@@ -99,7 +115,10 @@ grep -Fq 'MusicBrainzIdentityCatalog().searchArtists(' Trop/Search/SearchViewMod
 grep -Fq 'catalogRecordings' Trop/Search/SearchViewModel.swift
 grep -Fq 'catalogAlbums' Trop/Search/SearchViewModel.swift
 grep -Fq 'catalogArtists' Trop/Search/SearchViewModel.swift
-grep -Fq 'TropGlobalRecordingSheet(recording: recording)' Trop/Search/SearchView.swift
+grep -Fq 'TropGlobalPlaybackCoordinator.play(recording)' Trop/Search/SearchView.swift
+grep -Fq 'TropCatalogDetailRoute.artist(' Trop/Search/SearchView.swift
+grep -Fq 'TropCatalogDetailRoute.album(' Trop/Search/SearchView.swift
+grep -Fq 'MusicBrainzIdentityCatalog().albumTracks(' Trop/Detail/TropCatalogDetailPages.swift
 grep -Fq 'v2SectionHeader("Songs")' Trop/Search/SearchView.swift
 grep -Fq 'v2SectionHeader("Albums")' Trop/Search/SearchView.swift
 grep -Fq 'v2SectionHeader("Artists")' Trop/Search/SearchView.swift
@@ -122,7 +141,7 @@ assert "SearchService.shared.search" not in metadata_search
 assert "InnerTube" not in metadata_search
 assert "if includeProviders" in metadata_search
 assert "group.cancelAll()" in metadata_search
-assert "isShowingLibrary && (" in model
+assert "TropGlobalPlaybackCoordinator.play(recording)" in view
 assert "if viewModel.showsCatalogRecordings" in view
 assert "if viewModel.displaysV2LibraryResults" in view
 print("Global V2 Search and optional Library scope wiring passed")
