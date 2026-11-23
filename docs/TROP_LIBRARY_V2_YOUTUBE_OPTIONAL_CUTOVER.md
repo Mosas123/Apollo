@@ -156,11 +156,16 @@ album/artist V2 playback and provider failover need later dedicated gates.
 The first iPhone restore via combined V6 snapshot and external Telegram
 document passed: 25 V2 recordings, 4 playlists, 10 entries, 1 favorite radio,
 and user-confirmed persistence after reopening Thrum. **The next on-device
-recording demonstrated a remaining issue:** saved tracks display placeholder
-music-note icons and the **"Audio unavailable — This song has no verified
-independent audio source yet"** alert when tapped.
+recording exposed a previously existing V2 limitation:** saved tracks display
+placeholder music-note icons and the **"Audio unavailable — This song has no
+verified independent audio source yet"** alert when tapped. **User clarification
+(22 Nov): this behavior already occurred when saving songs before the restore
+test.** Do not classify either symptom as regression caused by the backup,
+uninstall/reinstall, or restoration. The evidence directly establishes
+pre-existing missing artwork; user reports the saved-song experience as a whole
+was already like this.
 
-These are separate issues, not a failure of recovery:
+These are separate V2 product-completeness issues, not a failure of recovery:
 
 - **Artwork:** earlier V2 UI intentionally had no image representation or
   lookup. The current PR now enriches saved V2 tracks in Recently Added,
