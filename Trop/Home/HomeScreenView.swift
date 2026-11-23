@@ -134,132 +134,258 @@ struct HomeScreenView: View {
 
     /// Separate V2 Home surface. No legacy YTItem, InnerTube browse, account
     /// login, YouTube likes or remote playlists are needed to display it.
+    private enum V2HomeFilter: String, CaseIterable {
+        case all = "All"
+        case music = "Music"
+        case radio = "Radio"
+    }
+
+    @State private var v2HomeFilter: V2HomeFilter = .all
+
+    /// Use the same visual vocabulary as Home in main: category pills,
+    /// feature card, horizontal shelves and artwork-backed song rows.
+    /// Data still comes exclusively from Trop UUIDs, not InnerTube shelves.
     private var v2HomeContent: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
+            LazyVStack(alignment: .leading, spacing: 0) {
                 Color.clear.frame(height: headerHeight)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Your music in Trop")
-                        .font(.title2.weight(.bold))
-                    Text("Your own library, independent of YouTube Music.")
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 16)
+                v2CategoryChips
+                v2DiscoveryCard
 
                 if v2HomeLoading {
-                    ProgressView().frame(maxWidth: .infinity).padding(.vertical, 24)
+                    ProgressView().frame(maxWidth: .infinity)
+                        .padding(.vertical, 24)
                 } else if let v2HomeMessage {
                     Text(v2HomeMessage)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
                 }
 
-                if !v2Playlists.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Your playlists").font(.headline)
-                        ForEach(v2Playlists, id: \.id) { playlist in
-                            NavigationLink {
-                                TropLibraryV2PlaylistScreen(playlist: playlist)
-                            } label: {
-                                Label(playlist.name, systemImage: "music.note.list")
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                }
-
-                if !v2Recordings.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Recently saved").font(.headline)
-                        ForEach(v2Recordings.prefix(12), id: \.id) { recording in
-                            Button {
-                                Task { await playSavedV2Recording(recording) }
-                            } label: {
-                                HStack(spacing: 10) {
-                                    Image(systemName: "music.note")
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(recording.title).lineLimit(1)
-                                        if let artist = recording.artist {
-                                            Text(artist).font(.caption)
+                if v2HomeFilter != .radio {
+                    if !v2Playlists.isEmpty {
+                        HorizontalSection(title: "Your playlists", vSpacing: 8) {
+                            LazyHStack(alignment: .top, spacing: 12) {
+                                ForEach(v2Playlists.prefix(12), id: \.id) { playlist in
+                                    NavigationLink {
+                                        TropLibraryV2PlaylistScreen(playlist: playlist)
+                                    } label: {
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            Image(systemName: "music.note.list")
+                                                .font(.largeTitle)
+                                                .frame(width: 140, height: 140)
+                                                .background(
+                                                    Color(uiColor: .secondarySystemBackground),
+                                                    in: RoundedRectangle(cornerRadius: 12)
+                                                )
+                                            Text(playlist.name)
+                                                .font(.subheadline.weight(.medium))
+                                                .foregroundStyle(.primary)
+                                                .lineLimit(2)
+                                            Text("\(playlist.entryCount) songs")
+                                                .font(.caption)
                                                 .foregroundStyle(.secondary)
                                         }
+                                        .frame(width: 140, alignment: .leading)
                                     }
-                                    Spacer()
-                                    if recording.isLiked {
-                                        Image(systemName: "heart.fill")
-                                            .foregroundStyle(.red)
-                                    }
-                                    Image(systemName: "play.fill")
-                                        .foregroundStyle(settings.accentColor)
+                                    .buttonStyle(.plain)
                                 }
-                                .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
-                            .disabled(isStartingV2Playback)
-                            // Trop UUID is NOT a playable ID. This always
-                            // resolves a provider alias before starting audio.
                         }
                     }
-                    .padding(.horizontal, 16)
+
+                    if !v2Recordings.isEmpty {
+                        HorizontalSection(title: "Recently saved", vSpacing: 8) {
+                            LazyHGrid(
+                                rows: Array(
+                                    repeating: GridItem(.fixed(54), spacing: 8),
+                                    count: 3
+                                ),
+                                spacing: 12
+                            ) {
+                                ForEach(v2Recordings.prefix(15), id: \.id) { recording in
+                                    Button {
+                                        Task { await playSavedV2Recording(recording) }
+                                    } label: {
+                                        HStack(spacing: 10) {
+                                            TropLibraryV2ArtworkView(
+                                                title: recording.title,
+                                                artist: recording.artist,
+                                                durationSeconds: recording.durationSeconds
+                                            )
+                                            .frame(width: 48, height: 48)
+                                            VStack(alignment: .leading, spacing: 3) {
+                                                Text(recording.title)
+                                                    .font(.subheadline.weight(.medium))
+                                                    .foregroundStyle(.primary)
+                                                    .lineLimit(1)
+                                                Text(recording.artist ?? "Unknown artist")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                                    .lineLimit(1)
+                                            }
+                                            Spacer(minLength: 0)
+                                            if recording.isLiked {
+                                                Image(systemName: "heart.fill")
+                                                    .foregroundStyle(.red)
+                                                    .font(.caption)
+                                            }
+                                            Image(systemName: "play.fill")
+                                                .foregroundStyle(settings.accentColor)
+                                                .font(.caption)
+                                        }
+                                        .frame(width: 312)
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(isStartingV2Playback)
+                                }
+                            }
+                        }
+                    }
                 }
 
-                if !v2Radios.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Your radio stations").font(.headline)
-                        ForEach(v2Radios, id: \.stationUUID) { radio in
-                            Button {
-                                Task {
-                                    do {
-                                        try await RadioPlaybackCoordinator.playSaved(
-                                            stationUUID: radio.stationUUID
-                                        )
-                                        v2HomeMessage = nil
-                                    } catch {
-                                        v2HomeMessage = "Station unavailable right now."
+                if v2HomeFilter != .music, !v2Radios.isEmpty {
+                    HorizontalSection(title: "Your radio stations", vSpacing: 8) {
+                        LazyHStack(spacing: 12) {
+                            ForEach(v2Radios, id: \.stationUUID) { radio in
+                                Button {
+                                    Task {
+                                        do {
+                                            try await RadioPlaybackCoordinator.playSaved(
+                                                stationUUID: radio.stationUUID
+                                            )
+                                            v2HomeMessage = nil
+                                        } catch {
+                                            v2HomeMessage = "Station unavailable right now."
+                                        }
                                     }
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Image(systemName: "dot.radiowaves.left.and.right")
+                                            .font(.largeTitle)
+                                            .frame(width: 140, height: 108)
+                                            .background(
+                                                Color(uiColor: .secondarySystemBackground),
+                                                in: RoundedRectangle(cornerRadius: 12)
+                                            )
+                                        Text(radio.name)
+                                            .font(.subheadline.weight(.medium))
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(2)
+                                    }
+                                    .frame(width: 140, alignment: .leading)
                                 }
-                            } label: {
-                                Label(radio.name, systemImage: "dot.radiowaves.left.and.right")
+                                .buttonStyle(.plain)
                             }
                         }
                     }
-                    .padding(.horizontal, 16)
                 }
 
                 if !v2HomeLoading && v2Recordings.isEmpty
                     && v2Playlists.isEmpty && v2Radios.isEmpty {
                     ContentUnavailableView(
-                        "Your Trop library is ready",
+                        "Discover music with Trop",
                         systemImage: "music.note.list",
-                        description: Text("Save a recording, a playlist or a radio station to begin.")
+                        description: Text(
+                            "Explore independent audio providers, even with an empty library."
+                        )
                     )
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 16) {
                     Button {
                         router.selectedTabIndex = 2
                     } label: {
-                        Label("Open Library", systemImage: "music.note.list")
+                        Label("Library", systemImage: "music.note.list")
                     }
                     Button {
                         router.selectedTabIndex = 3
                     } label: {
-                        Label("Search audio providers", systemImage: "magnifyingglass")
+                        Label("Search", systemImage: "magnifyingglass")
                     }
                     NavigationLink {
                         DownloadsView()
                     } label: {
-                        Label("Downloaded audio", systemImage: "arrow.down.circle")
+                        Label("Downloads", systemImage: "arrow.down.circle")
                     }
                 }
+                .font(.subheadline)
                 .padding(.horizontal, 16)
-                .padding(.bottom, 24)
+                .padding(.vertical, 24)
             }
         }
+        .scrollIndicators(.automatic)
         .miniPlayerTracksScroll(headerOffset: quantizedHeaderOffset)
         .scrollEdgeEffectHidden(true, for: .bottom)
         .task { await refreshV2Home() }
         .refreshable { await refreshV2Home() }
+    }
+
+    private var v2CategoryChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(V2HomeFilter.allCases, id: \.self) { filter in
+                    let selected = filter == v2HomeFilter
+                    Button {
+                        v2HomeFilter = filter
+                    } label: {
+                        Text(filter.rawValue)
+                            .font(.system(size: 15, weight: .semibold))
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 10)
+                            .background(
+                                selected ? settings.accentColor
+                                    : Color(uiColor: .secondarySystemBackground),
+                                in: Capsule()
+                            )
+                            .foregroundStyle(
+                                selected ? settings.accentColor.readableForeground : .primary
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+    }
+
+    /// Visual sibling of main's feature card. It opens our independent
+    /// Explore surface; it must never call the legacy SurpriseMeService.
+    private var v2DiscoveryCard: some View {
+        Button {
+            router.selectedTabIndex = 1
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "sparkles")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(settings.accentColor))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Discover music")
+                        .font(.headline)
+                    Text("Explore new music without YouTube Music's catalogue.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .background(
+                .regularMaterial,
+                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
     }
 
     @MainActor
