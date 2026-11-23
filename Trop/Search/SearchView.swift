@@ -27,17 +27,7 @@ struct SearchView: View {
     @State private var playlistPickerSelection: PlaylistPickerSelection?
     @State private var v2PlaybackMessage: String?
     @State private var isStartingV2Playback = false
-    @State private var selectedCatalogRecording: TropGlobalRecording?
-    @State private var selectedCatalogDetail: CatalogDetail?
-
-    /// Album and artist results are public identities, not playable IDs.
-    private struct CatalogDetail: Identifiable {
-        let id = UUID()
-        let name: String
-        let subtitle: String
-        let note: String
-        let searchQuery: String
-    }
+    @State private var globalPlayingID: String?
     @State private var headerHidden = false
     @State private var headerHeight: CGFloat = 60
     @State private var searchBarHeight: CGFloat = 60
@@ -90,35 +80,12 @@ struct SearchView: View {
             .frame(maxHeight: .infinity, alignment: .top)
             .toolbar(.hidden, for: .navigationBar)
             .detailRouteDestinations()
-            .sheet(item: $selectedCatalogRecording) { recording in
-                TropGlobalRecordingSheet(recording: recording)
-            }
-            .sheet(item: $selectedCatalogDetail) { detail in
-                NavigationStack {
-                    List {
-                        Section("Public music catalogue") {
-                            LabeledContent("Name", value: detail.name)
-                            LabeledContent("Artist", value: detail.subtitle)
-                            Text(detail.note)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                        Section {
-                            Button {
-                                selectedCatalogDetail = nil
-                                viewModel.submit(detail.searchQuery)
-                            } label: {
-                                Label("Search related music", systemImage: "magnifyingglass")
-                            }
-                        }
-                    }
-                    .navigationTitle(detail.name)
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Done") { selectedCatalogDetail = nil }
-                        }
-                    }
+            .navigationDestination(for: TropCatalogDetailRoute.self) { route in
+                switch route {
+                case .artist(let id, let name):
+                    TropCatalogArtistPage(id: id, name: name)
+                case .album(let id, let title, let artist):
+                    TropCatalogAlbumPage(id: id, title: title, artist: artist)
                 }
             }
             .sheet(item: $playlistPickerSelection) { selection in
@@ -427,12 +394,10 @@ struct SearchView: View {
 
     private func v2CatalogArtistRow(_ artist: MusicBrainzArtist) -> some View {
         Button {
-            selectedCatalogDetail = CatalogDetail(
-                name: artist.name,
-                subtitle: artist.disambiguation ?? "Artist",
-                note: "Artist identity from MusicBrainz. Audio tracks are "
-                    + "searched separately using enabled providers.",
-                searchQuery: artist.name
+            router.searchPath.append(
+                TropCatalogDetailRoute.artist(
+                    id: artist.id.mbid, name: artist.name
+                )
             )
         } label: {
             HStack(spacing: 12) {
@@ -466,11 +431,10 @@ struct SearchView: View {
 
     private func v2CatalogAlbumRow(_ album: MusicBrainzAlbum) -> some View {
         Button {
-            selectedCatalogDetail = CatalogDetail(
-                name: album.title, subtitle: album.artist,
-                note: "Album identity from MusicBrainz. "
-                    + "Metadata does not imply available audio.",
-                searchQuery: album.artist + " " + album.title
+            router.searchPath.append(
+                TropCatalogDetailRoute.album(
+                    id: album.id.mbid, title: album.title, artist: album.artist
+                )
             )
         } label: {
             HStack(spacing: 12) {
@@ -499,7 +463,7 @@ struct SearchView: View {
 
     private func v2CatalogRecordingRow(_ recording: TropGlobalRecording) -> some View {
         Button {
-            selectedCatalogRecording = recording
+            Task { await playGlobalRecording(recording) }
         } label: {
             HStack(spacing: 12) {
                 TropLibraryV2ArtworkView(
@@ -519,7 +483,7 @@ struct SearchView: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                Image(systemName: "ellipsis")
+                Image(systemName: "play.fill")
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 16)
@@ -527,12 +491,36 @@ struct SearchView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(globalPlayingID != nil)
         .contextMenu {
             Button {
-                selectedCatalogRecording = recording
+                Task { await saveGlobalRecording(recording) }
             } label: {
-                Label("Play or save", systemImage: "ellipsis.circle")
+                Label("Save to Library", systemImage: "plus")
             }
+        }
+    }
+
+    @MainActor
+    private func playGlobalRecording(_ recording: TropGlobalRecording) async {
+        guard globalPlayingID == nil else { return }
+        globalPlayingID = recording.id
+        defer { globalPlayingID = nil }
+        do {
+            try await TropGlobalPlaybackCoordinator.play(recording)
+        } catch is CancellationError {
+            return
+        } catch {
+            v2PlaybackMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func saveGlobalRecording(_ recording: TropGlobalRecording) async {
+        do {
+            try await TropGlobalPlaybackCoordinator.save(recording)
+        } catch {
+            v2PlaybackMessage = "Could not save this recording."
         }
     }
 
