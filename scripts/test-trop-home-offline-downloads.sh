@@ -14,6 +14,15 @@ swiftc -swift-version 6 -strict-concurrency=complete \
 # Saved metadata is NOT automatically playable offline; only verified local
 # downloads use the existing DownloadsView playback path.
 grep -Fq 'v2HomeContent' Trop/Home/HomeScreenView.swift
+# V2 must share the visible Home design language with main, but not its
+# InnerTube shelves, YouTube-keyed queue or SurpriseMeService.
+grep -Fq 'v2CategoryChips' Trop/Home/HomeScreenView.swift
+grep -Fq 'v2DiscoveryCard' Trop/Home/HomeScreenView.swift
+grep -Fq 'HorizontalSection(title: "Your playlists"' Trop/Home/HomeScreenView.swift
+grep -Fq 'HorizontalSection(title: "Recently saved"' Trop/Home/HomeScreenView.swift
+grep -Fq 'HorizontalSection(title: "Your radio stations"' Trop/Home/HomeScreenView.swift
+grep -Fq 'TropLibraryV2ArtworkView(' Trop/Home/HomeScreenView.swift
+swiftc -frontend -parse Trop/Home/HomeScreenView.swift
 grep -Fq 'TropLibraryV2Store.recordings()' Trop/Home/HomeScreenView.swift
 # Saved V2 rows are interactive only through a source-aware router.
 # Unresolved metadata must never be handed straight to the legacy queue.
@@ -40,7 +49,7 @@ grep -Fq 'navigationTitle(embeddedInHome ? "Home" : "Downloads")' Trop/Library/D
 # YouTube-keyed queue. Audio playback requires a separately resolved source.
 v2_surface="$(sed -n '/private var v2HomeContent:/,/private var homescreenContent:/p' \
   Trop/Home/HomeScreenView.swift)"
-if printf '%s' "$v2_surface" | grep -Eq 'PlaybackQueue\.play|InnerTubeClient|SyncBridge\.mutations'; then
+if printf '%s' "$v2_surface" | grep -Eq 'PlaybackQueue\.play|InnerTubeClient|SyncBridge\.mutations|SurpriseMeService|YTItem'; then
   echo 'V2 Home must not play unresolved metadata or call YouTube'
   exit 1
 fi
