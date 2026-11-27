@@ -333,28 +333,22 @@ final class SearchViewModel {
         isFetching = true
         defer { isFetching = false }
         async let localResults = try? SearchService.shared.localSearch(query: query)
-        var youtubeFailure: Error?
+        var primaryFailure: Error?
         do {
-            let raw = try await SearchService.shared.search(query: query)
+            let catalog = try await SpotifyCatalogProvider().search(query: query, limit: 30)
             guard !Task.isCancelled, query == submittedQuery else { return }
-            // Parse off the main actor. TubeJSON is the Sendable box the
-            // engine already uses to move raw JSON across isolation.
-            let box = TubeJSON(raw)
-            let parsed = await Task.detached(priority: .userInitiated) {
-                SearchParser.parseSearchResults(from: box.value)
-            }.value
-            guard !Task.isCancelled, query == submittedQuery else { return }
-            resultCache[query] = parsed
+            let sections = SpotifyCatalogMapper.searchSections(from: catalog)
+            resultCache[query] = sections
             cacheOrder.removeAll { $0 == query }
             cacheOrder.append(query)
             if cacheOrder.count > 20 {
                 resultCache.removeValue(forKey: cacheOrder.removeFirst())
             }
-            results = parsed
+            results = sections
             extractHero()
         } catch {
             guard !Task.isCancelled, query == submittedQuery else { return }
-            youtubeFailure = error
+            primaryFailure = error
         }
         let local = await localResults
         guard !Task.isCancelled, query == submittedQuery else { return }
@@ -364,7 +358,7 @@ final class SearchViewModel {
             localAlbums = local.albums
             localPlaylists = local.playlists
         }
-        error = youtubeFailure
+        error = primaryFailure
         updateResultPhase()
 
         // Extra catalogues are fetched on submission; they never delay the
