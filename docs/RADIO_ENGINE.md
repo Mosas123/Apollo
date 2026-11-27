@@ -161,9 +161,10 @@ con el pipeline actual.
 - [ ] Prefetch de la siguiente estación.
 
 ### R4 — IA
-- [ ] Embeddings de metadata.
-- [ ] Learning-to-rank con feedback local.
+- [x] Embeddings de metadata on-device (`NLEmbedding`) como feature de similitud.
+- [x] Learning-to-rank online local: pesos por estilo que aprenden de completions/skips/likes.
 - [ ] Bandits de exploración.
+- [ ] Modelo de secuencia de sesión.
 - [ ] Explicaciones generadas (opcional).
 
 ## 11. Lo que falta en el roadmap actual

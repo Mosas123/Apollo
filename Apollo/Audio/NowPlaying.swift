@@ -430,6 +430,11 @@ final class NowPlaying {
             let progress = duration > 0 ? currentTime / duration : 0
             if progress < 0.5 {
                 TasteProfileStore.shared.recordSkip(artist: artist)
+                if queueSongs.indices.contains(queueIndex) {
+                    let skipped = queueSongs[queueIndex]
+                    let key = skipped.catalogID ?? skipped.videoId
+                    Task { await RadioLearningStore.shared.record(key: key, label: 0) }
+                }
             }
         }
         queueIndex += 1
@@ -789,6 +794,11 @@ final class NowPlaying {
         }
         currentTime = duration
         TasteProfileStore.shared.recordCompletion(artist: artist)
+        if queueSongs.indices.contains(queueIndex) {
+            let finished = queueSongs[queueIndex]
+            let key = finished.catalogID ?? finished.videoId
+            Task { await RadioLearningStore.shared.record(key: key, label: 1) }
+        }
         if let finishedId = videoId,
            duration >= 600 || musicVideoType == "MUSIC_VIDEO_TYPE_PODCAST_EPISODE" {
             Task { await EpisodePlaybackStore.shared.markPlayed(videoId: finishedId) }

@@ -62,6 +62,10 @@ class LikeStore: ObservableObject {
             } else {
                 TasteProfileStore.shared.recordUnlike(artist: primaryArtist)
             }
+            let key = song.catalogID ?? song.videoId
+            Task {
+                await RadioLearningStore.shared.record(key: key, label: target ? 1 : 0)
+            }
             let artist = song.artists.map(\.name).joined(separator: ", ")
             let track = song.title
             if !artist.isEmpty, !track.isEmpty {

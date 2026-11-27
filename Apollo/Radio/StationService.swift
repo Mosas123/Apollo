@@ -48,6 +48,8 @@ actor StationService {
     private let source = SpotifyStationSource()
     private let taste = RadioTasteStore.shared
     private let lastFM = LastFMDiscoveryClient()
+    private let embeddings = CatalogEmbeddingStore.shared
+    private let learning = RadioLearningStore.shared
     private var cache: [String: (songs: [SongItem], at: Date)] = [:]
     private let ttl: TimeInterval = 10 * 60
 
@@ -293,9 +295,11 @@ actor StationService {
         options: RadioOptions
     ) async -> [SongItem] {
         _ = await taste.snapshot()
+        let seedText = CatalogEmbeddingStore.text(for: seedSong)
+        let weights = await learning.weights(for: options.style.rawValue)
 
         var seen = Set<String>()
-        var scored: [(SongItem, Double, String, String, String)] = []
+        var scored: [(SongItem, Double, String, String, String, RadioFeatureVector)] = []
 
         for candidate in candidates {
             if !options.allowExplicit, candidate.song.isExplicit == true { continue }
@@ -313,31 +317,41 @@ actor StationService {
             }
             guard profile.skips < 5 else { continue }
 
-            var score = candidate.base
-            score += 0.30 * affinity
-            score += 0.20 * min(max(profile.weight / 12, 0), 1)
-            score -= Double(min(profile.skips, 5)) * 0.04
-            score += 0.12 * candidate.popularity
-            score += recent ? -0.18 : 0.04
+            let candidateText = CatalogEmbeddingStore.text(for: candidate.song)
+            let rawSimilarity = await embeddings.similarity(seedText, candidateText)
+            let embeddingSimilarity = rawSimilarity.map { ($0 + 1) / 2 } ?? 0
 
-            switch options.style {
-            case .similar:
-                if case .seedTop = candidate.group { score += 0.05 }
-            case .variety:
-                if case .seedTop = candidate.group { score -= 0.15 }
-                if case .related = candidate.group { score += 0.08 }
-                score += 0.08 * affinity
-            case .deepCuts:
-                if case .album = candidate.group { score += 0.10 }
-                if case .related = candidate.group { score += 0.06 }
-                score -= 0.06 * candidate.popularity
+            var isSeedTop = 0.0
+            var isAlbum = 0.0
+            var isRelated = 0.0
+            var isSearch = 0.0
+            switch candidate.group {
+            case .seedTop: isSeedTop = 1
+            case .album: isAlbum = 1
+            case .related: isRelated = 1
+            case .search: isSearch = 1
             }
 
-            score += Double.random(in: 0...0.02)
+            let features = RadioFeatureVector(values: [
+                1,
+                affinity,
+                min(max(profile.weight / 12, 0), 1),
+                candidate.popularity,
+                recent ? 0 : 1,
+                embeddingSimilarity,
+                isSeedTop,
+                isAlbum,
+                isRelated,
+                isSearch,
+                min(Double(profile.skips) / 5, 1)
+            ])
+
+            var score = weights.score(features)
+            score += Double.random(in: 0...0.01)
 
             let artistKey = candidate.song.artists.first.map { TextMatch.normalizeArtist($0.name) } ?? ""
             let albumKey = TextMatch.normalizeTitle(candidate.song.album ?? "")
-            scored.append((candidate.song, score, artistKey, albumKey, candidate.reason))
+            scored.append((candidate.song, score, artistKey, albumKey, candidate.reason, features))
         }
 
         scored.sort { $0.1 > $1.1 }
@@ -349,7 +363,7 @@ actor StationService {
         var albumCounts: [String: Int] = [:]
         var result: [SongItem] = []
 
-        for (song, _, artistKey, albumKey, reason) in scored {
+        for (song, _, artistKey, albumKey, reason, features) in scored {
             guard result.count < options.limit else { break }
             if !artistKey.isEmpty, (artistCounts[artistKey] ?? 0) >= maxPerArtist { continue }
             if !albumKey.isEmpty, (albumCounts[albumKey] ?? 0) >= maxPerAlbum { continue }
@@ -357,6 +371,12 @@ actor StationService {
             var stamped = song
             stamped.stationReason = reason
             result.append(stamped)
+
+            await learning.snapshot(
+                key: stamped.catalogID ?? stamped.videoId,
+                style: options.style.rawValue,
+                features: features
+            )
             if !artistKey.isEmpty { artistCounts[artistKey, default: 0] += 1 }
             if !albumKey.isEmpty { albumCounts[albumKey, default: 0] += 1 }
         }

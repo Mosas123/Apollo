@@ -85,7 +85,8 @@ depender de YouTube Music para metadatos y con YouTube únicamente como audio.
 - [ ] Filtro de disponibilidad/calidad y explicaciones en UI.
 - [x] Diagnóstico local de estaciones (diversidad, repetición, latencia, fuentes).
 - [ ] Golden tests automáticos y cobertura de audio.
-- [ ] IA posterior: embeddings, learning-to-rank, bandits.
+- [x] IA v1: embeddings de metadata on-device + learning-to-rank local por estilo.
+- [ ] Bandits y modelo de secuencia.
 
 Detalle completo en [RADIO_ENGINE.md](RADIO_ENGINE.md).
 
