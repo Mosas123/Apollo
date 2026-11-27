@@ -699,7 +699,11 @@ final class SettingsStore: @unchecked Sendable {
         if d.object(forKey: Keys.losslessEnabled) != nil {
             losslessEnabled = d.bool(forKey: Keys.losslessEnabled)
         } else {
-            losslessEnabled = musicQualityMode != .high && musicQualityMode != .off
+            // Read the raw value: referencing self.musicQualityMode here is not
+            // allowed until every stored property has been initialized.
+            let storedMode = d.string(forKey: Keys.musicQualityMode)
+            losslessEnabled = storedMode != MusicQualityMode.high.rawValue
+                && storedMode != MusicQualityMode.off.rawValue
         }
         upgradeDuringPlayback = Self.load(Keys.upgradeDuringPlayback, default: false)
         aiProvider = Self.loadString(Keys.aiProvider, default: AIProvider.off.rawValue)
