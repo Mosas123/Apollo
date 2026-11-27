@@ -172,12 +172,30 @@ struct SpotifyPathfinderClient: @unchecked Sendable {
                 throw CatalogError.invalidResponse
             }
 
-            if http.statusCode == 401, attempt == 0 {
+            if (http.statusCode == 401 || http.statusCode == 429) && attempt == 0 {
+                if http.statusCode == 429 {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                }
                 _ = try await auth.refresh()
                 continue
             }
             guard http.statusCode == 200 else {
                 throw CatalogError.http(http.statusCode)
+            }
+
+            // Spotify can answer 200 with a GraphQL error (expired client
+            // token, rotated persisted query, throttling). Refresh once before
+            // surfacing a failure instead of treating it as "not found".
+            if let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let errors = root["errors"] as? [[String: Any]],
+               !errors.isEmpty {
+                let message = errors.compactMap { $0["message"] as? String }
+                    .joined(separator: "; ")
+                if attempt == 0 {
+                    _ = try await auth.refresh()
+                    continue
+                }
+                throw CatalogError.graphQL(message.isEmpty ? "Spotify GraphQL error" : message)
             }
             return data
         }

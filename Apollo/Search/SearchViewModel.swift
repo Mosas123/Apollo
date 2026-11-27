@@ -308,7 +308,7 @@ final class SearchViewModel {
         updateHistory(query: query)
         prepareQuery()
         fetchTask = Task { [weak self] in
-            await self?.fetchResults(for: query, includeProviders: true)
+            await self?.fetchResults(for: query)
         }
     }
 
@@ -329,9 +329,13 @@ final class SearchViewModel {
         phase = results.isEmpty && heroArtist == nil ? .loading : .results
     }
 
-    private func fetchResults(for query: String, includeProviders: Bool) async {
+    private func fetchResults(for query: String) async {
         isFetching = true
         defer { isFetching = false }
+        audiusTracks = []
+        qobuzTracks = []
+        jiosaavnTracks = []
+        addonTracks = []
         async let localResults = try? SearchService.shared.localSearch(query: query)
         var primaryFailure: Error?
         do {
@@ -359,21 +363,6 @@ final class SearchViewModel {
             localPlaylists = local.playlists
         }
         error = primaryFailure
-        updateResultPhase()
-
-        // Extra catalogues are fetched on submission; they never delay the
-        // primary results or generate requests for every partial word.
-        guard includeProviders else { return }
-        async let audius = try? AudiusClient().searchTracks(query: query, limit: 25)
-        async let qobuz = QobuzCatalogService.shared.searchIfConfigured(query: query, limit: 25)
-        async let jiosaavn = try? JioSaavnClient().search(query: query, limit: 25)
-        async let addons = fetchAddonTracks(query: query)
-        let (remoteAudius, remoteQobuz, remoteJioSaavn, remoteAddons) = await (audius, qobuz, jiosaavn, addons)
-        guard !Task.isCancelled, query == submittedQuery else { return }
-        audiusTracks = remoteAudius ?? []
-        qobuzTracks = remoteQobuz
-        jiosaavnTracks = remoteJioSaavn ?? []
-        addonTracks = remoteAddons
         updateResultPhase()
     }
 
@@ -509,7 +498,7 @@ final class SearchViewModel {
             do { try await Task.sleep(for: .milliseconds(350)) }
             catch { return }
             guard !Task.isCancelled else { return }
-            await self?.fetchResults(for: query, includeProviders: false)
+            await self?.fetchResults(for: query)
         }
     }
 

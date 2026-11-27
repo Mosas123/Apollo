@@ -96,4 +96,24 @@ enum CatalogError: Error, Sendable {
     case notFound
     case http(Int)
     case authentication
+    case graphQL(String)
+}
+
+extension CatalogError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .unsupported:
+            return "This catalogue feature isn't available."
+        case .invalidResponse:
+            return "The catalogue returned an unexpected response."
+        case .notFound:
+            return "Nothing was found for this search."
+        case .http(let code):
+            return "The catalogue is unavailable (HTTP \(code))."
+        case .authentication:
+            return "The catalogue session expired. Try again."
+        case .graphQL:
+            return "Spotify is not responding right now. Try again."
+        }
+    }
 }
