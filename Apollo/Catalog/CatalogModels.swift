@@ -6,6 +6,8 @@ enum CatalogSource: String, Codable, Sendable {
     case spotify
     case youtube
     case addon
+    case apple
+    case musicBrainz
 }
 
 struct CatalogArtist: Identifiable, Hashable, Sendable {
