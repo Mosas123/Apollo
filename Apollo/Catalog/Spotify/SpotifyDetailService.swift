@@ -438,7 +438,8 @@ final class SpotifyDetailService {
             isVideo: false,
             musicVideoType: nil,
             recordingPreference: .albumAudio,
-            contentKind: .music
+            contentKind: .music,
+            catalogID: SpotifyCatalogID.track(trackID)
         )
     }
 

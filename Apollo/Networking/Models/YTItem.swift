@@ -304,6 +304,10 @@ struct SongItem: Codable, Hashable {
     /// persisted queue snapshots keep decoding; nil means `.music`.
     var contentKind: ContentKind?
 
+    /// Original catalogue identity when the item came from Spotify. The
+    /// playable `videoId` may later be replaced by an audio carrier.
+    var catalogID: String?
+
     /// The watch endpoint's music type is authoritative even when the
     /// localized subtitle omits the word "Video".
     var isMusicVideo: Bool {

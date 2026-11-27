@@ -79,8 +79,8 @@ depender de YouTube Music para metadatos y con YouTube únicamente como audio.
 ### Fase 4.5 — Radio propia (ver RADIO_ENGINE.md)
 - [ ] Event store granular de play/skip/complete/save.
 - [ ] Afinidades locales con decaimiento.
-- [ ] `StationService` v1: seed track/artist, top tracks + related.
-- [ ] Ranker ponderado + MMR + ventanas anti-repetición.
+- [x] `StationService` v1: seed track/artist, top tracks + álbum + related.
+- [x] Ranker ponderado (gusto local, popularidad, novedad) + límites por artista/álbum.
 - [ ] Last.fm similar y tags/géneros.
 - [ ] Filtro de disponibilidad/calidad y explicaciones en UI.
 - [ ] Evaluación offline (diversidad, skip, cobertura) y golden tests.

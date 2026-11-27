@@ -46,75 +46,42 @@ enum PlaybackQueue {
     /// then replaces the queue with the fetched radio. Used by the song and
     /// player "Start Radio" menu actions.
     static func startRadio(for song: SongItem, options: RadioOptions = .default) {
-        guard !SpotifyCatalogID.isSpotify(song.videoId) else { return }
-        guard MusicPlaybackIdentity.isYouTube(song.videoId) else { return }
-        let isCurrentSong = NowPlaying.shared.videoId == song.videoId
-        if !isCurrentSong {
-            NowPlaying.shared.setQueue([song], startIndex: 0)
-            let intent = NowPlaying.shared.playbackGeneration
-            PlayerController.shared.markExplicitSelectionForInterruptionRecovery(
-                videoId: song.videoId, generation: intent
-            )
-            Task {
-                try? await PlaybackManager.shared.resolveAndPlay(
-                    videoId: song.videoId,
-                    intent: intent
-                )
-            }
+        let wasCurrent = isRadioSeedCurrent(song)
+        if !wasCurrent {
+            play([song], log: Log.player, context: "Start radio seed")
         }
+
         Task {
-            guard let radio = try? await PersonalizationService.shared.fetchRadio(videoId: song.videoId, options: options),
-                  radio.songs.count > 1 else { return }
-            guard NowPlaying.shared.videoId == song.videoId else { return }
-            NowPlaying.shared.queueSongs = preservingArtists(radio.songs, over: NowPlaying.shared.queueSongs)
-            NowPlaying.shared.queueIndex = radio.currentIndex
+            let station = await StationService.shared.radio(for: song, options: options)
+            guard !station.isEmpty, isRadioSeedCurrent(song) else { return }
+
+            let seed = NowPlaying.shared.queueSongs.first ?? song
+            let seedKey = seed.catalogID ?? seed.videoId
+            var queue = [seed]
+            queue.append(contentsOf: station.filter {
+                ($0.catalogID ?? $0.videoId) != seedKey && $0.videoId != seed.videoId
+            })
+
+            NowPlaying.shared.queueSongs = preservingArtists(queue, over: NowPlaying.shared.queueSongs)
+            NowPlaying.shared.queueIndex = 0
             NowPlaying.shared.queueDidChange()
         }
     }
 
-    /// Plays a single song, then continues with its radio queue when available.
-    /// Used by Home/Search/Explore tap-to-play.
-    static func playSingleWithRadio(_ song: SongItem, log: AppLogger) {
-        // Spotify catalogue tracks have no YouTube id until an audio carrier
-        // is resolved. YouTube is a stream source here, not the catalogue.
-        if SpotifyCatalogID.isSpotify(song.videoId) {
-            Task { @MainActor in
-                guard let resolved = await SpotifyAudioResolver.shared.resolve(song) else {
-                    log.error("No audio match for Spotify track \(song.videoId)")
-                    return
-                }
-                // No YouTube radio for a Spotify catalogue track; the queue
-                // stays local to the selection.
-                play([resolved], log: log, context: "Spotify single")
-            }
-            return
-        }
+    /// The seed may have been replaced by its audio carrier in the queue; the
+    /// original catalogue id lets us still recognise it.
+    private static func isRadioSeedCurrent(_ song: SongItem) -> Bool {
+        if NowPlaying.shared.videoId == song.videoId { return true }
+        let seedKey = song.catalogID ?? song.videoId
+        guard let first = NowPlaying.shared.queueSongs.first else { return false }
+        if first.videoId == song.videoId { return true }
+        return (first.catalogID ?? first.videoId) == seedKey
+    }
 
-        NowPlaying.shared.setQueue([song], startIndex: 0)
-        let intent = NowPlaying.shared.playbackGeneration
-        PlayerController.shared.markExplicitSelectionForInterruptionRecovery(
-            videoId: song.videoId, generation: intent
-        )
-        Task { @MainActor in
-            do {
-                try await PlaybackManager.shared.resolveAndPlay(
-                    videoId: song.videoId,
-                    intent: intent
-                )
-            } catch is CancellationError {
-                return
-            } catch {
-                log.error("Playback failed: \(error)")
-                return
-            }
-            guard MusicPlaybackIdentity.isYouTube(song.videoId),
-                  let radio = try? await PersonalizationService.shared.fetchRadio(videoId: song.videoId),
-                  radio.songs.count > 1,
-                  NowPlaying.shared.videoId == song.videoId else { return }
-            NowPlaying.shared.queueSongs = preservingArtists(radio.songs, over: NowPlaying.shared.queueSongs)
-            NowPlaying.shared.queueIndex = radio.currentIndex
-            NowPlaying.shared.queueDidChange()
-        }
+    /// Plays a single song and continues with Apollo's own station. YouTube
+    /// Music's recommendation endpoint is no longer used here.
+    static func playSingleWithRadio(_ song: SongItem, log: AppLogger) {
+        startRadio(for: song, options: .default)
     }
 
     private static func preservingArtists(_ songs: [SongItem], over current: [SongItem]) -> [SongItem] {

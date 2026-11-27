@@ -137,10 +137,10 @@ struct SimilarSongsView: View {
 
     private func load() async {
         defer { isLoading = false }
-        guard let radio = try? await PersonalizationService.shared.fetchRadio(
-            videoId: song.videoId,
+        let station = await StationService.shared.radio(
+            for: song,
             options: RadioOptions(style: .similar, limit: 25, allowExplicit: true)
-        ) else { return }
-        songs = radio.songs.filter { $0.videoId != song.videoId }
+        )
+        songs = station.filter { $0.videoId != song.videoId }
     }
 }

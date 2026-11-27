@@ -140,11 +140,11 @@ con el pipeline actual.
 - [ ] “No repetir” con ventanas configurables.
 
 ### R1 — StationService v1 (sin IA)
-- [ ] Seed track/artist.
-- [ ] Candidatos: top tracks, álbum, related artists.
-- [ ] Ranker ponderado + MMR.
-- [ ] Filtros de calidad/explícito/disponibilidad.
-- [ ] Reemplazar Start Radio de YouTube para seeds Spotify.
+- [x] Seed track/artist.
+- [x] Candidatos: top tracks, álbum, related artists.
+- [x] Ranker ponderado + diversidad por artista/álbum.
+- [x] Filtro de explícito; calidad/availability delegadas al playback.
+- [x] Start Radio, Similar y autoplay sin radio de YouTube.
 
 ### R2 — Más recall
 - [ ] Last.fm similar (track/artist).

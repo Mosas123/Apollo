@@ -118,6 +118,7 @@ final class SpotifyAudioResolver {
         resolved.isExplicit = song.isExplicit
         resolved.year = song.year
         resolved.contentKind = .music
+        resolved.catalogID = song.catalogID
         return resolved
     }
 

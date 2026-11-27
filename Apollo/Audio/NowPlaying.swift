@@ -861,9 +861,12 @@ final class NowPlaying {
         let generation = playbackGeneration
         Task {
             do {
-                let radio = try await PersonalizationService.shared.fetchRadio(videoId: videoId)
+                guard let seed = queueSongs.first(where: { $0.videoId == videoId }) else {
+                    isPlaying = false
+                    return
+                }
+                let songs = await StationService.shared.radio(for: seed, options: .default)
                 guard generation == playbackGeneration else { return }
-                let songs = radio.songs
                 guard !songs.isEmpty else {
                     isPlaying = false
                     return
