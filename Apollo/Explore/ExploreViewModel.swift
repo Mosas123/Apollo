@@ -43,22 +43,24 @@ final class ExploreViewModel {
     private func fetch() async {
         phase = .loading
         error = nil
-        let region = SettingsStore.shared.contentCountry
-        Log.explore.debug("Explore fetch start browseId=\(HomePageParser.exploreBrowseId)")
         do {
-            let json = try await InnerTubeClient.apolloShared.browse(
-                browseId: HomePageParser.exploreBrowseId,
-                formData: ["selectedValues": [region]]
-            ).value
-            Log.explore.debug("Explore fetch ok topKeys=\((json.keys.sorted()))")
-            sections = HomePageParser.parseExploreSections(from: json)
-            await applyRegionalTrending(region: region)
-            let moodCount = sections.reduce(0) { $0 + $1.moods.count }
-            Log.explore.debug(
-                "Explore loaded: " +
-                sections.map { "\($0.title)(\($0.kind)):\($0.items.count)" }.joined(separator: ", ") +
-                " moods=\(moodCount)"
-            )
+            let spotifySections = try await SpotifyHomeService.shared.sections()
+            var mapped: [ExploreSection] = []
+            for section in spotifySections {
+                let kind: ExploreSection.Kind = section.items.allSatisfy { item in
+                    if case .song = item { return true }
+                    return false
+                } ? .rows : .cards
+                mapped.append(
+                    ExploreSection(
+                        title: section.title,
+                        kind: kind,
+                        items: section.items,
+                        moods: []
+                    )
+                )
+            }
+            sections = mapped
             phase = sections.isEmpty ? .empty : .loaded
             hasLoaded = phase == .loaded
         } catch {
@@ -68,42 +70,25 @@ final class ExploreViewModel {
         }
     }
 
-    /// Swaps the Trending shelf for the region's chart tracks. The explore
-    /// carousel follows the IP/account region, which the region setting
-    /// cannot move — but per-country charts can, via the country selector.
-    /// Falls back to explore's own items on any failure.
-    private func applyRegionalTrending(region: String) async {
-        guard let index = sections.firstIndex(where: { $0.title.lowercased().contains("trending") }) else {
-            Log.explore.debug("Explore: no trending shelf for regional swap")
-            return
-        }
-        guard let playlistId = try? await RegionalCharts.trendingPlaylistId(country: region, using: InnerTubeClient.apolloShared),
-              let rows = (try? await SyncBridge.playlistDetail.fetchPlaylistRows(playlistId: playlistId))?.rows else { return }
-        let songs = rows.compactMap { item -> SongItem? in
-            guard let renderer = item["musicResponsiveListItemRenderer"] as? [String: Any] else { return nil }
-            return SongItem.from(renderer)
-        }
-        guard !songs.isEmpty else { return }
-        sections[index].items = songs.map(YTItem.song)
-        sections[index].kind = .rows
-    }
-
     // MARK: - Moods
 
-    /// Full category page (songs, playlists, videos, albums shelves).
+    /// Full category page backed by Spotify search.
     static func loadMoodDetail(_ mood: MoodItem) async -> [ExploreSection] {
-        Log.explore.debug("Explore mood '\(mood.title)' fetch params=\(mood.params ?? "none")")
         do {
-            let json = try await InnerTubeClient.apolloShared.browse(
-                browseId: HomePageParser.moodsCategoryBrowseId,
-                params: mood.params
-            ).value
-            let sections = HomePageParser.parseExploreSections(from: json)
-            Log.explore.debug(
-                "Explore mood '\(mood.title)': " +
-                sections.map { "\($0.title)(\($0.kind)):\($0.items.count)" }.joined(separator: ", ")
-            )
-            return sections
+            let results = try await SpotifyCatalogProvider().search(mood.title, limit: 20)
+            let items = results.tracks.map { YTItem.song(SpotifyCatalogMapper.song(from: $0)) }
+                + results.albums.map { YTItem.album(SpotifyCatalogMapper.album(from: $0)) }
+                + results.artists.map { YTItem.artist(SpotifyCatalogMapper.artist(from: $0)) }
+                + results.playlists.map { YTItem.playlist(SpotifyCatalogMapper.playlist(from: $0)) }
+            guard !items.isEmpty else { return [] }
+            return [
+                ExploreSection(
+                    title: mood.title,
+                    kind: .cards,
+                    items: items,
+                    moods: []
+                )
+            ]
         } catch {
             Log.explore.error("Explore mood '\(mood.title)' failed: \(error)")
             return []

@@ -46,6 +46,7 @@ enum PlaybackQueue {
     /// then replaces the queue with the fetched radio. Used by the song and
     /// player "Start Radio" menu actions.
     static func startRadio(for song: SongItem, options: RadioOptions = .default) {
+        guard !SpotifyCatalogID.isSpotify(song.videoId) else { return }
         guard MusicPlaybackIdentity.isYouTube(song.videoId) else { return }
         let isCurrentSong = NowPlaying.shared.videoId == song.videoId
         if !isCurrentSong {
@@ -82,7 +83,9 @@ enum PlaybackQueue {
                     log.error("No audio match for Spotify track \(song.videoId)")
                     return
                 }
-                playSingleWithRadio(resolved, log: log)
+                // No YouTube radio for a Spotify catalogue track; the queue
+                // stays local to the selection.
+                play([resolved], log: log, context: "Spotify single")
             }
             return
         }

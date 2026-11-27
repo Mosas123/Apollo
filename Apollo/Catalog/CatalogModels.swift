@@ -43,6 +43,27 @@ struct CatalogAlbum: Identifiable, Hashable, Sendable {
     let externalURL: URL?
 }
 
+struct CatalogPodcast: Identifiable, Hashable, Sendable {
+    let id: String
+    let source: CatalogSource
+    let title: String
+    let author: String?
+    let artworkURL: URL?
+    let externalURL: URL?
+}
+
+struct CatalogEpisode: Identifiable, Hashable, Sendable {
+    let id: String
+    let source: CatalogSource
+    let title: String
+    let showTitle: String?
+    let durationMS: Int
+    let releaseDate: String?
+    let artworkURL: URL?
+    let description: String?
+    let externalURL: URL?
+}
+
 struct CatalogPlaylist: Identifiable, Hashable, Sendable {
     let id: String
     let source: CatalogSource
@@ -57,9 +78,13 @@ struct CatalogSearchResults: Sendable {
     var albums: [CatalogAlbum] = []
     var artists: [CatalogArtist] = []
     var playlists: [CatalogPlaylist] = []
+    var podcasts: [CatalogPodcast] = []
+    var episodes: [CatalogEpisode] = []
+    var audiobooks: [CatalogAlbum] = []
 
     var isEmpty: Bool {
         tracks.isEmpty && albums.isEmpty && artists.isEmpty && playlists.isEmpty
+            && podcasts.isEmpty && episodes.isEmpty && audiobooks.isEmpty
     }
 }
 

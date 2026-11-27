@@ -58,6 +58,16 @@ final class SpotifyHomeService {
                     item = playlistItem(from: content, fallbackID: fallbackID)
                 case "artist":
                     item = artistItem(from: content, fallbackID: fallbackID)
+                case "show", "podcast":
+                    if content["isAudiobook"] as? Bool == true {
+                        item = audiobookItem(from: content, fallbackID: fallbackID)
+                    } else {
+                        item = podcastItem(from: content, fallbackID: fallbackID)
+                    }
+                case "audiobook":
+                    item = audiobookItem(from: content, fallbackID: fallbackID)
+                case "episode":
+                    item = episodeItem(from: content, fallbackID: fallbackID)
                 default:
                     item = nil
                 }
@@ -146,6 +156,66 @@ final class SpotifyHomeService {
             ?? coverURL(from: node["visualIdentity"])
         let artist = CatalogArtist(id: artistID, name: name, artworkURL: avatar)
         return .artist(SpotifyCatalogMapper.artist(from: artist))
+    }
+
+    private static func podcastItem(from node: [String: Any], fallbackID: String) -> YTItem? {
+        let podcastID = identifier(node) ?? fallbackID
+        guard !podcastID.isEmpty else { return nil }
+        let title = (node["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown"
+        let author = (node["publisher"] as? [String: Any])?["name"] as? String
+        let podcast = CatalogPodcast(
+            id: podcastID,
+            source: .spotify,
+            title: title,
+            author: author,
+            artworkURL: coverURL(from: node["coverArt"])
+                ?? coverURL(from: (node["visualIdentity"] as? [String: Any])?["squareCoverImage"]),
+            externalURL: URL(string: "https://open.spotify.com/show/\(podcastID)")
+        )
+        return .podcast(SpotifyCatalogMapper.podcast(from: podcast))
+    }
+
+    private static func episodeItem(from node: [String: Any], fallbackID: String) -> YTItem? {
+        let episodeID = identifier(node) ?? fallbackID
+        guard !episodeID.isEmpty else { return nil }
+        let title = (node["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown"
+        let podcastNode = node["podcastV2"] as? [String: Any]
+        let podcastData = podcastNode?["data"] as? [String: Any]
+        let showTitle = (podcastData?["name"] as? String) ?? (podcastNode?["name"] as? String)
+        let episode = CatalogEpisode(
+            id: episodeID,
+            source: .spotify,
+            title: title,
+            showTitle: showTitle,
+            durationMS: intValue((node["duration"] as? [String: Any])?["totalMilliseconds"]),
+            releaseDate: (node["releaseDate"] as? [String: Any])?["isoString"] as? String,
+            artworkURL: coverURL(from: node["coverArt"]),
+            description: node["description"] as? String,
+            externalURL: URL(string: "https://open.spotify.com/episode/\(episodeID)")
+        )
+        return .episode(SpotifyCatalogMapper.episode(from: episode))
+    }
+
+    private static func audiobookItem(from node: [String: Any], fallbackID: String) -> YTItem? {
+        let bookID = identifier(node) ?? fallbackID
+        guard !bookID.isEmpty else { return nil }
+        let title = (node["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown"
+        let authorsNode = node["authorsV2"] as? [String: Any]
+        let authors = (authorsNode?["items"] as? [[String: Any]] ?? []).compactMap { entry -> CatalogArtist? in
+            guard let name = entry["name"] as? String, !name.isEmpty else { return nil }
+            return CatalogArtist(id: identifier(entry) ?? name, name: name, artworkURL: nil)
+        }
+        let book = CatalogAlbum(
+            id: bookID,
+            source: .spotify,
+            title: title,
+            artists: authors,
+            releaseDate: (node["publishDate"] as? [String: Any])?["isoString"] as? String,
+            artworkURL: coverURL(from: node["coverArt"])
+                ?? coverURL(from: (node["visualIdentity"] as? [String: Any])?["squareCoverImage"]),
+            externalURL: URL(string: "https://open.spotify.com/show/\(bookID)")
+        )
+        return .album(SpotifyCatalogMapper.audiobook(from: book))
     }
 
     // MARK: - JSON helpers

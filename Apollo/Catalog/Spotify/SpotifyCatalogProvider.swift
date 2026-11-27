@@ -31,6 +31,9 @@ struct SpotifyCatalogProvider: CatalogSearching {
         results.albums = albumItems(search["albumsV2"] ?? search["albums"], limit: limit)
         results.artists = artistItems(search["artistsV2"] ?? search["artists"], limit: limit)
         results.playlists = playlistItems(search["playlistsV2"] ?? search["playlists"], limit: limit)
+        results.podcasts = podcastItems(search["podcasts"], limit: limit)
+        results.episodes = episodeItems(search["episodes"], limit: limit)
+        results.audiobooks = audiobookItems(search["audiobooks"], limit: limit)
         return results
     }
 
@@ -118,6 +121,75 @@ struct SpotifyCatalogProvider: CatalogSearching {
                 artworkURL: coverURL(from: data["images"]),
                 externalURL: URL(string: "https://open.spotify.com/playlist/\(id)")
             )
+        }
+    }
+
+    private static func podcastItems(_ node: Any?, limit: Int) -> [CatalogPodcast] {
+        items(from: node).prefix(limit).compactMap { wrapper in
+            guard let data = dataNode(from: wrapper), let id = identifier(from: data) else { return nil }
+            let title = (data["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown"
+            let publisher = (data["publisher"] as? [String: Any])?["name"] as? String
+            let author = publisher ?? authors(from: data["authorsV2"]).first?.name
+            return CatalogPodcast(
+                id: id,
+                source: .spotify,
+                title: title,
+                author: author,
+                artworkURL: coverURL(from: data["coverArt"])
+                    ?? coverURL(from: (data["visualIdentity"] as? [String: Any])?["squareCoverImage"]),
+                externalURL: URL(string: "https://open.spotify.com/show/\(id)")
+            )
+        }
+    }
+
+    private static func episodeItems(_ node: Any?, limit: Int) -> [CatalogEpisode] {
+        items(from: node).prefix(limit).compactMap { wrapper in
+            guard let data = dataNode(from: wrapper), let id = identifier(from: data) else { return nil }
+            let title = (data["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown"
+            let podcastNode = data["podcastV2"] as? [String: Any]
+            let podcastData = podcastNode?["data"] as? [String: Any]
+            let showTitle = (podcastData?["name"] as? String) ?? (podcastNode?["name"] as? String)
+            let duration = milliseconds(from: (data["duration"] as? [String: Any])?["totalMilliseconds"])
+            return CatalogEpisode(
+                id: id,
+                source: .spotify,
+                title: title,
+                showTitle: showTitle,
+                durationMS: duration,
+                releaseDate: (data["releaseDate"] as? [String: Any])?["isoString"] as? String,
+                artworkURL: coverURL(from: data["coverArt"]),
+                description: data["description"] as? String,
+                externalURL: URL(string: "https://open.spotify.com/episode/\(id)")
+            )
+        }
+    }
+
+    private static func audiobookItems(_ node: Any?, limit: Int) -> [CatalogAlbum] {
+        items(from: node).prefix(limit).compactMap { wrapper in
+            guard let data = dataNode(from: wrapper), let id = identifier(from: data) else { return nil }
+            let title = (data["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown"
+            return CatalogAlbum(
+                id: id,
+                source: .spotify,
+                title: title,
+                artists: authors(from: data["authorsV2"]),
+                releaseDate: (data["publishDate"] as? [String: Any])?["isoString"] as? String,
+                artworkURL: coverURL(from: data["coverArt"])
+                    ?? coverURL(from: (data["visualIdentity"] as? [String: Any])?["squareCoverImage"]),
+                externalURL: URL(string: "https://open.spotify.com/show/\(id)")
+            )
+        }
+    }
+
+    private static func authors(from node: Any?) -> [CatalogArtist] {
+        guard let dict = node as? [String: Any],
+              let items = dict["items"] as? [[String: Any]] else { return [] }
+        return items.compactMap { item in
+            let name = (item["name"] as? String)
+                ?? ((item["profile"] as? [String: Any])?["name"] as? String)
+            guard let name, !name.isEmpty else { return nil }
+            let id = identifier(from: item) ?? name
+            return CatalogArtist(id: id, name: name, artworkURL: nil)
         }
     }
 

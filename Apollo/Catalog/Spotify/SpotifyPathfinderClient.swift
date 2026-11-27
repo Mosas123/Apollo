@@ -12,6 +12,9 @@ struct SpotifyPathfinderClient: @unchecked Sendable {
     private static let artistDiscographyHash = "5e07d323febb57b4a56a42abbf781490e58764aa45feb6e3dc0591564fc56599"
     private static let trackHash = "612585ae06ba435ad26369870deaae23b5c8800a256cd8a57e08eddc25a37294"
     private static let homeHash = "3a67ee0ea6abad2ebad2e588a9aa130fc98d6b553f5b05ac6467503d02133bdc"
+    private static let showMetadataHash = "b475447846f37cc426add800b995a7859c169c53c72b62de6338c0c40a5dacea"
+    private static let podcastEpisodesHash = "3539d746cf882f3909660de40b4ef472b3f5893a0761d617c282541de5d412c5"
+    private static let bookChaptersHash = "8f342d1c624755901657fa65cbb80dd3bacbcca2f6d802f570ae3269d59a403e"
     private static let userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
 
@@ -42,6 +45,39 @@ struct SpotifyPathfinderClient: @unchecked Sendable {
             operationName: "searchDesktop",
             variables: variables,
             hash: Self.searchHash
+        )
+    }
+
+    func show(id: String) async throws -> Data {
+        try await perform(
+            operationName: "queryShowMetadataV2",
+            variables: [
+                "uri": "spotify:show:\(id)",
+                "includeContentCapabilityTrait": false,
+                "includeEpisodeContentRatingsV2": false
+            ],
+            hash: Self.showMetadataHash
+        )
+    }
+
+    func podcastEpisodes(id: String, offset: Int = 0, limit: Int = 100) async throws -> Data {
+        try await perform(
+            operationName: "queryPodcastEpisodes",
+            variables: [
+                "uri": "spotify:show:\(id)",
+                "offset": offset,
+                "limit": limit,
+                "includeEpisodeContentRatingsV2": false
+            ],
+            hash: Self.podcastEpisodesHash
+        )
+    }
+
+    func bookChapters(id: String, offset: Int = 0, limit: Int = 200) async throws -> Data {
+        try await perform(
+            operationName: "queryBookChapters",
+            variables: ["uri": "spotify:show:\(id)", "offset": offset, "limit": limit],
+            hash: Self.bookChaptersHash
         )
     }
 

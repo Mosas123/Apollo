@@ -224,6 +224,155 @@ final class SpotifyDetailService {
         )
     }
 
+    // MARK: - Podcast
+
+    func podcastDetail(id: String) async throws -> PodcastDetailInfo {
+        let showData = try await client.show(id: id)
+        guard let showRoot = try object(from: showData),
+              let showPayload = showRoot["data"] as? [String: Any],
+              let show = showPayload["podcastUnionV2"] as? [String: Any] else {
+            throw CatalogError.notFound
+        }
+
+        let title = (show["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown Podcast"
+        let author = ((show["publisher"] as? [String: Any])?["name"] as? String)
+        let description = (show["htmlDescriptionPlain"] as? String)
+            ?? (show["description"] as? String).map(stripHTML)
+        let cover = coverURLString(show["coverArt"])
+            ?? coverURLString((show["visualIdentity"] as? [String: Any])?["squareCoverImage"])
+
+        var episodes: [EpisodeItem] = []
+        var offset = 0
+        let pageSize = 100
+        while offset < 2000 {
+            let data = try await client.podcastEpisodes(id: id, offset: offset, limit: pageSize)
+            guard let root = try object(from: data),
+                  let payload = root["data"] as? [String: Any],
+                  let podcast = payload["podcastUnionV2"] as? [String: Any] else { break }
+            let page = items(of: podcast["episodesV2"])
+            if page.isEmpty { break }
+            for wrapper in page {
+                guard let entity = wrapper["entity"] as? [String: Any],
+                      let episode = entity["data"] as? [String: Any],
+                      let episodeID = identifier(episode) else { continue }
+                let episodeTitle = (episode["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Episode"
+                let duration = intValue((episode["duration"] as? [String: Any])?["totalMilliseconds"]) / 1000
+                episodes.append(
+                    EpisodeItem(
+                        videoId: SpotifyCatalogID.episode(episodeID),
+                        title: episodeTitle,
+                        artists: [YTArtist(name: author ?? title)],
+                        duration: duration,
+                        thumbnailUrl: cover,
+                        publishDate: (episode["releaseDate"] as? [String: Any])?["isoString"] as? String,
+                        descriptionText: episode["description"] as? String,
+                        viewsText: nil
+                    )
+                )
+            }
+            if page.count < pageSize { break }
+            offset += pageSize
+        }
+
+        return PodcastDetailInfo(
+            title: title,
+            author: author,
+            descriptionText: description,
+            thumbnailUrl: cover,
+            browseId: SpotifyCatalogID.podcast(id),
+            isSubscribed: false,
+            episodes: episodes
+        )
+    }
+
+    // MARK: - Audiobooks
+
+    func audiobookDetail(id: String) async throws -> AlbumDetailInfo {
+        let showData = try await client.show(id: id)
+        guard let showRoot = try object(from: showData),
+              let showPayload = showRoot["data"] as? [String: Any],
+              let show = showPayload["podcastUnionV2"] as? [String: Any] else {
+            throw CatalogError.notFound
+        }
+
+        let title = (show["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown Audiobook"
+        let authors = authors(from: show["authorsV2"])
+        let artistList = authors.isEmpty
+            ? [YTArtist(name: ((show["publisher"] as? [String: Any])?["name"] as? String) ?? "Unknown Author")]
+            : authors.map { YTArtist(name: $0.name, id: SpotifyCatalogID.artist($0.id)) }
+        let cover = coverURLString(show["coverArt"])
+            ?? coverURLString((show["visualIdentity"] as? [String: Any])?["squareCoverImage"])
+        let year = year(from: show["publishDate"])
+
+        var songs: [SongItem] = []
+        var offset = 0
+        let pageSize = 100
+        while offset < 2000 {
+            let data = try await client.bookChapters(id: id, offset: offset, limit: pageSize)
+            guard let root = try object(from: data),
+                  let payload = root["data"] as? [String: Any],
+                  let book = payload["podcastUnionV2"] as? [String: Any] else { break }
+            let page = items(of: book["chaptersV2"])
+            if page.isEmpty { break }
+            for wrapper in page {
+                guard let entity = wrapper["entity"] as? [String: Any],
+                      let chapter = entity["data"] as? [String: Any],
+                      let chapterID = identifier(chapter) else { continue }
+                let chapterTitle = (chapter["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Chapter"
+                let duration = intValue((chapter["duration"] as? [String: Any])?["totalMilliseconds"]) / 1000
+                songs.append(
+                    SongItem(
+                        videoId: SpotifyCatalogID.chapter(chapterID),
+                        title: chapterTitle,
+                        artists: artistList,
+                        album: title,
+                        albumId: SpotifyCatalogID.audiobook(id),
+                        duration: duration,
+                        thumbnailUrl: coverURLString(chapter["coverArt"]) ?? cover,
+                        isExplicit: false,
+                        playlistId: nil,
+                        viewCount: nil,
+                        year: year,
+                        isVideo: false,
+                        musicVideoType: nil,
+                        recordingPreference: .albumAudio,
+                        contentKind: .music
+                    )
+                )
+            }
+            if page.count < pageSize { break }
+            offset += pageSize
+        }
+
+        return AlbumDetailInfo(
+            title: title,
+            artists: artistList,
+            year: year,
+            songCount: songs.count,
+            duration: songs.reduce(0) { $0 + $1.duration },
+            thumbnailUrl: cover,
+            playlistId: nil,
+            browseId: SpotifyCatalogID.audiobook(id),
+            songs: songs,
+            descriptionText: (show["htmlDescriptionPlain"] as? String)
+                ?? (show["description"] as? String).map(stripHTML),
+            relatedAlbums: [],
+            videos: [],
+            featuredPlaylists: []
+        )
+    }
+
+    private static func authors(from node: Any?) -> [CatalogArtist] {
+        guard let dict = node as? [String: Any],
+              let entries = dict["items"] as? [[String: Any]] else { return [] }
+        return entries.compactMap { entry in
+            let name = (entry["name"] as? String)
+                ?? ((entry["profile"] as? [String: Any])?["name"] as? String)
+            guard let name, !name.isEmpty else { return nil }
+            return CatalogArtist(id: identifier(entry) ?? name, name: name, artworkURL: nil)
+        }
+    }
+
     // MARK: - Song / release mapping
 
     private static func song(

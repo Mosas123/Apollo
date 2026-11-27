@@ -49,6 +49,32 @@ final class PodcastDetailViewModel {
         isLoading = true
         error = nil
 
+        if SpotifyCatalogID.isPodcast(browseId) {
+            do {
+                let id = SpotifyCatalogID.rawID(browseId) ?? browseId
+                let parsed = try await SpotifyDetailService.shared.podcastDetail(id: id)
+                podcast = parsed
+                isLoading = false
+                await refreshSubscribedState()
+                let fresh = await EpisodePlaybackStore.shared.syncKnownEpisodes(
+                    parsed.episodes,
+                    podcastId: browseId,
+                    podcastName: parsed.title
+                )
+                if SettingsStore.shared.autoDownloadNewEpisodes, !fresh.isEmpty {
+                    for episode in fresh.prefix(10) {
+                        await DownloadManager.shared.download(
+                            song: PodcastEpisodeArtwork.song(episode, show: parsed.thumbnailUrl)
+                        )
+                    }
+                }
+            } catch {
+                self.error = error
+                isLoading = false
+            }
+            return
+        }
+
         do {
             let json = try await innerTube.browse(browseId: browseId).value
             let parsed = Self.parsePodcastDetail(from: json, browseId: browseId)
@@ -90,15 +116,24 @@ final class PodcastDetailViewModel {
         let currentlySubscribed = isSubscribed
         isSubscribed = !currentlySubscribed
         do {
-            if currentlySubscribed {
-                try await SyncBridge.mutations.unsubscribePodcast(browseId: browseId)
-            } else {
-                try await SyncBridge.mutations.subscribePodcast(
-                    browseId: browseId,
-                    name: podcast.title,
-                    thumbnailUrl: podcast.thumbnailUrl
-                )
-            }
+            let existing = try await DatabaseService.shared.fetchOne(
+                PodcastEntity.self,
+                key: browseId
+            )
+            var entity = existing ?? PodcastEntity(
+                id: browseId,
+                name: podcast.title,
+                thumbnailUrl: podcast.thumbnailUrl,
+                subscribedAt: nil
+            )
+            entity.name = podcast.title
+            entity.thumbnailUrl = podcast.thumbnailUrl
+            entity.subscribedAt = currentlySubscribed ? nil : Date()
+            try await DatabaseService.shared.save(entity)
+            NotificationCenter.default.post(
+                name: Notification.Name("apollo.libraryChanged"),
+                object: nil
+            )
         } catch {
             Log.podcastDetail.error("Toggle subscribe failed: \(error)")
         }

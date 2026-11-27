@@ -32,10 +32,12 @@ final class AlbumDetailViewModel {
         isLoading = true
         error = nil
 
-        if SpotifyCatalogID.isSpotify(browseId) {
+        if SpotifyCatalogID.isAudiobook(browseId) || SpotifyCatalogID.isSpotify(browseId) {
             do {
                 let id = SpotifyCatalogID.rawID(browseId) ?? browseId
-                album = try await SpotifyDetailService.shared.albumDetail(id: id)
+                album = SpotifyCatalogID.isAudiobook(browseId)
+                    ? try await SpotifyDetailService.shared.audiobookDetail(id: id)
+                    : try await SpotifyDetailService.shared.albumDetail(id: id)
                 isLoading = false
                 await refreshSavedState()
             } catch {
