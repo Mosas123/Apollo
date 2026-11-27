@@ -166,6 +166,16 @@ private func normalizeThumbnailURL(_ urlString: String, pixels: Int) -> String {
         url = crop.stringByReplacingMatches(in: url, range: NSRange(url.startIndex..., in: url), withTemplate: "")
     }
 
+    // Apple serves arbitrary square sizes from its image CDN. Match the
+    // requested rung so small rows never download a 1200px asset.
+    if url.contains("mzstatic.com") {
+        url = url.replacingOccurrences(
+            of: #"(?<=/)\d+x\d+(?=[^/]*\.[^/]+$)"#,
+            with: "\(pixels)x\(pixels)",
+            options: .regularExpression
+        )
+    }
+
     if url.contains("googleusercontent.com") || url.contains("ggpht.com") {
         if let match = thumbnailSizeRegex,
            let result = match.firstMatch(in: url, range: NSRange(url.startIndex..., in: url)),

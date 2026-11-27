@@ -12,6 +12,7 @@ struct PodcastEpisode: Hashable, Sendable {
 struct PodcastFeedContent: Sendable {
     let title: String
     let author: String?
+    let artworkURL: URL?
     let episodes: [PodcastEpisode]
 }
 
@@ -58,6 +59,7 @@ actor PodcastRSSFeedLoader {
         let content = PodcastFeedContent(
             title: parser.channelTitle ?? feedURL.host ?? "Podcast",
             author: parser.channelAuthor,
+            artworkURL: parser.channelArtworkURL,
             episodes: parser.episodes
         )
         cache[key] = Entry(content: content, at: Date())
@@ -68,6 +70,7 @@ actor PodcastRSSFeedLoader {
 private final class PodcastRSSParser: NSObject, XMLParserDelegate {
     private(set) var channelTitle: String?
     private(set) var channelAuthor: String?
+    private(set) var channelArtworkURL: URL?
     private(set) var episodes: [PodcastEpisode] = []
 
     private var currentText = ""
@@ -113,6 +116,11 @@ private final class PodcastRSSParser: NSObject, XMLParserDelegate {
             itemAudioURL = nil
             itemMimeType = nil
             return
+        }
+
+        if !inItem, name == "image", let raw = attributeDict["href"],
+           let url = URL(string: raw) {
+            channelArtworkURL = url
         }
 
         if inItem, name == "enclosure", let raw = attributeDict["url"],
@@ -178,6 +186,8 @@ private final class PodcastRSSParser: NSObject, XMLParserDelegate {
             case "title" where channelTitle == nil: channelTitle = text
             case "author" where channelAuthor == nil: channelAuthor = text
             case "name" where channelAuthor == nil: channelAuthor = text
+            case "url" where channelArtworkURL == nil:
+                if let url = URL(string: text) { channelArtworkURL = url }
             default: break
             }
         }

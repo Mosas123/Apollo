@@ -65,7 +65,7 @@ enum ArtworkURLs {
         var components = URLComponents(url: parsed, resolvingAgainstBaseURL: false)
         components?.path = parsed.path.replacingOccurrences(
             of: #"(?<=/)\d+x\d+(?=[^/]*\.[^/]+$)"#,
-            with: "3000x3000", options: .regularExpression
+            with: "1200x1200", options: .regularExpression
         )
         return components?.url?.absoluteString ?? upgraded
     }

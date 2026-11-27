@@ -55,6 +55,12 @@ final class PodcastDetailViewModel {
                 let parsed = try await SpotifyDetailService.shared.podcastDetail(id: id)
                 podcast = parsed
                 isLoading = false
+                Task {
+                    if let artwork = await PodcastAudioResolver.shared.artwork(for: parsed.title),
+                       ArtworkQuality.pixelWidth(of: URL(string: parsed.thumbnailUrl ?? "")) < 1000 {
+                        podcast?.thumbnailUrl = artwork.absoluteString
+                    }
+                }
                 await refreshSubscribedState()
                 let fresh = await EpisodePlaybackStore.shared.syncKnownEpisodes(
                     parsed.episodes,

@@ -28,6 +28,9 @@ final class SpotifyAudioResolver {
                     rawValue: match.audioURL.absoluteString
                 ).storageKey
                 resolved.sourceAttribution = "Podcast RSS · \(match.feedTitle)"
+                if let artwork = match.artworkURL {
+                    resolved.thumbnailUrl = artwork.absoluteString
+                }
                 cache[song.videoId] = resolved
                 return resolved
             }

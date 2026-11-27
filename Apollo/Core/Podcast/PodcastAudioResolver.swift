@@ -7,6 +7,7 @@ struct PodcastAudioMatch: Sendable {
     let feedURL: URL
     let episodeTitle: String
     let mimeType: String?
+    let artworkURL: URL?
 }
 
 /// Resolves a Spotify podcast episode to the publisher's public RSS enclosure.
@@ -51,10 +52,21 @@ actor PodcastAudioResolver {
             feedAuthor: content.author ?? feed.author,
             feedURL: feedURL,
             episodeTitle: episode.title,
-            mimeType: episode.mimeType ?? mimeType(for: episode.audioURL)
+            mimeType: episode.mimeType ?? mimeType(for: episode.audioURL),
+            artworkURL: ArtworkQuality.resized(content.artworkURL, to: 1200)
         )
         cache[key] = Entry(match: match, at: Date())
         return match
+    }
+
+    func artwork(for show: String) async -> URL? {
+        guard let feed = await ITunesPodcastDirectory.shared.feed(for: show),
+              let feedURL = feed.feedURL,
+              let content = await PodcastRSSFeedLoader.shared.content(for: feedURL) else {
+            return nil
+        }
+        return ArtworkQuality.resized(content.artworkURL, to: 1200)
+            ?? ArtworkQuality.resized(feed.artworkURL, to: 1200)
     }
 
     private func bestEpisode(for song: SongItem, in episodes: [PodcastEpisode]) -> PodcastEpisode? {

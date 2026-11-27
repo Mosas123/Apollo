@@ -24,6 +24,17 @@ enum ArtworkQuality {
         return 0
     }
 
+    static func resized(_ url: URL?, to maxWidth: Int) -> URL? {
+        guard let url else { return nil }
+        var value = url.absoluteString
+        if let range = value.range(of: #"\d{2,5}x\d{2,5}"#, options: .regularExpression),
+           let width = Int(value[range].split(separator: "x").first ?? ""),
+           width > maxWidth {
+            value.replaceSubrange(range, with: "\(maxWidth)x\(maxWidth)")
+        }
+        return URL(string: value)
+    }
+
     static func better(_ current: URL?, than candidate: URL?) -> URL? {
         let currentWidth = pixelWidth(of: current)
         let candidateWidth = pixelWidth(of: candidate)
