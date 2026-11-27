@@ -182,6 +182,8 @@ final class SpotifyHomeService {
         let podcastNode = node["podcastV2"] as? [String: Any]
         let podcastData = podcastNode?["data"] as? [String: Any]
         let showTitle = (podcastData?["name"] as? String) ?? (podcastNode?["name"] as? String)
+        let showCover = coverURL(from: podcastData?["coverArt"])
+            ?? coverURL(from: (podcastData?["visualIdentity"] as? [String: Any])?["squareCoverImage"])
         let episode = CatalogEpisode(
             id: episodeID,
             source: .spotify,
@@ -189,7 +191,7 @@ final class SpotifyHomeService {
             showTitle: showTitle,
             durationMS: intValue((node["duration"] as? [String: Any])?["totalMilliseconds"]),
             releaseDate: (node["releaseDate"] as? [String: Any])?["isoString"] as? String,
-            artworkURL: coverURL(from: node["coverArt"]),
+            artworkURL: showCover ?? coverURL(from: node["coverArt"]),
             description: node["description"] as? String,
             externalURL: URL(string: "https://open.spotify.com/episode/\(episodeID)")
         )

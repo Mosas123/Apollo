@@ -157,7 +157,8 @@ struct SpotifyCatalogProvider: CatalogSearching {
                 showTitle: showTitle,
                 durationMS: duration,
                 releaseDate: (data["releaseDate"] as? [String: Any])?["isoString"] as? String,
-                artworkURL: coverURL(from: data["coverArt"]),
+                artworkURL: coverURL(from: podcastData?["coverArt"])
+                    ?? coverURL(from: data["coverArt"]),
                 description: data["description"] as? String,
                 externalURL: URL(string: "https://open.spotify.com/episode/\(id)")
             )
