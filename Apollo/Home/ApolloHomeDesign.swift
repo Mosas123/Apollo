@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 // MARK: - Content category language
 
@@ -329,21 +330,57 @@ struct HomeArtwork: View {
 
 // MARK: - Hero
 
+struct HomeHeroDisplay {
+    var item: YTItem?
+    var title: String
+    var subtitle: String
+    var kindLabel: String
+    var badge: String?
+    var artworkURL: String?
+    var artworkImage: UIImage?
+    var actionSymbol: String
+}
+
+extension YTItem {
+    var homeHeroDisplay: HomeHeroDisplay {
+        HomeHeroDisplay(
+            item: self,
+            title: title,
+            subtitle: homeSubtitle,
+            kindLabel: homeKindLabel,
+            badge: homeBadge,
+            artworkURL: nil,
+            artworkImage: nil,
+            actionSymbol: videoId == nil ? "chevron.right" : "play.fill"
+        )
+    }
+}
+
 struct HomeHeroCard: View {
-    let item: YTItem
+    let display: HomeHeroDisplay
     let label: String
-    let subtitle: String
     let accent: Color
     let progress: Double?
     let onTap: () -> Void
 
-    private var actionSymbol: String {
-        item.videoId == nil ? "chevron.right" : "play.fill"
+    @ViewBuilder
+    private var artwork: some View {
+        if let image = display.artworkImage {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+        } else if let url = display.artworkURL {
+            AsyncImageView(url: url)
+        } else if let item = display.item {
+            HomeArtwork(item: item)
+        } else {
+            Color(.secondarySystemBackground)
+        }
     }
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            HomeArtwork(item: item)
+            artwork
                 .frame(maxWidth: .infinity)
                 .frame(height: 320)
                 .clipped()
@@ -370,7 +407,7 @@ struct HomeHeroCard: View {
                         .background(.black.opacity(0.28), in: Capsule())
                         .overlay(Capsule().stroke(.white.opacity(0.18), lineWidth: 0.5))
 
-                    if let badge = item.homeBadge {
+                    if let badge = display.badge {
                         Text(badge.uppercased())
                             .font(.caption2.weight(.bold))
                             .tracking(1.2)
@@ -385,13 +422,13 @@ struct HomeHeroCard: View {
 
                 Spacer(minLength: 0)
 
-                Text(item.title)
+                Text(display.title)
                     .font(.system(size: 26, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                     .lineLimit(2)
                     .minimumScaleFactor(0.8)
 
-                Text(subtitle)
+                Text(display.subtitle)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.white.opacity(0.76))
                     .lineLimit(1)
@@ -410,13 +447,13 @@ struct HomeHeroCard: View {
                 }
 
                 HStack(spacing: 12) {
-                    Image(systemName: actionSymbol)
+                    Image(systemName: display.actionSymbol)
                         .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(.black)
                         .frame(width: 46, height: 46)
                         .background(.white, in: Circle())
 
-                    Text(item.homeKindLabel)
+                    Text(display.kindLabel)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.72))
 

@@ -32,10 +32,11 @@ struct HomeScreenView: View {
     }
 
     private struct HeroModel {
-        let item: YTItem
+        let display: HomeHeroDisplay
         let label: String
-        let subtitle: String
         let progress: Double?
+        let isNowPlaying: Bool
+        let item: YTItem?
     }
 
     private var accent: Color {
@@ -118,13 +119,17 @@ struct HomeScreenView: View {
 
                     if let hero {
                         HomeHeroCard(
-                            item: hero.item,
+                            display: hero.display,
                             label: hero.label,
-                            subtitle: hero.subtitle,
                             accent: accent,
-                            progress: hero.progress,
-                            onTap: { handleItemTap(hero.item) }
-                        )
+                            progress: hero.progress
+                        ) {
+                            if hero.isNowPlaying {
+                                openPlayer()
+                            } else if let item = hero.item {
+                                handleItemTap(item)
+                            }
+                        }
                         .padding(.horizontal, 16)
                         .padding(.top, 14)
                         .scrollTransition(.interactive, axis: .vertical) { content, phase in
@@ -294,6 +299,8 @@ struct HomeScreenView: View {
     // MARK: - Hero
 
     private var hero: HeroModel? {
+        if let nowPlayingHero, shouldShowNowPlayingHero { return nowPlayingHero }
+
         let item: YTItem?
         switch selectedCategory {
         case .podcast:
@@ -304,9 +311,7 @@ struct HomeScreenView: View {
         case .audiobook:
             item = audiobooks.first
         case .all, .music:
-            if let current = currentFeedItem {
-                item = current
-            } else if let keep = continueItems.first {
+            if let keep = continueItems.first {
                 item = keep
             } else if let song = forYouSongs.first {
                 item = .song(song)
@@ -317,11 +322,8 @@ struct HomeScreenView: View {
 
         guard let item else { return nil }
 
-        let isNowPlaying = item.videoId != nil && item.videoId == NowPlaying.shared.videoId
         let label: String
-        if isNowPlaying {
-            label = "Now playing"
-        } else if selectedCategory == .podcast {
+        if selectedCategory == .podcast {
             if case .podcast = item {
                 label = "Featured show"
             } else {
@@ -336,20 +338,71 @@ struct HomeScreenView: View {
         }
 
         return HeroModel(
-            item: item,
+            display: item.homeHeroDisplay,
             label: label,
-            subtitle: item.homeSubtitle,
-            progress: isNowPlaying ? Double(NowPlaying.shared.progress) : nil
+            progress: nil,
+            isNowPlaying: false,
+            item: item
         )
     }
 
-    private var currentFeedItem: YTItem? {
-        guard let currentId = NowPlaying.shared.videoId else { return nil }
-        let pool = allHomeItems + forYouSongs.map(YTItem.song) + quickModels.map(\.item)
-        return pool.first {
-            $0.videoId == currentId
-                && (selectedCategory == .all || mediaCategory(of: $0) == selectedCategory)
+    private var shouldShowNowPlayingHero: Bool {
+        switch selectedCategory {
+        case .all:
+            return true
+        case .music:
+            return NowPlaying.shared.playbackKind == .music
+        case .podcast:
+            return NowPlaying.shared.playbackKind == .podcast
+        case .audiobook:
+            return isCurrentAudiobook
         }
+    }
+
+    private var isCurrentAudiobook: Bool {
+        let player = NowPlaying.shared
+        guard player.queueSongs.indices.contains(player.queueIndex),
+              let albumId = player.queueSongs[player.queueIndex].albumId else {
+            return false
+        }
+        return audiobooks.contains { item in
+            if case .album(let album) = item { return album.browseId == albumId }
+            return false
+        }
+    }
+
+    /// Bound directly to NowPlaying so the hero follows every track change,
+    /// even when the new song is not part of the loaded home feed.
+    private var nowPlayingHero: HeroModel? {
+        let player = NowPlaying.shared
+        guard let videoId = player.videoId,
+              !videoId.hasPrefix(NowPlaying.radioPrefix) else { return nil }
+
+        let title = player.displayTitle
+        guard !title.isEmpty else { return nil }
+
+        let isPodcast = player.playbackKind == .podcast
+        let cover = episodeCovers[videoId]
+        let artist = player.displayArtist
+
+        let display = HomeHeroDisplay(
+            item: nil,
+            title: title,
+            subtitle: artist.isEmpty ? (isPodcast ? "Podcast" : "Apollo") : artist,
+            kindLabel: isPodcast ? "Episode" : "Song",
+            badge: isPodcast ? "Podcast" : nil,
+            artworkURL: cover,
+            artworkImage: cover == nil ? player.thumbnailUIImage : nil,
+            actionSymbol: "play.fill"
+        )
+
+        return HeroModel(
+            display: display,
+            label: "Now playing",
+            progress: Double(player.progress),
+            isNowPlaying: true,
+            item: nil
+        )
     }
 
     // MARK: - Continue
@@ -825,6 +878,13 @@ struct HomeScreenView: View {
     }
 
     // MARK: - Actions
+
+    private func openPlayer() {
+        PlayerSheetState.shared.hasExpandedArtwork = !NowPlaying.shared.isVideoMode
+        withAnimation(.smooth(duration: 0.3)) {
+            PlayerSheetState.shared.isExpanded = true
+        }
+    }
 
     private func reloadSpeedDial() async {
         speedDialEntries = (try? await DatabaseService.shared.fetchSpeedDial()) ?? []
