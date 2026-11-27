@@ -32,6 +32,20 @@ final class AlbumDetailViewModel {
         isLoading = true
         error = nil
 
+        if SpotifyCatalogID.isSpotify(browseId) {
+            do {
+                let id = SpotifyCatalogID.rawID(browseId) ?? browseId
+                album = try await SpotifyDetailService.shared.albumDetail(id: id)
+                isLoading = false
+                await refreshSavedState()
+            } catch {
+                Log.albumDetailViewModel.error("Spotify album failed: \(error)")
+                self.error = error
+                isLoading = false
+            }
+            return
+        }
+
         do {
             let json = try await innerTube.browse(browseId: browseId).value
             Log.albumDetailViewModel.debug("Got browse response, parsing...")
@@ -368,10 +382,17 @@ struct AlbumDetailView: View {
                 AlbumMoreSheet(
                     album: album,
                     isSaved: viewModel.isSaved,
-                    onToggleSave: { Task { await viewModel.toggleSave() } }
+                    onToggleSave: SpotifyCatalogID.isSpotify(album.browseId)
+                        ? nil
+                        : { Task { await viewModel.toggleSave() } }
                 )
             }
         }
+    }
+
+    private static func shareURL(for album: AlbumDetailInfo) -> URL? {
+        SpotifyCatalogID.shareURL(for: album.browseId)
+            ?? URL(string: "https://music.youtube.com/browse/\(album.browseId)")
     }
 
     private var albumTopBar: some View {
@@ -388,7 +409,7 @@ struct AlbumDetailView: View {
             Spacer()
 
             if let album = viewModel.album,
-               let url = URL(string: "https://music.youtube.com/browse/\(album.browseId)") {
+               let url = Self.shareURL(for: album) {
                 HStack(spacing: 0) {
                     ShareLink(item: url) {
                         Image(systemName: "square.and.arrow.up")
@@ -697,15 +718,17 @@ struct AlbumMoreSheet: View {
     var body: some View {
         SheetChrome {
             MenuCard {
-                MenuRow(
-                    icon: isSaved ? "bookmark.fill" : "bookmark",
-                    title: isSaved ? "Saved" : "Save to Library",
-                    subtitle: isSaved ? "Remove from your library" : "Add to your library"
-                ) {
-                    onToggleSave?()
-                    dismiss()
+                if let onToggleSave {
+                    MenuRow(
+                        icon: isSaved ? "bookmark.fill" : "bookmark",
+                        title: isSaved ? "Saved" : "Save to Library",
+                        subtitle: isSaved ? "Remove from your library" : "Add to your library"
+                    ) {
+                        onToggleSave()
+                        dismiss()
+                    }
+                    Divider()
                 }
-                Divider()
                 MenuRow(
                     icon: "list.bullet",
                     title: "Add to Queue",
@@ -714,14 +737,16 @@ struct AlbumMoreSheet: View {
                     addToQueue()
                     dismiss()
                 }
-                Divider()
-                MenuRow(
-                    icon: "square.and.arrow.down",
-                    title: "Download",
-                    subtitle: "Download all songs for offline playback"
-                ) {
-                    downloadAll()
-                    dismiss()
+                if !SpotifyCatalogID.isSpotify(album.browseId) {
+                    Divider()
+                    MenuRow(
+                        icon: "square.and.arrow.down",
+                        title: "Download",
+                        subtitle: "Download all songs for offline playback"
+                    ) {
+                        downloadAll()
+                        dismiss()
+                    }
                 }
                 Divider()
                 MenuRow(
@@ -748,7 +773,9 @@ struct AlbumMoreSheet: View {
     }
 
     private func share() {
-        guard let url = URL(string: "https://music.youtube.com/browse/\(album.browseId)") else { return }
+        let url = SpotifyCatalogID.shareURL(for: album.browseId)
+            ?? URL(string: "https://music.youtube.com/browse/\(album.browseId)")
+        guard let url else { return }
         presentShareSheet(items: [url])
         dismiss()
     }

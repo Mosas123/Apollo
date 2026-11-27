@@ -13,29 +13,35 @@ struct PlaylistMoreSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var showEditAlert = false
+
+    private var isSpotify: Bool {
+        SpotifyCatalogID.isSpotify(playlist.playlistId)
+    }
     @State private var editedName = ""
 
     var body: some View {
         SheetChrome {
             MenuCard {
-                MenuRow(
-                    icon: "pencil",
-                    title: "Edit",
-                    subtitle: "Edit playlist"
-                ) {
-                    editedName = playlist.title
-                    showEditAlert = true
+                if !isSpotify {
+                    MenuRow(
+                        icon: "pencil",
+                        title: "Edit",
+                        subtitle: "Edit playlist"
+                    ) {
+                        editedName = playlist.title
+                        showEditAlert = true
+                    }
+                    Divider()
+                    MenuRow(
+                        icon: "arrow.triangle.2.circlepath",
+                        title: "Sync",
+                        subtitle: "Sync this playlist with YouTube Music"
+                    ) {
+                        onSync?()
+                        dismiss()
+                    }
+                    Divider()
                 }
-                Divider()
-                MenuRow(
-                    icon: "arrow.triangle.2.circlepath",
-                    title: "Sync",
-                    subtitle: "Sync this playlist with YouTube Music"
-                ) {
-                    onSync?()
-                    dismiss()
-                }
-                Divider()
                 MenuRow(
                     icon: "list.bullet",
                     title: "Add to Queue",
@@ -44,14 +50,16 @@ struct PlaylistMoreSheet: View {
                     addToQueue()
                     dismiss()
                 }
-                Divider()
-                MenuRow(
-                    icon: "square.and.arrow.down",
-                    title: "Download",
-                    subtitle: "Download all songs for offline playback"
-                ) {
-                    downloadAll()
-                    dismiss()
+                if !isSpotify {
+                    Divider()
+                    MenuRow(
+                        icon: "square.and.arrow.down",
+                        title: "Download",
+                        subtitle: "Download all songs for offline playback"
+                    ) {
+                        downloadAll()
+                        dismiss()
+                    }
                 }
                 Divider()
                 MenuRow(
@@ -62,15 +70,17 @@ struct PlaylistMoreSheet: View {
                     share()
                     dismiss()
                 }
-                Divider()
-                MenuRow(
-                    icon: "trash",
-                    title: "Delete",
-                    subtitle: "Remove all downloads",
-                    destructive: true
-                ) {
-                    deleteAllDownloads()
-                    dismiss()
+                if !isSpotify {
+                    Divider()
+                    MenuRow(
+                        icon: "trash",
+                        title: "Delete",
+                        subtitle: "Remove all downloads",
+                        destructive: true
+                    ) {
+                        deleteAllDownloads()
+                        dismiss()
+                    }
                 }
             }
         }
@@ -109,7 +119,9 @@ struct PlaylistMoreSheet: View {
     }
 
     private func share() {
-        guard let url = URL.playlistShareURL(id: playlist.playlistId) else { return }
+        let url = SpotifyCatalogID.shareURL(for: playlist.playlistId)
+            ?? URL.playlistShareURL(id: playlist.playlistId)
+        guard let url else { return }
         presentShareSheet(items: [url])
         dismiss()
     }

@@ -18,6 +18,13 @@ enum SpotifyCatalogID {
     static func rawID(_ value: String) -> String? {
         value.split(separator: ":").last.map(String.init)
     }
+
+    static func shareURL(for value: String) -> URL? {
+        guard isSpotify(value) else { return nil }
+        let parts = value.split(separator: ":")
+        guard parts.count >= 3 else { return nil }
+        return URL(string: "https://open.spotify.com/\(parts[1])/\(parts[2])")
+    }
 }
 
 /// Projects Spotify catalogue objects into the app's existing UI models so the

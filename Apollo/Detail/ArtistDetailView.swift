@@ -31,6 +31,18 @@ final class ArtistDetailViewModel {
         isLoading = true
         error = nil
 
+        if SpotifyCatalogID.isSpotify(browseId) {
+            do {
+                let id = SpotifyCatalogID.rawID(browseId) ?? browseId
+                artist = try await SpotifyDetailService.shared.artistDetail(id: id)
+                isLoading = false
+            } catch {
+                self.error = error
+                isLoading = false
+            }
+            return
+        }
+
         do {
             let json = try await innerTube.browse(browseId: browseId).value
             var parsed = Self.parseArtistDetail(from: json, browseId: browseId)
@@ -639,16 +651,18 @@ struct ArtistDetailView: View {
                     .disabled(artist.songs.isEmpty)
                     .accessibilityLabel("Play artist")
 
-                    Button { toggleSubscribe(artist) } label: {
-                        Image(systemName: artist.isSubscribed ? "star.fill" : "star")
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 48, height: 48)
-                            .background(Circle().fill(.white.opacity(0.22)))
+                    if !SpotifyCatalogID.isSpotify(artist.browseId) {
+                        Button { toggleSubscribe(artist) } label: {
+                            Image(systemName: artist.isSubscribed ? "star.fill" : "star")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 48, height: 48)
+                                .background(Circle().fill(.white.opacity(0.22)))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isUpdatingSubscription)
+                        .accessibilityLabel(LocalizedStringKey(artist.isSubscribed ? "Unfollow artist" : "Follow artist"))
                     }
-                    .buttonStyle(.plain)
-                    .disabled(isUpdatingSubscription)
-                    .accessibilityLabel(LocalizedStringKey(artist.isSubscribed ? "Unfollow artist" : "Follow artist"))
                 }
 
             }

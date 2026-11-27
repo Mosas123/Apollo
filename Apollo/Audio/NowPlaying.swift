@@ -467,6 +467,34 @@ final class NowPlaying {
             isResolvingNext = true
         }
         let song = queueSongs[queueIndex]
+
+        // Spotify catalogue entries have no YouTube id yet. Resolve the
+        // current item on demand and replace it in place, so Next/Previous,
+        // play-all and auto-advance all keep working with a catalogue that is
+        // not YouTube.
+        if SpotifyCatalogID.isSpotify(song.videoId) {
+            Task { @MainActor in
+                guard let resolved = await SpotifyAudioResolver.shared.resolve(song) else {
+                    guard playbackGeneration == intent else { return }
+                    isResolvingNext = false
+                    isPlaying = false
+                    handlePlaybackFailure(failedVideoId: song.videoId)
+                    return
+                }
+                guard playbackGeneration == intent,
+                      queueSongs.indices.contains(queueIndex),
+                      queueSongs[queueIndex].videoId == song.videoId else { return }
+                queueSongs[queueIndex] = resolved
+                persistQueueState()
+                playCurrentSong(
+                    logContext: logContext,
+                    manageResolvingFlag: manageResolvingFlag,
+                    afterResolve: afterResolve
+                )
+            }
+            return
+        }
+
         Log.nowPlaying.info(
             "QUEUE_ADVANCE selected context=\(logContext) "
                 + "videoId=\(song.videoId) previous=\(videoId ?? "nil") "

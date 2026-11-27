@@ -1,0 +1,371 @@
+import Foundation
+
+/// Fetches Spotify detail pages and projects them into the app's existing
+/// `AlbumDetailInfo` / `PlaylistDetailInfo` / `ArtistDetailInfo` models, so
+/// the current screens render without changes.
+@MainActor
+final class SpotifyDetailService {
+    static let shared = SpotifyDetailService()
+
+    private let client: SpotifyPathfinderClient
+
+    init(client: SpotifyPathfinderClient = SpotifyPathfinderClient()) {
+        self.client = client
+    }
+
+    // MARK: - Album
+
+    func albumDetail(id: String) async throws -> AlbumDetailInfo {
+        let data = try await client.album(id: id)
+        return try Self.parseAlbum(data, requestedID: id)
+    }
+
+    private static func parseAlbum(_ data: Data, requestedID: String) throws -> AlbumDetailInfo {
+        guard let root = try object(from: data),
+              let payload = root["data"] as? [String: Any],
+              let album = payload["albumUnion"] as? [String: Any] else {
+            throw CatalogError.notFound
+        }
+
+        let title = (album["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown Album"
+        let albumID = identifier(album) ?? requestedID
+        let albumArtists = artists(from: album["artists"])
+        let cover = coverURLString(album["coverArt"])
+        let year = year(from: album["date"])
+
+        let tracksNode = album["tracksV2"] ?? album["tracks"]
+        let rawTracks = items(of: tracksNode)
+        let songs = rawTracks.compactMap { wrapper -> SongItem? in
+            let track = (wrapper["track"] as? [String: Any]) ?? wrapper
+            return song(
+                from: track,
+                fallbackAlbumTitle: title,
+                fallbackAlbumID: albumID,
+                fallbackCover: cover,
+                fallbackArtists: albumArtists,
+                fallbackYear: year
+            )
+        }
+        let totalCount = max(intValue((tracksNode as? [String: Any])?["totalCount"]), songs.count)
+
+        return AlbumDetailInfo(
+            title: title,
+            artists: albumArtists,
+            year: year,
+            songCount: totalCount,
+            duration: songs.reduce(0) { $0 + $1.duration },
+            thumbnailUrl: cover,
+            playlistId: nil,
+            browseId: SpotifyCatalogID.album(albumID),
+            songs: songs,
+            descriptionText: copyrightText(album["copyright"]),
+            relatedAlbums: [],
+            videos: [],
+            featuredPlaylists: []
+        )
+    }
+
+    // MARK: - Playlist
+
+    func playlistDetail(id: String) async throws -> PlaylistDetailInfo {
+        var offset = 0
+        let pageSize = 100
+        var allItems: [[String: Any]] = []
+        var playlist: [String: Any]?
+        var totalCount = 0
+
+        while offset < 2000 {
+            let data = try await client.playlist(id: id, offset: offset, limit: pageSize)
+            guard let root = try object(from: data),
+                  let payload = root["data"] as? [String: Any],
+                  let node = payload["playlistV2"] as? [String: Any] else {
+                throw CatalogError.notFound
+            }
+            if playlist == nil {
+                playlist = node
+                totalCount = intValue((node["content"] as? [String: Any])?["totalCount"])
+            }
+            let pageItems = items(of: node["content"])
+            allItems.append(contentsOf: pageItems)
+            if pageItems.isEmpty || allItems.count >= totalCount || pageItems.count < pageSize {
+                break
+            }
+            offset += pageSize
+        }
+
+        guard let playlist else { throw CatalogError.notFound }
+
+        let title = (playlist["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown Playlist"
+        let cover = coverURLString(playlist["images"]) ?? coverURLString(playlist["visualIdentity"])
+        let owner = ((playlist["ownerV2"] as? [String: Any])?["data"] as? [String: Any])
+        let ownerName = (owner?["name"] as? String)
+            ?? (owner?["displayName"] as? String)
+            ?? (owner?["username"] as? String)
+        let ownerAvatar = coverURLString(owner?["avatar"])
+
+        let songs = allItems.compactMap { wrapper -> SongItem? in
+            let track = ((wrapper["itemV2"] as? [String: Any])?["data"] as? [String: Any])
+                ?? ((wrapper["itemV3"] as? [String: Any])?["data"] as? [String: Any])
+            guard let track else { return nil }
+            return song(
+                from: track,
+                fallbackAlbumTitle: nil,
+                fallbackAlbumID: nil,
+                fallbackCover: cover,
+                fallbackArtists: [],
+                fallbackYear: nil
+            )
+        }
+
+        return PlaylistDetailInfo(
+            title: title,
+            authorName: ownerName,
+            authorBrowseId: nil,
+            authorAvatarUrl: ownerAvatar,
+            descriptionText: (playlist["description"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+            songCount: max(totalCount, songs.count),
+            duration: songs.reduce(0) { $0 + $1.duration },
+            thumbnailUrl: cover,
+            playlistId: SpotifyCatalogID.playlist(id),
+            songs: songs
+        )
+    }
+
+    // MARK: - Artist
+
+    func artistDetail(id: String) async throws -> ArtistDetailInfo {
+        let data = try await client.artistOverview(id: id)
+        guard let root = try object(from: data),
+              let payload = root["data"] as? [String: Any],
+              let artist = payload["artistUnion"] as? [String: Any] else {
+            throw CatalogError.notFound
+        }
+
+        let profile = artist["profile"] as? [String: Any]
+        let name = (profile?["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown Artist"
+        let stats = artist["stats"] as? [String: Any]
+        let monthly = intValue(stats?["monthlyListeners"])
+        let followers = intValue(stats?["followers"])
+        let avatar = coverURLString((artist["visuals"] as? [String: Any])?["avatarImage"])
+            ?? coverURLString(artist["visualIdentity"])
+        let header = coverURLString(artist["headerImage"])
+
+        let topTracks = items(of: (artist["discography"] as? [String: Any])?["topTracks"])
+        let songs = topTracks.compactMap { wrapper -> SongItem? in
+            let track = (wrapper["track"] as? [String: Any]) ?? wrapper
+            return song(
+                from: track,
+                fallbackAlbumTitle: nil,
+                fallbackAlbumID: nil,
+                fallbackCover: nil,
+                fallbackArtists: [YTArtist(name: name, id: SpotifyCatalogID.artist(id))],
+                fallbackYear: nil
+            )
+        }
+
+        var albums: [AlbumItem] = []
+        var singles: [AlbumItem] = []
+        if let discographyData = try? await client.artistDiscography(id: id),
+           let discographyRoot = try? object(from: discographyData),
+           let discographyPayload = discographyRoot["data"] as? [String: Any],
+           let discographyArtist = discographyPayload["artistUnion"] as? [String: Any] {
+            let releases = items(of: ((discographyArtist["discography"] as? [String: Any])?["all"]))
+            for wrapper in releases {
+                let releaseItems = items(of: wrapper["releases"])
+                guard let release = releaseItems.first,
+                      let album = albumItem(from: release, artistName: name, artistID: id) else { continue }
+                let type = (release["type"] as? String)?.uppercased() ?? ""
+                if type == "ALBUM" || type == "COMPILATION" {
+                    albums.append(album)
+                } else {
+                    singles.append(album)
+                }
+            }
+        }
+
+        let related = items(of: ((artist["relatedContent"] as? [String: Any])?["relatedArtists"]))
+            .compactMap { node -> ArtistItem? in
+                guard let relatedID = identifier(node),
+                      let relatedProfile = node["profile"] as? [String: Any],
+                      let relatedName = relatedProfile["name"] as? String else { return nil }
+                let image = coverURLString((node["visuals"] as? [String: Any])?["avatarImage"])
+                    ?? coverURLString(node["visualIdentity"])
+                return ArtistItem(
+                    browseId: SpotifyCatalogID.artist(relatedID),
+                    name: relatedName,
+                    thumbnailUrl: image,
+                    isSubscribed: false
+                )
+            }
+
+        let bio = ((profile?["biography"] as? [String: Any])?["text"] as? String)
+            .map(stripHTML)
+            .flatMap { $0.isEmpty ? nil : $0 }
+        let subtitle = monthly > 0
+            ? "\(compactCount(monthly)) monthly listeners"
+            : (followers > 0 ? "\(compactCount(followers)) followers" : nil)
+
+        return ArtistDetailInfo(
+            name: name,
+            thumbnailUrl: avatar,
+            subscriberCountText: subtitle,
+            descriptionText: bio,
+            isSubscribed: false,
+            browseId: SpotifyCatalogID.artist(id),
+            songs: songs,
+            albums: albums,
+            singles: singles,
+            videos: [],
+            playlists: [],
+            relatedArtists: related,
+            heroImageURL: header,
+            heroImageResolved: true,
+            subscriptionChannelId: nil
+        )
+    }
+
+    // MARK: - Song / release mapping
+
+    private static func song(
+        from track: [String: Any],
+        fallbackAlbumTitle: String?,
+        fallbackAlbumID: String?,
+        fallbackCover: String?,
+        fallbackArtists: [YTArtist],
+        fallbackYear: Int?
+    ) -> SongItem? {
+        guard let trackID = identifier(track) else { return nil }
+        let title = (track["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown"
+        let albumNode = track["albumOfTrack"] as? [String: Any]
+        let trackArtists = artists(from: track["artists"])
+        let durationNode = track["duration"] ?? track["trackDuration"]
+        let durationMS = intValue((durationNode as? [String: Any])?["totalMilliseconds"])
+        let cover = coverURLString(albumNode?["coverArt"]) ?? fallbackCover
+        let albumTitle = (albumNode?["name"] as? String) ?? fallbackAlbumTitle
+        let albumID = albumNode.flatMap(identifier) ?? fallbackAlbumID
+        let explicit = (track["contentRating"] as? [String: Any])?["label"] as? String == "EXPLICIT"
+
+        return SongItem(
+            videoId: SpotifyCatalogID.track(trackID),
+            title: title,
+            artists: trackArtists.isEmpty ? fallbackArtists : trackArtists,
+            album: albumTitle,
+            albumId: albumID.map(SpotifyCatalogID.album),
+            duration: max(0, durationMS / 1000),
+            thumbnailUrl: cover,
+            isExplicit: explicit,
+            playlistId: nil,
+            viewCount: nil,
+            year: year(from: albumNode?["date"]) ?? fallbackYear,
+            isVideo: false,
+            musicVideoType: nil,
+            recordingPreference: .albumAudio,
+            contentKind: .music
+        )
+    }
+
+    private static func albumItem(from release: [String: Any], artistName: String, artistID: String) -> AlbumItem? {
+        guard let releaseID = identifier(release),
+              let title = release["name"] as? String,
+              !title.isEmpty else { return nil }
+        return AlbumItem(
+            browseId: SpotifyCatalogID.album(releaseID),
+            title: title,
+            artists: [YTArtist(name: artistName, id: SpotifyCatalogID.artist(artistID))],
+            year: year(from: release["date"]),
+            thumbnailUrl: coverURLString(release["coverArt"]),
+            playlistId: nil,
+            isExplicit: false
+        )
+    }
+
+    // MARK: - JSON helpers
+
+    private static func object(from data: Data) throws -> [String: Any]? {
+        try JSONSerialization.jsonObject(with: data) as? [String: Any]
+    }
+
+    private static func items(of node: Any?) -> [[String: Any]] {
+        guard let dict = node as? [String: Any] else { return [] }
+        return (dict["items"] as? [[String: Any]]) ?? []
+    }
+
+    private static func identifier(_ node: [String: Any]) -> String? {
+        if let id = node["id"] as? String, !id.isEmpty { return id }
+        if let uri = node["uri"] as? String, let last = uri.split(separator: ":").last {
+            return String(last)
+        }
+        return nil
+    }
+
+    private static func artists(from node: Any?) -> [YTArtist] {
+        guard let dict = node as? [String: Any],
+              let entries = dict["items"] as? [[String: Any]] else { return [] }
+        return entries.compactMap { entry in
+            let profile = entry["profile"] as? [String: Any]
+            guard let name = (profile?["name"] as? String) ?? (entry["name"] as? String),
+                  !name.isEmpty else { return nil }
+            return YTArtist(name: name, id: identifier(entry).map(SpotifyCatalogID.artist))
+        }
+    }
+
+    private static func coverURLString(_ node: Any?) -> String? {
+        guard let dict = node as? [String: Any] else { return nil }
+        var sources = dict["sources"] as? [[String: Any]] ?? []
+        if sources.isEmpty,
+           let data = dict["data"] as? [String: Any],
+           let nested = data["sources"] as? [[String: Any]] {
+            sources = nested
+        }
+        if sources.isEmpty,
+           let image = dict["image"] as? [String: Any],
+           let data = image["data"] as? [String: Any],
+           let nested = data["sources"] as? [[String: Any]] {
+            sources = nested
+        }
+        let candidates = sources.compactMap { source -> (Int, String)? in
+            guard let raw = source["url"] as? String, !raw.isEmpty else { return nil }
+            return (max(intValue(source["width"]), intValue(source["maxWidth"])), raw)
+        }
+        return candidates.max { $0.0 < $1.0 }?.1
+    }
+
+    private static func year(from date: Any?) -> Int? {
+        guard let dict = date as? [String: Any] else { return nil }
+        if let year = dict["year"] as? Int { return year }
+        if let iso = dict["isoString"] as? String, let year = Int(iso.prefix(4)) { return year }
+        return nil
+    }
+
+    private static func intValue(_ value: Any?) -> Int {
+        if let int = value as? Int { return int }
+        if let number = value as? NSNumber { return number.intValue }
+        if let string = value as? String { return Int(string) ?? 0 }
+        return 0
+    }
+
+    private static func copyrightText(_ node: Any?) -> String? {
+        guard let dict = node as? [String: Any],
+              let items = dict["items"] as? [[String: Any]] else { return nil }
+        let text = items.compactMap { $0["text"] as? String }.joined(separator: "\n")
+        return text.isEmpty ? nil : text
+    }
+
+    private static func stripHTML(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func compactCount(_ value: Int) -> String {
+        switch value {
+        case 1_000_000...:
+            return String(format: "%.1fM", Double(value) / 1_000_000)
+        case 1_000...:
+            return String(format: "%.1fK", Double(value) / 1_000)
+        default:
+            return "\(value)"
+        }
+    }
+}

@@ -66,6 +66,7 @@ struct CatalogSearchResults: Sendable {
 enum CatalogError: Error, Sendable {
     case unsupported
     case invalidResponse
+    case notFound
     case http(Int)
     case authentication
 }

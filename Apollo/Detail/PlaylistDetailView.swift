@@ -48,6 +48,18 @@ final class PlaylistDetailViewModel {
         isLoading = true
         error = nil
 
+        if SpotifyCatalogID.isSpotify(playlistId) {
+            do {
+                let id = SpotifyCatalogID.rawID(playlistId) ?? playlistId
+                playlist = try await SpotifyDetailService.shared.playlistDetail(id: id)
+                isLoading = false
+            } catch {
+                self.error = error
+                isLoading = false
+            }
+            return
+        }
+
         // Check if this is a local-only playlist
         if let entity = try? await DatabaseService.shared.fetchOne(PlaylistEntity.self, key: playlistId),
            entity.browseId == nil {
