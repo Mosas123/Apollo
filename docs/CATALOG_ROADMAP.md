@@ -47,8 +47,8 @@ depender de YouTube Music para metadatos y con YouTube únicamente como audio.
 - [ ] Caché de catálogo canónico.
 
 ### Fase 1 — Enriquecedores pequeños
-- [ ] `AppleCatalogClient` (iTunes Search): artwork de alta resolución, género,
-      fecha; nunca sustituye artistas de Spotify.
+- [x] `AppleCatalogClient` (iTunes Search): artwork de alta resolución, género,
+      fecha; nunca sustituye artistas de Spotify. (falta conectarlo al enriquecedor)
 - [x] Fotos de artista: **Spotify → Deezer → placeholder**; sin prioridad de
       YouTube. (iTunes público no da foto de artista; Apple Music API sí, con
       token de developer.)
