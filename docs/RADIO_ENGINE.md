@@ -167,16 +167,63 @@ con el pipeline actual.
 - [ ] Modelo de secuencia de sesión.
 - [ ] Explicaciones generadas (opcional).
 
-## 11. Lo que falta en el roadmap actual
+## 11. Estado y pendientes (27-nov)
 
-- Event store de reproducción y skips (hoy hay historial/scrobble, no señal
-  granular de radio).
-- Cliente Last.fm de similitud (la integración actual solo scrobble).
-- Tags/géneros normalizados por identidad.
-- `SeedResolver` para track/artist/album.
-- `StationRanker` + MMR + ventanas de repetición.
-- Filtro de disponibilidad por proveedor/calidad.
-- Evaluación offline y golden tests.
-- UI de radio con explicación (“porque te gusta X”, “similar a Y”).
-- Cache/prefetch de estaciones.
-- Feature store local para IA (vectores/afinidades).
+### Hecho
+- Seed track/artist con resolución vía Spotify (también para seeds YouTube).
+- Candidatos: top tracks, álbum, relacionados Spotify, Last.fm track/artist similar.
+- Taste local: plays, skips, completions, likes, follows, géneros.
+- Ranker con diversidad por artista/álbum y filtros de explícito/skips.
+- Embeddings on-device y learning-to-rank online por estilo.
+- Start Radio / Similar / autoplay / Surprise sin radio de YouTube.
+- Diagnóstico local (Settings → Radio diagnostics) y explicaciones en cola.
+
+### Pendiente
+- [ ] Event store granular propio (hoy se apoya en TasteProfileStore + DB).
+- [ ] Tags/géneros normalizados por identidad para similitud y mood.
+- [ ] Co-ocurrencia/editorial y estaciones por mood.
+- [ ] Golden tests automáticos y cobertura de audio por candidato.
+- [ ] Prefetch de la siguiente estación.
+- [ ] Bandits contextuales.
+- [ ] Modelo de secuencia de sesión (SASRec/GRU pequeño on-device).
+- [ ] Explicaciones generadas con LLM/Foundation Models.
+- [ ] Ventanas de “no repetir” configurables por el usuario.
+
+## 12. Backlog de ideas avanzadas
+
+Prioridad alta:
+1. **Pesos de señal finos**: play>30s, completion, like/save, repeat, skip<10s,
+   skip tardío neutro, añadir a playlist. Contexto por hora/dispositivo.
+2. **Grafo de gusto personal**: artistas/géneros/álbumes/eras/moods, propagación
+   tipo PageRank desde likes/plays.
+3. **Co-ocurrencia pública sin backend**: playlists públicas/editorial,
+   ListenBrainz, Last.fm, MusicBrainz para item-item similarity.
+4. **Retrieval con embeddings + ANN local**: “user tower” con historial
+   ponderado + contexto; “item tower” con metadata.
+5. **LTR pairwise**: pares completado vs skip; sustituir el logístico simple.
+6. **Bandits** (Thompson/LinUCB) para fuente, novedad y exploración.
+7. **Calibración/diversidad**: MMR/DPP, cuotas de género/era/idioma, dial
+   familiar ↔ descubrir.
+
+Prioridad media:
+8. **Modelo secuencial de sesión**: últimas 5–10 pistas; detectar intención.
+9. **Online learning con caducidad** (estilo Monolith): TTL/frecuencia por
+   entidad y actualización inmediata.
+10. **Taste fingerprint**: energía/acústica/era/idioma/popularidad/mood
+    inferidos de tags, no de audio features.
+11. **Negativo explícito y contextual**: “no este artista por un tiempo”, skips
+    por contexto.
+12. **Arcos de sesión**: warmup → peak → cooldown.
+
+Prioridad baja / experimental:
+13. **LLM/Foundation Models** para intención en lenguaje natural y
+    explicaciones; verificar siempre contra el catálogo.
+14. **Cold start onboarding** con 3–5 artistas/géneros + charts/editorial.
+15. **Datos públicos**: ListenBrainz para señales colaborativas sin subir datos
+    del usuario; MusicBrainz/Last.fm para tags y relaciones.
+
+Métricas:
+- Offline: NDCG, recall@k, cobertura, diversidad, novedad, intra-list
+  similarity, calibración.
+- Online local: skip<10s, completion, save, repeat, duración de sesión.
+- Guardrails: repetición por artista/álbum, explícito, calidad, disponibilidad.
