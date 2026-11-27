@@ -154,9 +154,11 @@ con el pipeline actual.
 - [ ] Local taste y “para ti”.
 
 ### R3 — Evaluación y ajuste
-- [ ] Métricas y golden tests.
-- [ ] Pesos por estilo y límites de repetición.
-- [ ] Cache de estaciones y prefetch.
+- [x] Métricas locales por estación (candidatos, diversidad, repetición, latencia, mix de fuentes) y pantalla de diagnóstico.
+- [x] Pesos por estilo y límites de repetición.
+- [x] Cache de estaciones (10 min).
+- [ ] Golden tests automáticos.
+- [ ] Prefetch de la siguiente estación.
 
 ### R4 — IA
 - [ ] Embeddings de metadata.

@@ -34,6 +34,15 @@ actor StationService {
             case .search: return 0.4
             }
         }
+
+        var label: String {
+            switch self {
+            case .seedTop: return "artist"
+            case .album: return "album"
+            case .related: return "related"
+            case .search: return "search"
+            }
+        }
     }
 
     private let source = SpotifyStationSource()
@@ -48,15 +57,43 @@ actor StationService {
             return cached.songs
         }
 
+        let startedAt = Date()
         var candidates: [Candidate] = []
         if let seed = await resolveSeed(song) {
             candidates = await candidatePool(seed: seed, seedSong: song, options: options)
+        }
+
+        let candidateCount = candidates.count
+        var sourceMix: [String: Int] = [:]
+        for candidate in candidates {
+            sourceMix[candidate.group.label, default: 0] += 1
         }
 
         var ranked = await rank(candidates, seedSong: song, options: options)
         if ranked.isEmpty {
             ranked = await fallbackSearch(song: song, options: options)
         }
+
+        let artistCounts = Dictionary(
+            grouping: ranked.compactMap { $0.artists.first?.name },
+            by: { TextMatch.normalizeArtist($0) }
+        ).mapValues(\.count)
+        let albumNames = Set(ranked.compactMap { $0.album.map(TextMatch.normalizeTitle) })
+
+        let metric = RadioStationMetric(
+            id: UUID(),
+            date: Date(),
+            seedTitle: song.title,
+            style: options.style.rawValue,
+            candidateCount: candidateCount,
+            selectedCount: ranked.count,
+            uniqueArtists: artistCounts.count,
+            uniqueAlbums: albumNames.count,
+            maxArtistRepeat: artistCounts.values.max() ?? 0,
+            sourceMix: sourceMix,
+            latencyMS: Int(Date().timeIntervalSince(startedAt) * 1000)
+        )
+        await RadioMetricsStore.shared.record(metric)
 
         cache[key] = (ranked, Date())
         return ranked

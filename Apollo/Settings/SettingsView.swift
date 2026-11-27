@@ -46,6 +46,9 @@ struct SettingsView: View {
                 SettingsNavigationRow("History", icon: "clock.arrow.circlepath") {
                     HistoryScreenView()
                 }
+                SettingsNavigationRow("Radio diagnostics", icon: "waveform.path.ecg") {
+                    RadioDiagnosticsView()
+                }
             }
 
             Section {

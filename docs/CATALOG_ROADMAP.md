@@ -83,7 +83,8 @@ depender de YouTube Music para metadatos y con YouTube únicamente como audio.
 - [x] Ranker ponderado (gusto local, popularidad, novedad) + límites por artista/álbum.
 - [x] Last.fm similar; tags/géneros pendientes.
 - [ ] Filtro de disponibilidad/calidad y explicaciones en UI.
-- [ ] Evaluación offline (diversidad, skip, cobertura) y golden tests.
+- [x] Diagnóstico local de estaciones (diversidad, repetición, latencia, fuentes).
+- [ ] Golden tests automáticos y cobertura de audio.
 - [ ] IA posterior: embeddings, learning-to-rank, bandits.
 
 Detalle completo en [RADIO_ENGINE.md](RADIO_ENGINE.md).
