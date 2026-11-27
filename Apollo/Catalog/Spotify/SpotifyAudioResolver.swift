@@ -18,28 +18,11 @@ final class SpotifyAudioResolver {
 
         if let cached = cache[song.videoId] { return cached }
 
-        // Podcasts come from Spotify as metadata only. Prefer the publisher's
-        // public RSS enclosure before falling back to a YouTube carrier.
+        // Podcasts come from Spotify as metadata only. Resolve the publisher's
+        // RSS enclosure and a YouTube carrier at the same time and use whichever
+        // arrives first, so a slow feed can never stall playback.
         if song.contentKind == .episode || song.videoId.hasPrefix("spotify:episode:") {
-            if let match = await PodcastAudioResolver.shared.resolve(for: song) {
-                var resolved = song
-                resolved.videoId = MusicCatalogID(
-                    source: .podcast,
-                    rawValue: match.audioURL.absoluteString
-                ).storageKey
-                resolved.sourceAttribution = "Podcast RSS · \(match.feedTitle)"
-                if let artwork = match.artworkURL {
-                    resolved.thumbnailUrl = artwork.absoluteString
-                }
-                cache[song.videoId] = resolved
-                return resolved
-            }
-            if let youtube = await PodcastYouTubeResolver.shared.resolve(for: song) {
-                cache[song.videoId] = youtube
-                return youtube
-            }
-            Log.searchView.error("No podcast audio match for \(song.videoId)")
-            return nil
+            return await resolvePodcastEpisode(song)
         }
 
         // Downloads and queue prefetch can ask for several tracks at once.
@@ -56,6 +39,59 @@ final class SpotifyAudioResolver {
         }
         tail = Task { _ = await task.value }
         return await task.value
+    }
+
+    private enum PodcastCarrier: Sendable {
+        case rss(PodcastAudioMatch)
+        case youtube(SongItem)
+    }
+
+    /// RSS and YouTube race each other; the first playable carrier wins and the
+    /// losing lookup is cancelled. Failures are cached only briefly, so a
+    /// transient miss retries instead of being stuck for the whole session.
+    private func resolvePodcastEpisode(_ song: SongItem) async -> SongItem? {
+        let carrier = await withTaskGroup(of: PodcastCarrier?.self) { group -> PodcastCarrier? in
+            group.addTask {
+                if let match = await PodcastAudioResolver.shared.resolve(for: song) {
+                    return .rss(match)
+                }
+                return nil
+            }
+            group.addTask { @MainActor in
+                if let resolved = await PodcastYouTubeResolver.shared.resolve(for: song) {
+                    return .youtube(resolved)
+                }
+                return nil
+            }
+            for await result in group {
+                if let result {
+                    group.cancelAll()
+                    return result
+                }
+            }
+            return nil
+        }
+
+        switch carrier {
+        case .rss(let match):
+            var resolved = song
+            resolved.videoId = MusicCatalogID(
+                source: .podcast,
+                rawValue: match.audioURL.absoluteString
+            ).storageKey
+            resolved.sourceAttribution = "Podcast RSS · \(match.feedTitle)"
+            if let artwork = match.artworkURL {
+                resolved.thumbnailUrl = artwork.absoluteString
+            }
+            cache[song.videoId] = resolved
+            return resolved
+        case .youtube(let resolved):
+            cache[song.videoId] = resolved
+            return resolved
+        case nil:
+            Log.searchView.error("No podcast audio match for \(song.videoId)")
+            return nil
+        }
     }
 
     private func resolveOne(_ song: SongItem) async -> SongItem? {

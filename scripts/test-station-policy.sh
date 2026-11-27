@@ -10,3 +10,9 @@ swiftc \
   "$ROOT/tests/Radio/StationPolicyChecks.swift" \
   -o "$OUT"
 "$OUT"
+
+swiftc \
+  "$ROOT/Apollo/Radio/StationIntentMix.swift" \
+  "$ROOT/tests/Radio/StationIntentMixChecks.swift" \
+  -o "$OUT.intent"
+"$OUT.intent"

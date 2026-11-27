@@ -18,6 +18,7 @@ actor StationService {
         let popularity: Double
         let group: Group
         var reason: String = ""
+        let intent: StationIntent
     }
 
     private enum Group {
@@ -164,7 +165,8 @@ actor StationService {
                 base: seedTopBase,
                 popularity: popularity(index: index, count: max(snapshot.topTracks.count, 1)),
                 group: .seedTop,
-                reason: "More from \(snapshot.artist.name)"
+                reason: "More from \(snapshot.artist.name)",
+                intent: .familiar
             ))
         }
 
@@ -177,7 +179,8 @@ actor StationService {
                     base: albumBase,
                     popularity: popularity(index: index, count: max(album.songs.count, 1)),
                     group: .album,
-                    reason: "From \(album.title)"
+                    reason: "From \(album.title)",
+                    intent: .deepCuts
                 ))
             }
         }
@@ -195,7 +198,8 @@ actor StationService {
                     base: base,
                     popularity: popularity(index: index, count: max(relatedSnapshot.topTracks.count, 1)),
                     group: .related,
-                    reason: "Similar to \(relatedSnapshot.artist.name)"
+                    reason: "Similar to \(relatedSnapshot.artist.name)",
+                    intent: rank < 2 ? .popular : .discover
                 ))
             }
         }
@@ -222,8 +226,32 @@ actor StationService {
                     song: SpotifyCatalogMapper.song(from: track),
                     base: 0.68,
                     popularity: 0.5,
-                    group: .related,
-                    reason: "\(tag.capitalized) · same genre"
+                    group: .search,
+                    reason: "\(tag.capitalized) · same genre",
+                    intent: .genre
+                ))
+            }
+        }
+
+        // Mood flavours keep the seed's genre so they stay relevant: a salsa
+        // seed gets "salsa romantic" and "salsa party" rather than global hits.
+        let primaryTag = tags.first
+        let moods: [(StationIntent, String)] = [
+            (.romance, primaryTag.map { "\($0) romantic" } ?? "romantic songs"),
+            (.party, primaryTag.map { "\($0) party" } ?? "party songs")
+        ]
+        for (intent, term) in moods {
+            guard let results = try? await SpotifyCatalogProvider().search(term, limit: 10) else {
+                continue
+            }
+            for track in results.tracks.prefix(5) {
+                candidates.append(Candidate(
+                    song: SpotifyCatalogMapper.song(from: track),
+                    base: 0.55,
+                    popularity: 0.45,
+                    group: .search,
+                    reason: intent.rawValue.capitalized,
+                    intent: intent
                 ))
             }
         }
@@ -299,7 +327,7 @@ actor StationService {
         }
 
         var seen = Set<String>()
-        var scored: [(SongItem, Double, String, String, String, RadioFeatureVector, String)] = []
+        var scored: [(SongItem, Double, String, String, String, RadioFeatureVector, String, StationIntent)] = []
 
         for candidate in candidates {
             if !options.allowExplicit, candidate.song.isExplicit == true { continue }
@@ -354,7 +382,7 @@ actor StationService {
             let albumKey = TextMatch.normalizeTitle(candidate.song.album ?? "")
             if !artistKey.isEmpty, session.0.contains(artistKey) { score += 0.12 }
             if !albumKey.isEmpty, session.1.contains(albumKey) { score += 0.05 }
-            scored.append((candidate.song, score, artistKey, albumKey, candidate.reason, features, candidate.group.label))
+            scored.append((candidate.song, score, artistKey, albumKey, candidate.reason, features, candidate.group.label, candidate.intent))
         }
 
         scored.sort { $0.1 > $1.1 }
@@ -370,8 +398,18 @@ actor StationService {
         )
         var result: [SongItem] = []
 
-        for (song, _, artistKey, albumKey, reason, features, source) in scored {
+        // Ranked candidates keep their per-intent order, then the mixer draws
+        // from each flavour at random so the queue never follows a fixed
+        // pattern (familiar → popular → …). Diversity caps still apply.
+        var generator = SystemRandomNumberGenerator()
+        let order = StationIntentMix.order(
+            intents: scored.map { $0.7 },
+            generator: &generator
+        )
+
+        for index in order {
             guard result.count < options.limit else { break }
+            let (song, _, artistKey, albumKey, reason, features, source, _) = scored[index]
             guard diversity.select(artistKey: artistKey, albumKey: albumKey) else { continue }
 
             var stamped = song

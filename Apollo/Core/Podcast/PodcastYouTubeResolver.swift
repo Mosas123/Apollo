@@ -20,18 +20,23 @@ final class PodcastYouTubeResolver {
     private struct Entry {
         let song: SongItem?
         let at: Date
+        let negative: Bool
     }
 
     private var cache: [String: Entry] = [:]
     private let ttl: TimeInterval = 6 * 60 * 60
+    private let negativeTTL: TimeInterval = 5 * 60
 
     func resolve(for song: SongItem) async -> SongItem? {
         guard song.contentKind == .episode || song.videoId.hasPrefix("spotify:episode:") else {
             return nil
         }
         let cacheKey = song.catalogID ?? song.videoId
-        if let entry = cache[cacheKey], Date().timeIntervalSince(entry.at) < ttl {
-            return entry.song
+        if let entry = cache[cacheKey] {
+            let effective = entry.negative ? negativeTTL : ttl
+            if Date().timeIntervalSince(entry.at) < effective {
+                return entry.song
+            }
         }
 
         let show = song.artists.first?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -54,7 +59,7 @@ final class PodcastYouTubeResolver {
         }
 
         guard let best = candidates.max(by: { $0.score < $1.score }), best.score >= 70 else {
-            cache[cacheKey] = Entry(song: nil, at: Date())
+            cache[cacheKey] = Entry(song: nil, at: Date(), negative: true)
             return nil
         }
 
@@ -62,7 +67,7 @@ final class PodcastYouTubeResolver {
         resolved.videoId = best.videoId
         resolved.catalogID = song.catalogID
         resolved.sourceAttribution = "Podcast audio · YouTube"
-        cache[cacheKey] = Entry(song: resolved, at: Date())
+        cache[cacheKey] = Entry(song: resolved, at: Date(), negative: false)
         return resolved
     }
 

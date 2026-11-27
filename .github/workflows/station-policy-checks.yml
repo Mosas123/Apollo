@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - "Apollo/Radio/StationDiversityPolicy.swift"
+      - "Apollo/Radio/StationIntentMix.swift"
       - "Apollo/Radio/StationService.swift"
       - "Apollo/Catalog/MusicBrainz/MusicBrainzTagPolicy.swift"
       - "Apollo/Catalog/MusicBrainz/MusicBrainzClient.swift"
       - "Apollo/Playback/PlaybackEventPolicy.swift"
       - "tests/Radio/StationPolicyChecks.swift"
+      - "tests/Radio/StationIntentMixChecks.swift"
       - "tests/Radio/PlaybackEventPolicyChecks.swift"
       - "scripts/test-station-policy.sh"
       - "scripts/test-playback-events.sh"

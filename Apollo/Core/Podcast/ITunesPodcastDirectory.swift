@@ -14,16 +14,21 @@ actor ITunesPodcastDirectory {
     private struct Entry {
         let feed: PodcastFeedInfo?
         let at: Date
+        let negative: Bool
     }
 
     private var cache: [String: Entry] = [:]
     private let ttl: TimeInterval = 6 * 60 * 60
+    private let negativeTTL: TimeInterval = 5 * 60
 
     func feed(for show: String) async -> PodcastFeedInfo? {
         let key = show.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return nil }
-        if let entry = cache[key], Date().timeIntervalSince(entry.at) < ttl {
-            return entry.feed
+        if let entry = cache[key] {
+            let effective = entry.negative ? negativeTTL : ttl
+            if Date().timeIntervalSince(entry.at) < effective {
+                return entry.feed
+            }
         }
 
         let country = Locale.current.region?.identifier.lowercased() ?? "us"
@@ -37,14 +42,14 @@ actor ITunesPodcastDirectory {
         guard let url = components?.url else { return nil }
 
         var request = URLRequest(url: url)
-        request.timeoutInterval = 12
+        request.timeoutInterval = 8
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               let http = response as? HTTPURLResponse,
               (200..<300).contains(http.statusCode),
               let decoded = try? JSONDecoder().decode(Response.self, from: data) else {
-            cache[key] = Entry(feed: nil, at: Date())
+            cache[key] = Entry(feed: nil, at: Date(), negative: true)
             return nil
         }
 
@@ -73,7 +78,7 @@ actor ITunesPodcastDirectory {
         }
 
         let best = candidates.max { $0.1 < $1.1 }?.0
-        cache[key] = Entry(feed: best, at: Date())
+        cache[key] = Entry(feed: best, at: Date(), negative: best == nil)
         return best
     }
 

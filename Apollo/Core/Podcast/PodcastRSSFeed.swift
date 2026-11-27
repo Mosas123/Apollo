@@ -34,7 +34,7 @@ actor PodcastRSSFeedLoader {
         }
 
         var request = URLRequest(url: feedURL)
-        request.timeoutInterval = 20
+        request.timeoutInterval = 8
         request.setValue(
             "Apollo/0.14.0 (Podcast RSS reader; com.cl0udly.Apollo)",
             forHTTPHeaderField: "User-Agent"

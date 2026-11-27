@@ -18,51 +18,86 @@ actor PodcastAudioResolver {
     private struct Entry {
         let match: PodcastAudioMatch?
         let at: Date
+        let negative: Bool
     }
 
     private var cache: [String: Entry] = [:]
+    private var knownFeeds: [String: URL] = [:]
     private let ttl: TimeInterval = 6 * 60 * 60
+    private let negativeTTL: TimeInterval = 5 * 60
 
-    func resolve(for song: SongItem) async -> PodcastAudioMatch? {
+    /// Lets a caller that already fetched the show (e.g. PodcastDetailView)
+    /// hand us the feed URL so the next episode skips the iTunes directory.
+    func remember(feedURL: URL, for show: String) {
+        let key = show.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        knownFeeds[key] = feedURL
+    }
+
+    func resolve(for song: SongItem, feedURL: URL? = nil) async -> PodcastAudioMatch? {
         guard song.contentKind == .episode || song.videoId.hasPrefix("spotify:episode:") else {
             return nil
         }
         let key = song.catalogID ?? song.videoId
-        if let entry = cache[key], Date().timeIntervalSince(entry.at) < ttl {
-            return entry.match
+        if let entry = cache[key] {
+            let effective = entry.negative ? negativeTTL : ttl
+            if Date().timeIntervalSince(entry.at) < effective {
+                return entry.match
+            }
         }
 
         let showName = song.artists.first?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !showName.isEmpty,
-              let feed = await ITunesPodcastDirectory.shared.feed(for: showName),
-              let feedURL = feed.feedURL,
-              let content = await PodcastRSSFeedLoader.shared.content(for: feedURL) else {
-            cache[key] = Entry(match: nil, at: Date())
+        guard !showName.isEmpty else {
+            cache[key] = Entry(match: nil, at: Date(), negative: true)
+            return nil
+        }
+        let showKey = showName.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let resolvedURL: URL?
+        if let feedURL {
+            resolvedURL = feedURL
+        } else if let known = knownFeeds[showKey] {
+            resolvedURL = known
+        } else if let feed = await ITunesPodcastDirectory.shared.feed(for: showName),
+                  let url = feed.feedURL {
+            knownFeeds[showKey] = url
+            resolvedURL = url
+        } else {
+            cache[key] = Entry(match: nil, at: Date(), negative: true)
+            return nil
+        }
+
+        guard let resolvedURL,
+              let content = await PodcastRSSFeedLoader.shared.content(for: resolvedURL) else {
+            cache[key] = Entry(match: nil, at: Date(), negative: true)
             return nil
         }
 
         guard let episode = bestEpisode(for: song, in: content.episodes) else {
-            cache[key] = Entry(match: nil, at: Date())
+            cache[key] = Entry(match: nil, at: Date(), negative: true)
             return nil
         }
 
         let match = PodcastAudioMatch(
             audioURL: episode.audioURL,
             feedTitle: content.title,
-            feedAuthor: content.author ?? feed.author,
-            feedURL: feedURL,
+            feedAuthor: content.author,
+            feedURL: resolvedURL,
             episodeTitle: episode.title,
             mimeType: episode.mimeType ?? mimeType(for: episode.audioURL),
             artworkURL: ArtworkQuality.resized(content.artworkURL, to: 1200)
         )
-        cache[key] = Entry(match: match, at: Date())
+        cache[key] = Entry(match: match, at: Date(), negative: false)
         return match
     }
 
     func artwork(for show: String) async -> URL? {
         guard let feed = await ITunesPodcastDirectory.shared.feed(for: show),
-              let feedURL = feed.feedURL,
-              let content = await PodcastRSSFeedLoader.shared.content(for: feedURL) else {
+              let feedURL = feed.feedURL else {
+            return nil
+        }
+        remember(feedURL: feedURL, for: show)
+        guard let content = await PodcastRSSFeedLoader.shared.content(for: feedURL) else {
             return nil
         }
         return ArtworkQuality.resized(content.artworkURL, to: 1200)
