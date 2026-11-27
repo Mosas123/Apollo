@@ -45,29 +45,60 @@ enum ArtistImageResolver {
         }
     }
 
+    private static let trustedImageHosts = ["scdn.co", "mzstatic.com", "dzcdn.net"]
+
     static func preferredImageURL(
         name: String,
         youTubeURL: URL?,
         artistID: String? = nil,
         referenceTracks: [String] = []
     ) async -> URL? {
-        // This URL was read from the requested artist's own page. Searching a
-        // different catalogue by name must never replace it with a namesake.
-        if let youTubeURL, ["https", "http"].contains(youTubeURL.scheme?.lowercased() ?? "") {
+        // Images that already come from a catalogue CDN (Spotify, Apple,
+        // Deezer) are authoritative and must not be replaced by a namesake.
+        if let youTubeURL, let host = youTubeURL.host?.lowercased(),
+           trustedImageHosts.contains(where: { host.hasSuffix($0) }) {
             return youTubeURL
         }
+
+        let normalizedName = TextMatch.normalize(name)
+        guard !normalizedName.isEmpty else { return nil }
+
         let tracks = Set(referenceTracks.map(TextMatch.normalizeTitle).filter { !$0.isEmpty })
-        guard !TextMatch.normalize(name).isEmpty, tracks.count >= 2 else { return nil }
-        let key = "verified-v1|\(artistID ?? "")|\(TextMatch.normalize(name))|\(tracks.sorted().joined(separator: "|"))"
+        let key = "spotify-first-v1|\(artistID ?? "")|\(normalizedName)|\(tracks.sorted().joined(separator: "|"))"
         if let cached = await Cache.shared.entry(key) { return cached.url }
-        let resolved = await deezerImage(name: name, referenceTracks: tracks)
-        guard !Task.isCancelled else { return nil }
-        await Cache.shared.store(key, resolved)
-        return resolved
+
+        if let spotify = await spotifyImage(name: name) {
+            guard !Task.isCancelled else { return nil }
+            await Cache.shared.store(key, spotify)
+            return spotify
+        }
+
+        if tracks.count >= 2 {
+            let deezer = await deezerImage(name: name, referenceTracks: tracks)
+            guard !Task.isCancelled else { return nil }
+            await Cache.shared.store(key, deezer)
+            return deezer
+        }
+
+        await Cache.shared.store(key, nil)
+        return nil
     }
 
     static func avatarImageURL(name: String, youTubeURL: URL?, artistID: String? = nil) async -> URL? {
         await preferredImageURL(name: name, youTubeURL: youTubeURL, artistID: artistID)
+    }
+
+    // MARK: - Spotify first
+
+    private static func spotifyImage(name: String) async -> URL? {
+        guard let results = try? await SpotifyCatalogProvider().search(name, limit: 6) else {
+            return nil
+        }
+        let wanted = TextMatch.normalize(name)
+        return results.artists
+            .filter { TextMatch.normalize($0.name) == wanted }
+            .compactMap(\.artworkURL)
+            .first
     }
 
     // MARK: - Verified fallback
