@@ -12,7 +12,7 @@
     {
       "name": "Apollo",
       "bundleIdentifier": "com.cl0udly.Apollo",
-      "developerName": "SwiftyMedia",
+      "developerName": "cl0udly",
       "subtitle": "YouTube Music client for iOS (Apollo)",
       "localizedDescription": "A free and open source YouTube Music client for iOS.\n\n\u2022 No ads\n\u2022 Stream songs and videos from YouTube Music\n\u2022 Background playback with lock screen controls\n\u2022 Equalizer & audio normalization\n\u2022 Video mode\n\u2022 Queue management & listening history\n\u2022 Discord status \u2013 show current song\n\u2022 Last.fm scrobbling\n\u2022 Synced lyrics (Musixmatch, Netease, Kugou, LRCLIB, Genius)\n\u2022 Library sync (playlists, albums, artists, podcasts)\n\u2022 Downloads\n\u2022 Custom app icons\n\nRequires iOS 26 or later and a YouTube Music account.",
       "iconURL": "https://raw.githubusercontent.com/Mosas123/Apollo/main/.github/assets/icon.png",
