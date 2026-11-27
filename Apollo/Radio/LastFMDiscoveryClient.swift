@@ -11,6 +11,11 @@ struct LastFMArtistMatch: Hashable, Sendable {
     let match: Double
 }
 
+struct LastFMTagMatch: Hashable, Sendable {
+    let name: String
+    let count: Int
+}
+
 actor LastFMArtistCache {
     static let shared = LastFMArtistCache()
     private struct Entry { let artists: [LastFMArtistMatch]; let at: Date }
@@ -27,6 +32,25 @@ actor LastFMArtistCache {
 
     func store(_ artists: [LastFMArtistMatch], for key: String) {
         entries[key] = Entry(artists: artists, at: Date())
+    }
+}
+
+actor LastFMTagCache {
+    static let shared = LastFMTagCache()
+    private struct Entry { let tags: [LastFMTagMatch]; let at: Date }
+    private var entries: [String: Entry] = [:]
+    private let ttl: TimeInterval = 24 * 60 * 60
+
+    func tags(for key: String) -> [LastFMTagMatch]? {
+        guard let entry = entries[key], Date().timeIntervalSince(entry.at) < ttl else {
+            entries[key] = nil
+            return nil
+        }
+        return entry.tags
+    }
+
+    func store(_ tags: [LastFMTagMatch], for key: String) {
+        entries[key] = Entry(tags: tags, at: Date())
     }
 }
 
@@ -103,6 +127,51 @@ struct LastFMDiscoveryClient: @unchecked Sendable {
         return matches
     }
 
+    func topTags(artist: String, limit: Int = 8) async -> [LastFMTagMatch] {
+        let apiKey = LastFMDefaults.apiKey
+        guard !apiKey.isEmpty, !artist.isEmpty else { return [] }
+
+        let key = "\(artist.lowercased())|\(limit)"
+        if let cached = await LastFMTagCache.shared.tags(for: key) {
+            return cached
+        }
+
+        var components = URLComponents(string: LastFMDefaults.baseUrl)
+        components?.queryItems = [
+            URLQueryItem(name: "method", value: "artist.getTopTags"),
+            URLQueryItem(name: "artist", value: artist),
+            URLQueryItem(name: "autocorrect", value: "1"),
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "format", value: "json")
+        ]
+        guard let url = components?.url else { return [] }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 12
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        guard let (data, response) = try? await session.data(for: request),
+              let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode),
+              let decoded = try? JSONDecoder().decode(TagResponse.self, from: data) else {
+            return []
+        }
+
+        let tags = (decoded.topTags?.tags ?? []).compactMap { tag -> LastFMTagMatch? in
+            let name = tag.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return nil }
+            let lower = name.lowercased()
+            let ignored = ["seen live", "favorite", "favourites", "spotify", "owned", "albums i own", "under 2000 listeners"]
+            guard !ignored.contains(lower) else { return nil }
+            guard lower != artist.lowercased() else { return nil }
+            return LastFMTagMatch(name: name, count: Int(tag.count ?? "0") ?? 0)
+        }.sorted { $0.count > $1.count }
+
+        let result = Array(tags.prefix(max(1, limit)))
+        await LastFMTagCache.shared.store(result, for: key)
+        return result
+    }
+
     func similarArtists(name: String, limit: Int = 10) async -> [LastFMArtistMatch] {
         let apiKey = LastFMDefaults.apiKey
         guard !apiKey.isEmpty, !name.isEmpty else { return [] }
@@ -144,6 +213,21 @@ struct LastFMDiscoveryClient: @unchecked Sendable {
 
         await LastFMArtistCache.shared.store(matches, for: key)
         return matches
+    }
+
+    private struct TagResponse: Decodable {
+        let topTags: Container?
+        enum CodingKeys: String, CodingKey {
+            case topTags = "toptags"
+        }
+        struct Container: Decodable {
+            let tags: [Tag]
+            enum CodingKeys: String, CodingKey { case tags = "tag" }
+        }
+        struct Tag: Decodable {
+            let name: String
+            let count: String?
+        }
     }
 
     private struct ArtistResponse: Decodable {

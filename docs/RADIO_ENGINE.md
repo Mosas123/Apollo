@@ -149,7 +149,8 @@ con el pipeline actual.
 ### R2 — Más recall
 - [x] Last.fm `track.getSimilar` (solo API key, cache 24 h).
 - [x] `artist.getSimilar` para ampliar artistas relacionados.
-- [ ] Estaciones por mood/tags.
+- [x] Continuidad por género en la estación (tags del artista seed).
+- [ ] Estaciones por mood explícitas.
 - [ ] Co-ocurrencia/editorial.
 - [ ] Local taste y “para ti”.
 
@@ -181,7 +182,8 @@ con el pipeline actual.
 
 ### Pendiente
 - [x] Señales de feedback locales vía TasteProfileStore + DB (event store propio pendiente).
-- [ ] Tags/géneros normalizados por identidad para similitud y mood.
+- [x] Género del seed vía Last.fm `artist.getTopTags`; los tags se buscan en Spotify para continuidad de género.
+- [ ] Mood stations y normalización de tags por identidad.
 - [ ] Co-ocurrencia/editorial y estaciones por mood.
 - [ ] Golden tests automáticos y cobertura de audio por candidato.
 - [ ] Prefetch de la siguiente estación.

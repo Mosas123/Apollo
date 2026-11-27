@@ -200,6 +200,26 @@ actor StationService {
             }
         }
 
+        // Genre continuity: Last.fm tags of the seed artist are searched in
+        // Spotify so a salsa station keeps serving salsa, not just one artist.
+        let seedArtistName = seedSong.artists.first?.name ?? snapshot.artist.name
+        let tags = await lastFM.topTags(artist: seedArtistName, limit: 6)
+        for tag in tags.prefix(2) {
+            let searchTerm = tag.name
+            guard let results = try? await SpotifyCatalogProvider().search(searchTerm, limit: 12) else {
+                continue
+            }
+            for track in results.tracks.prefix(8) {
+                candidates.append(Candidate(
+                    song: SpotifyCatalogMapper.song(from: track),
+                    base: 0.68,
+                    popularity: 0.5,
+                    group: .related,
+                    reason: "\(tag.name.capitalized) · same genre"
+                ))
+            }
+        }
+
         let similarTracks = await lastFM.similarTracks(
             title: seedSong.title,
             artist: seedSong.artists.first?.name ?? "",
