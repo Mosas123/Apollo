@@ -49,12 +49,12 @@ depender de YouTube Music para metadatos y con YouTube únicamente como audio.
 ### Fase 1 — Enriquecedores pequeños
 - [ ] `AppleCatalogClient` (iTunes Search): artwork de alta resolución, género,
       fecha; nunca sustituye artistas de Spotify.
-- [ ] Fotos de artista: **Spotify → Deezer → placeholder**; sin prioridad de
+- [x] Fotos de artista: **Spotify → Deezer → placeholder**; sin prioridad de
       YouTube. (iTunes público no da foto de artista; Apple Music API sí, con
       token de developer.)
 - [ ] Portada de álbum: Apple/iTunes → Spotify → Deezer.
-- [ ] Arreglar podcasts vacíos en Home: revisar shapes `show/episode` del feed y
-      de search; añadir diagnóstico.
+- [x] Podcasts/Audiobooks: si el home feed no trae secciones, se siembran con
+      búsquedas de Spotify (podcasts, true crime, comedy, news, audiobooks…).
 
 ### Fase 2 — Identidad y deduplicación
 - [ ] Clave canónica: ISRC/MBID primero.

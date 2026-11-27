@@ -234,9 +234,54 @@ final class HomeViewModel {
     func loadCategoryFeed(_ category: ContentCategory) async {
         guard category == .podcast || category == .audiobook else { return }
         guard categoryFeeds[category] == nil else { return }
-        // Podcast/audiobook shelves are derived from the same Spotify home
-        // feed until their dedicated providers land.
+
+        // The anonymous Spotify home feed is music-heavy. Seed the podcast
+        // and audiobook tabs with search shelves so they are never empty.
+        let sections = await categorySearchSections(category)
+        if !sections.isEmpty {
+            categoryFeeds[category] = sections
+            return
+        }
+
         categoryFeeds[category] = (homePage?.sections ?? []).filter { $0.category == category }
+    }
+
+    private func categorySearchSections(_ category: ContentCategory) async -> [HomePage.Section] {
+        let seeds: [(title: String, query: String)] = category == .podcast
+            ? [
+                ("Podcasts for you", "podcasts"),
+                ("True crime", "true crime podcast"),
+                ("Comedy", "comedy podcast"),
+                ("News", "news podcast")
+            ]
+            : [
+                ("Audiobooks", "audiobooks"),
+                ("Fiction", "fiction audiobook"),
+                ("Biographies", "biography audiobook")
+            ]
+
+        var sections: [HomePage.Section] = []
+        var seen = Set<String>()
+
+        for seed in seeds {
+            guard let results = try? await SpotifyCatalogProvider().search(seed.query, limit: 20) else {
+                continue
+            }
+
+            var items: [YTItem]
+            if category == .podcast {
+                items = results.podcasts.map { .podcast(SpotifyCatalogMapper.podcast(from: $0)) }
+                    + results.episodes.map { .episode(SpotifyCatalogMapper.episode(from: $0)) }
+            } else {
+                items = results.audiobooks.map { .album(SpotifyCatalogMapper.audiobook(from: $0)) }
+            }
+
+            items = items.filter { seen.insert($0.id).inserted }
+            guard !items.isEmpty else { continue }
+            sections.append(HomePage.Section(title: seed.title, items: items))
+        }
+
+        return sections
     }
 
     private func chipMatches(_ title: String, _ category: ContentCategory) -> Bool {
