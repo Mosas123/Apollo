@@ -13,6 +13,21 @@ struct CatalogEnrichment: Sendable {
     var mbid: String?
 }
 
+extension CatalogEnrichment {
+    func merged(with other: CatalogEnrichment) -> CatalogEnrichment {
+        CatalogEnrichment(
+            artworkURL: artworkURL ?? other.artworkURL,
+            artworkSource: artworkURL != nil ? artworkSource : other.artworkSource,
+            genre: genre ?? other.genre,
+            genreSource: genre != nil ? genreSource : other.genreSource,
+            releaseDate: releaseDate ?? other.releaseDate,
+            releaseDateSource: releaseDate != nil ? releaseDateSource : other.releaseDateSource,
+            isrc: isrc ?? other.isrc,
+            mbid: mbid ?? other.mbid
+        )
+    }
+}
+
 extension CatalogTrack {
     func applying(_ enrichment: CatalogEnrichment) -> CatalogTrack {
         CatalogTrack(

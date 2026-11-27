@@ -2,7 +2,7 @@ import Foundation
 
 /// A provider-independent catalogue object. Playback never uses these ids
 /// directly: an audio provider resolves them to a stream later.
-enum CatalogSource: String, Codable, Sendable {
+enum CatalogSource: String, Codable, Hashable, Sendable {
     case spotify
     case youtube
     case addon

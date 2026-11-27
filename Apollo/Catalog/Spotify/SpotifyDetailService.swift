@@ -17,7 +17,36 @@ final class SpotifyDetailService {
 
     func albumDetail(id: String) async throws -> AlbumDetailInfo {
         let data = try await client.album(id: id)
-        return try Self.parseAlbum(data, requestedID: id)
+        var detail = try Self.parseAlbum(data, requestedID: id)
+
+        // Apple/iTunes only fills fields that Spotify did not provide.
+        if detail.thumbnailUrl == nil || detail.year == nil {
+            let artists = detail.artists.map {
+                CatalogArtist(
+                    id: $0.id ?? $0.name,
+                    name: $0.name,
+                    artworkURL: nil
+                )
+            }
+            let album = CatalogAlbum(
+                id: id,
+                source: .spotify,
+                title: detail.title,
+                artists: artists,
+                releaseDate: detail.year.map { String($0) },
+                artworkURL: detail.thumbnailUrl.flatMap(URL.init(string:)),
+                externalURL: URL(string: "https://open.spotify.com/album/\(id)")
+            )
+            let enrichment = await CatalogEnricher().enrich(album)
+            if detail.thumbnailUrl == nil, let artwork = enrichment.artworkURL {
+                detail.thumbnailUrl = artwork.absoluteString
+            }
+            if detail.year == nil, let date = enrichment.releaseDate, let year = Int(date.prefix(4)) {
+                detail.year = year
+            }
+        }
+
+        return detail
     }
 
     private static func parseAlbum(_ data: Data, requestedID: String) throws -> AlbumDetailInfo {
