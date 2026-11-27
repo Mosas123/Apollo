@@ -1,4 +1,4 @@
-# Trop Library Import & Merge — Stage 1
+# Apollo Library Import & Merge — Stage 1
 
 ## Goal
 
@@ -7,7 +7,7 @@ songs, playlists, podcasts and episodes originating in multiple services,
 without deleting local edits, duplicating content or confusing accounts.
 This is **not** a way to copy third-party audio binaries.
 
-## What Trop already does
+## What Apollo already does
 
 - Authenticated YouTube Music integration uses InnerTube cookies.
 - SyncBridge / LibrarySyncService cover artists, saved albums, liked
@@ -57,7 +57,7 @@ unrelated local state or another provider's data.
 
 Per-source provenance is preserved. Matching does not replace local names,
 likes, offline files, podcast progress, playlist ordering, or metadata
-edited inside Trop.
+edited inside Apollo.
 
 ### Account safety
 

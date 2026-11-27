@@ -1,4 +1,4 @@
-# Trop Music Addons — Foundation v1 (Draft)
+# Apollo Music Addons — Foundation v1 (Draft)
 
 The goal is a **music-only** addon ecosystem inspired by the flexibility of
 Nuvio's addons, with a deliberately small, verifiable, declarative protocol.

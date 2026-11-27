@@ -4,8 +4,8 @@ cd "$(dirname "$0")/.."
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 swiftc -swift-version 6 \
-  Trop/Core/MusicSources/MusicCatalog.swift \
-  Trop/Core/MusicSources/QobuzClient.swift \
+  Apollo/Core/MusicSources/MusicCatalog.swift \
+  Apollo/Core/MusicSources/QobuzClient.swift \
   tests/MusicSources/QobuzClientChecks.swift \
   -o "$tmp_dir/qobuz-client-checks"
 "$tmp_dir/qobuz-client-checks"

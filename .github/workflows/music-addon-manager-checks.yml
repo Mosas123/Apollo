@@ -3,9 +3,9 @@ name: Music Addon Manager Checks
 on:
   pull_request:
     paths:
-      - "Trop/Core/MusicAddons/**"
-      - "Trop/Settings/MusicAddonsSettingsView.swift"
-      - "Trop/Settings/IntegrationsSettingsView.swift"
+      - "Apollo/Core/MusicAddons/**"
+      - "Apollo/Settings/MusicAddonsSettingsView.swift"
+      - "Apollo/Settings/IntegrationsSettingsView.swift"
       - "tests/MusicAddons/MusicAddonManagerChecks.swift"
       - "scripts/test-music-addon-manager.sh"
       - ".github/workflows/music-addon-manager-checks.yml"

@@ -3,7 +3,7 @@ name: Music Sync & Import Replay Checks
 on:
   pull_request:
     paths:
-      - "Trop/Core/LibrarySync/**"
+      - "Apollo/Core/LibrarySync/**"
       - "tests/LibrarySync/MusicSyncPlannerChecks.swift"
       - "scripts/test-music-sync.sh"
       - ".github/workflows/music-sync-checks.yml"

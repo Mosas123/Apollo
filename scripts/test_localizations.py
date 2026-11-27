@@ -35,13 +35,13 @@ class LocalizationTests(unittest.TestCase):
 
     def test_generated_resources_are_current(self):
         for locale, values in self.catalogs.items():
-            path = ROOT / 'Trop' / 'Resources' / f'{locale}.lproj' / 'Localizable.strings'
+            path = ROOT / 'Apollo' / 'Resources' / f'{locale}.lproj' / 'Localizable.strings'
             with self.subTest(locale=locale):
                 self.assertEqual(path.read_text(), generator.render_strings(values))
 
     def test_plural_resources(self):
         for locale in LOCALES:
-            path = ROOT / 'Trop' / 'Resources' / f'{locale}.lproj' / 'Localizable.stringsdict'
+            path = ROOT / 'Apollo' / 'Resources' / f'{locale}.lproj' / 'Localizable.stringsdict'
             entries = plistlib.loads(path.read_bytes())
             for key in ('songs.count', 'offline_tracks.count', 'episodes.count'):
                 with self.subTest(locale=locale, key=key):
@@ -59,7 +59,7 @@ class LocalizationTests(unittest.TestCase):
                         self.assertEqual(generator.format_arguments(text), generator.format_arguments('%ld'))
 
     def test_declared_languages(self):
-        project = (ROOT / 'Trop.xcodeproj' / 'project.pbxproj').read_text()
+        project = (ROOT / 'Apollo.xcodeproj' / 'project.pbxproj').read_text()
         regions = re.search(r'knownRegions = \((.*?)\);', project, re.S).group(1)
         for locale in LOCALES:
             self.assertIn(locale, [item.strip().strip(chr(34)) for item in regions.split(',')])
@@ -80,7 +80,7 @@ class LocalizationTests(unittest.TestCase):
             r'|String\(localized:\s*(' + sequence + r')'
             r'|AppStrings\.format\(\s*(' + sequence + r')'
         )
-        for path in (ROOT / 'Trop').rglob('*.swift'):
+        for path in (ROOT / 'Apollo').rglob('*.swift'):
             for match in pattern.finditer(path.read_text()):
                 raw = next(group for group in match.groups() if group is not None)
                 # Interpolation and fetched content require a context-aware audit.

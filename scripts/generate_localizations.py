@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 LANGUAGES_DIR = ROOT / "languages"
-OUTPUT_DIR = ROOT / "Trop" / "Resources"
+OUTPUT_DIR = ROOT / "Apollo" / "Resources"
 LOCALE_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 FORMAT_PATTERN = re.compile(
     r"%(?:(\d+)\$)?[-+ #0]*(?:\d+|\*)?(?:\.(?:\d+|\*))?"

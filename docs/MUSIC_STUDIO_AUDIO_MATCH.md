@@ -2,7 +2,7 @@
 
 ## Reported symptom
 
-While playing a song such as Bad Bunny's "Moscow Mule", Thrum may
+While playing a song such as Bad Bunny's "Moscow Mule", Apollo may
 use the audio from the related music video rather than the album's
 standalone recording. This is a source/recording identity problem, **not**
 evidence that Apolo is decoding a video file incorrectly. The example

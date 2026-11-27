@@ -1,6 +1,6 @@
-# Auditoría de Trop (base "Thrum") — bugs, mejoras y plan Swift 6
+# Auditoría de Apollo (base "Apollo") — bugs, mejoras y plan Swift 6
 
-Fecha: 15-nov. Alcance: los 169 ficheros Swift de `/root/work/Trop`.
+Fecha: 15-nov. Alcance: los 169 ficheros Swift de `/root/work/Apollo`.
 Veredicto global: código **limpio y bien estructurado** (sin TODOs, sin `print` sueltos, casi sin force-unwraps). Los problemas reales se concentran en **concurrencia** (PlayerController con mpv) y en **detalles de BD/estado**. Abajo, por severidad.
 
 ## A. Bugs que causan fallos o datos incorrectos
@@ -10,7 +10,7 @@ Veredicto global: código **limpio y bien estructurado** (sin TODOs, sin `print`
 2. **`PlaybackManager.swift:76/200`** — `resolveAndPlay` y `resolve` comparten clave de resolución (`videoId`). El `preloadNextTrack` (`NowPlaying.swift:540`) puede pisar la tarea de `resolveAndPlay` y **saltarse el `play()`**, o resolver puede disparar reproducción como efecto colateral.
 3. **`DatabaseService.fetchForgottenFavorites`** (`:257-268`) — compara `event.timestamp` (GRDB guarda `Date` como `yyyy-MM-dd HH:mm:ss.SSS`) contra un string `ISO8601DateFormatter`. El formato no coincide → el `NOT IN` falla → devuelve **todas** las canciones con like como "olvidadas".
 4. **`SettingsStore.defaultTab`** (`:403-405`) — la migración (`storedTab == 2 ? 3`) corre en **cada arranque**, no una vez: si eliges Explore (índice 2) como pestaña por defecto, al siguiente lanzamiento te lo convierte en 3.
-5. **`TropApp.observePlaybackSettings`** (`:29-43`) — `withObservationTracking` es de un solo disparo; `onChange` no vuelve a llamar `register()`, así que el EQ/normalización/gapless solo se aplica una vez tras el arranque.
+5. **`ApolloApp.observePlaybackSettings`** (`:29-43`) — `withObservationTracking` es de un solo disparo; `onChange` no vuelve a llamar `register()`, así que el EQ/normalización/gapless solo se aplica una vez tras el arranque.
 6. **`PlaybackQueue.swift:80`** — `Dictionary(uniqueKeysWithValues:)` **crash** si hay el mismo `videoId` dos veces en la cola. `QueueView.swift:69` usa `id: \.videoId` → IDs duplicados en SwiftUI (indefinido). `NowPlaying.swift:161` accede a `queueSongs[queueIndex]` sin comprobar límites.
 7. **`DatabaseMigrations.swift:222-224`** — v7 escribe `downloaded_at` con ISO8601, que GRDB no puede leer de vuelta → filas recuperadas fallan al fetch.
 

@@ -3,12 +3,12 @@ name: Studio Audio Matching Checks
 on:
   pull_request:
     paths:
-      - "Trop/Core/Metadata/MusicRecordingSelectionPolicy.swift"
-      - "Trop/Core/Metadata/TextMatch.swift"
-      - "Trop/Audio/PlaybackManager.swift"
-      - "Trop/Networking/Models/YTItem.swift"
-      - "Trop/Search/SearchParser.swift"
-      - "Trop/SponsorBlock/SponsorBlockIntegration.swift"
+      - "Apollo/Core/Metadata/MusicRecordingSelectionPolicy.swift"
+      - "Apollo/Core/Metadata/TextMatch.swift"
+      - "Apollo/Audio/PlaybackManager.swift"
+      - "Apollo/Networking/Models/YTItem.swift"
+      - "Apollo/Search/SearchParser.swift"
+      - "Apollo/SponsorBlock/SponsorBlockIntegration.swift"
       - "tests/Playback/StudioAudioMatchChecks.swift"
       - ".github/workflows/studio-audio-matching-checks.yml"
 
@@ -21,8 +21,8 @@ jobs:
         run: |
           set -euo pipefail
           swiftc \
-            Trop/Core/Metadata/TextMatch.swift \
-            Trop/Core/Metadata/MusicRecordingSelectionPolicy.swift \
+            Apollo/Core/Metadata/TextMatch.swift \
+            Apollo/Core/Metadata/MusicRecordingSelectionPolicy.swift \
             tests/Playback/StudioAudioMatchChecks.swift \
             -o "$RUNNER_TEMP/studio-audio-match-checks"
           "$RUNNER_TEMP/studio-audio-match-checks"

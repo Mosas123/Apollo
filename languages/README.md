@@ -1,4 +1,4 @@
-# Thrum translations
+# Apollo translations
 
 The app declares English (`en`), Spanish (`es`), French (`fr`), Brazilian
 Portuguese (`pt-BR`) and Chinese (`zh`, simplified characters). iOS chooses among them using the user's app language settings.
@@ -11,7 +11,7 @@ python3 scripts/generate_localizations.py
 python3 scripts/test_localizations.py
 ```
 
-`Trop/Resources/*/Localizable.strings` are generated. Do not edit them directly.
+`Apollo/Resources/*/Localizable.strings` are generated. Do not edit them directly.
 Counted labels use `Localizable.stringsdict` in each language directory. Keep
 those plural rules in sync with `AppStrings.swift` and the JSON fallback text.
 The checks do not compile or launch the app.

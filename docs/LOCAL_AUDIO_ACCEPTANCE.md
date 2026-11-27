@@ -1,4 +1,4 @@
-# Local audio in Thrum — offline playback beta
+# Local audio in Apollo — offline playback beta
 
 ## Confirmed implementation gaps
 
@@ -18,7 +18,7 @@ native AVPlayer was attempted.
 ## Changes in this stack
 
 - Import local audio using **Downloads → Import Audio**. Select files from
-  iOS Files; Thrum copies supported audio files into its own Downloads
+  iOS Files; Apollo copies supported audio files into its own Downloads
   folder under a unique `local:<UUID>` identity, stores a database row
   and closes any external security-scoped access. Files need not remain
   available in the original app, iCloud or file provider.
@@ -43,7 +43,7 @@ native AVPlayer was attempted.
    Downloads. Verify audible sound, progression and pause/resume.
 2. Test in **Airplane Mode**. No streaming fallback or network request
    should be required for a valid imported file.
-3. Force-quit and reopen Thrum, visit Downloads and repeat playback.
+3. Force-quit and reopen Apollo, visit Downloads and repeat playback.
    All three files must still appear.
 4. Try next/previous and rapid song selection, then an imported track
    from a mixed queue. The old track must not take over late.

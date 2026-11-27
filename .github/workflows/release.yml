@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: trop-release
+  group: apollo-release
   cancel-in-progress: false
 
 env:
@@ -44,7 +44,7 @@ jobs:
           import re
           from pathlib import Path
 
-          contents = Path("Trop.xcodeproj/project.pbxproj").read_text()
+          contents = Path("Apollo.xcodeproj/project.pbxproj").read_text()
           versions = re.findall(
               r"MARKETING_VERSION = ([0-9]+\.[0-9]+\.[0-9]+);",
               contents,
@@ -101,9 +101,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/DerivedDataApp
-          key: trop-dd-${{ runner.os }}-${{ hashFiles('Trop.xcodeproj/**', '**/Package.resolved', 'Trop/**/*.swift') }}
+          key: apollo-dd-${{ runner.os }}-${{ hashFiles('Apollo.xcodeproj/**', '**/Package.resolved', 'Apollo/**/*.swift') }}
           restore-keys: |
-            trop-dd-${{ runner.os }}-
+            apollo-dd-${{ runner.os }}-
 
       - name: Make build script executable
         run: chmod +x ./build_ipa.sh
@@ -128,7 +128,7 @@ jobs:
           import re
           from pathlib import Path
 
-          path = Path("Trop.xcodeproj/project.pbxproj")
+          path = Path("Apollo.xcodeproj/project.pbxproj")
           contents = path.read_text()
           old = f"MARKETING_VERSION = {os.environ['OLD_VERSION']};"
           new = f"MARKETING_VERSION = {os.environ['VERSION']};"
@@ -142,7 +142,7 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Trop.xcodeproj/project.pbxproj
+          git add Apollo.xcodeproj/project.pbxproj
           if git diff --cached --quiet; then
             echo "Project version already matches v${VERSION}"
             exit 0
@@ -181,7 +181,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          gh release create "v${VERSION}" build/Trop.ipa \
+          gh release create "v${VERSION}" build/Apollo.ipa \
             --title "v${VERSION}" \
             --notes-file release-notes.md
 
@@ -192,10 +192,10 @@ jobs:
           BUILD_NUMBER: ${{ github.run_number }}
         run: |
           set -euo pipefail
-          IPA_PATH="build/Trop.ipa"
+          IPA_PATH="build/Apollo.ipa"
           export SIZE="$(stat -f%z "$IPA_PATH")"
           export DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          export DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/Trop.ipa"
+          export DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/Apollo.ipa"
           export RELEASE_NOTES="$(cat release-notes.md)"
 
           python3 - <<'PY'

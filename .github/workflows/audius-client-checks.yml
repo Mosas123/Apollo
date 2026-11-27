@@ -3,7 +3,7 @@ name: Audius Client Checks
 on:
   pull_request:
     paths:
-      - "Trop/Core/MusicSources/**"
+      - "Apollo/Core/MusicSources/**"
       - "tests/MusicSources/**"
       - "scripts/test-audius-client.sh"
       - ".github/workflows/audius-client-checks.yml"

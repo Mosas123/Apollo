@@ -3,16 +3,16 @@ name: Consolidated Music and Download Checks
 on:
   pull_request:
     paths:
-      - "Trop/Core/Metadata/TextMatch.swift"
-      - "Trop/Core/Metadata/MusicRecordingSelectionPolicy.swift"
-      - "Trop/Services/OfflineAudioFormatPolicy.swift"
-      - "Trop/Services/DownloadManager.swift"
-      - "Trop/Audio/PlayerController/PlayerController.swift"
-      - "Trop/Audio/PlayerController/ApoloFiniteAudioWatchdog.swift"
-      - "Trop/Audio/PlayerController/ApoloLiveRadioWatchdog.swift"
-      - "Trop/Audio/PlayerController/AudioRouteChangePolicy.swift"
-      - "Trop/Audio/PlayerController/LiveRadioDuplicateRequestPolicy.swift"
-      - "Trop/Features/Radio/RadioView.swift"
+      - "Apollo/Core/Metadata/TextMatch.swift"
+      - "Apollo/Core/Metadata/MusicRecordingSelectionPolicy.swift"
+      - "Apollo/Services/OfflineAudioFormatPolicy.swift"
+      - "Apollo/Services/DownloadManager.swift"
+      - "Apollo/Audio/PlayerController/PlayerController.swift"
+      - "Apollo/Audio/PlayerController/ApoloFiniteAudioWatchdog.swift"
+      - "Apollo/Audio/PlayerController/ApoloLiveRadioWatchdog.swift"
+      - "Apollo/Audio/PlayerController/AudioRouteChangePolicy.swift"
+      - "Apollo/Audio/PlayerController/LiveRadioDuplicateRequestPolicy.swift"
+      - "Apollo/Features/Radio/RadioView.swift"
       - "tests/Playback/ConsolidatedAudioChecks.swift"
       - "tests/Playback/ApoloInterruptionWatchdogChecks.swift"
       - "tests/Playback/LiveRadioDuplicateRequestChecks.swift"
@@ -28,9 +28,9 @@ jobs:
         run: |
           set -euo pipefail
           swiftc \
-            Trop/Core/Metadata/TextMatch.swift \
-            Trop/Core/Metadata/MusicRecordingSelectionPolicy.swift \
-            Trop/Services/OfflineAudioFormatPolicy.swift \
+            Apollo/Core/Metadata/TextMatch.swift \
+            Apollo/Core/Metadata/MusicRecordingSelectionPolicy.swift \
+            Apollo/Services/OfflineAudioFormatPolicy.swift \
             tests/Playback/ConsolidatedAudioChecks.swift \
             -o "$RUNNER_TEMP/consolidated-audio-checks"
           "$RUNNER_TEMP/consolidated-audio-checks"
@@ -38,8 +38,8 @@ jobs:
         run: |
           set -euo pipefail
           swiftc \
-            Trop/Audio/PlayerController/ApoloFiniteAudioWatchdog.swift \
-            Trop/Audio/PlayerController/ApoloLiveRadioWatchdog.swift \
+            Apollo/Audio/PlayerController/ApoloFiniteAudioWatchdog.swift \
+            Apollo/Audio/PlayerController/ApoloLiveRadioWatchdog.swift \
             tests/Playback/ApoloInterruptionWatchdogChecks.swift \
             -o "$RUNNER_TEMP/apolo-interruption-watchdog-checks"
           "$RUNNER_TEMP/apolo-interruption-watchdog-checks"
@@ -48,7 +48,7 @@ jobs:
         run: |
           set -euo pipefail
           swiftc \
-            Trop/Audio/PlayerController/LiveRadioDuplicateRequestPolicy.swift \
+            Apollo/Audio/PlayerController/LiveRadioDuplicateRequestPolicy.swift \
             tests/Playback/LiveRadioDuplicateRequestChecks.swift \
             -o "$RUNNER_TEMP/live-radio-duplicate-request-checks"
           "$RUNNER_TEMP/live-radio-duplicate-request-checks"
@@ -57,7 +57,7 @@ jobs:
         run: |
           set -euo pipefail
           swiftc \
-            Trop/Audio/PlayerController/AudioRouteChangePolicy.swift \
+            Apollo/Audio/PlayerController/AudioRouteChangePolicy.swift \
             tests/Playback/AudioRouteChangeChecks.swift \
             -o "$RUNNER_TEMP/audio-route-change-checks"
           "$RUNNER_TEMP/audio-route-change-checks"

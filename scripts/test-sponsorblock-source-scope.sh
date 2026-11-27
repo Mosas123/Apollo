@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 temp_dir="$(mktemp -d)"
 trap 'rm -rf "$temp_dir"' EXIT
 swiftc -swift-version 6 -strict-concurrency=complete \
-  Trop/SponsorBlock/SponsorBlockSkipPolicy.swift \
+  Apollo/SponsorBlock/SponsorBlockSkipPolicy.swift \
   tests/SponsorBlock/SponsorBlockSourceScopeChecks.swift \
   -o "$temp_dir/sponsorblock-source-checks"
 "$temp_dir/sponsorblock-source-checks"
@@ -13,9 +13,9 @@ swiftc -swift-version 6 -strict-concurrency=complete \
 # does NOT certify the source as YouTube. Both gate and intro bypass matter.
 python3 - <<'PY'
 from pathlib import Path
-integration=Path("Trop/SponsorBlock/SponsorBlockIntegration.swift").read_text()
-manager=Path("Trop/Audio/PlaybackManager.swift").read_text()
-policy=Path("Trop/SponsorBlock/SponsorBlockSkipPolicy.swift").read_text()
+integration=Path("Apollo/SponsorBlock/SponsorBlockIntegration.swift").read_text()
+manager=Path("Apollo/Audio/PlaybackManager.swift").read_text()
+policy=Path("Apollo/SponsorBlock/SponsorBlockSkipPolicy.swift").read_text()
 assert "SponsorBlockSkipPolicy.allowsSource(clientName: source.clientName)" in integration
 assert "bypassSponsorBlock: externalSource" in manager
 assert "SponsorBlockSkipPolicy.allowsSource(clientName: audioResult.clientName)" in manager

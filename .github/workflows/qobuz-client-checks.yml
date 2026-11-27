@@ -3,7 +3,7 @@ name: Qobuz Client Checks
 on:
   pull_request:
     paths:
-      - "Trop/Core/MusicSources/**"
+      - "Apollo/Core/MusicSources/**"
       - "tests/MusicSources/QobuzClientChecks.swift"
       - "scripts/test-qobuz-client.sh"
       - ".github/workflows/qobuz-client-checks.yml"

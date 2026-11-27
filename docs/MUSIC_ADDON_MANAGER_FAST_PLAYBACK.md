@@ -1,4 +1,4 @@
-# Trop Music Addons — Manager UI & Fast Playback Design (Draft)
+# Apollo Music Addons — Manager UI & Fast Playback Design (Draft)
 
 ## Objective
 
@@ -38,10 +38,10 @@ Settings → Integrations → Music Addons:
   with a specific compatibility explanation, not a generic JSON failure.
   This includes Flix-Music (https://flix-music.vercel.app/manifest.json),
   which advertises Stremio `catalog/meta/stream` resources and a `movie`
-  content type for its Last.fm-based music catalogs. Trop currently accepts
+  content type for its Last.fm-based music catalogs. Apollo currently accepts
   only its own v1 declarative manifest format. Stremio compatibility needs
   a dedicated protocol adapter and a source/rights review; silently mapping
-  Stremio endpoints to Trop's schema would create unusable addons.
+  Stremio endpoints to Apollo's schema would create unusable addons.
 
 ## Manifest fetch restrictions
 

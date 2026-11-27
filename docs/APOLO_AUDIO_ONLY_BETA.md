@@ -1,8 +1,8 @@
-# Thrum Beta 0.1 — audio-only Apolo integration
+# Apollo Beta 0.1 — audio-only Apolo integration
 
 ## Scope
 
-The first beta tests ApoloEngine for **music playback only**. It does not add or migrate video rendering, video-only URLs, DASH/EDL pairing, radio or downloads. Thrum keeps ownership of queue, metadata, remote commands, the shared audio session and app lifecycle.
+The first beta tests ApoloEngine for **music playback only**. It does not add or migrate video rendering, video-only URLs, DASH/EDL pairing, radio or downloads. Apollo keeps ownership of queue, metadata, remote commands, the shared audio session and app lifecycle.
 
 ## PR 1 — Link smoke test (this draft)
 
@@ -22,16 +22,16 @@ The first beta tests ApoloEngine for **music playback only**. It does not add or
 
 ## Exit criteria
 
-Build + link succeeds, audio-only routing works with one owner of system controls, music playback survives background/lock, and no critical regressions in current Thrum features. This PR **alone is not a runnable Apolo beta**: it is the safe package-integration checkpoint.
+Build + link succeeds, audio-only routing works with one owner of system controls, music playback survives background/lock, and no critical regressions in current Apollo features. This PR **alone is not a runnable Apolo beta**: it is the safe package-integration checkpoint.
 
 ## PR 2 — Real playback (stacked draft)
 
 - Turn on **Player → Experimental Playback → ApoloEngine Beta (Music Only)**. The preference applies to the next song.
-- `PlayerController` sends music URLs to ApoloEngine, stops mpv before starting Apolo, and keeps Thrum in charge of queue, metadata, screen-lock commands, history and UI.
+- `PlayerController` sends music URLs to ApoloEngine, stops mpv before starting Apolo, and keeps Apollo in charge of queue, metadata, screen-lock commands, history and UI.
 - Pause, resume, seek, volume, elapsed time, duration and automatic next song are routed through the active audio engine.
 - Playback errors and a 20-second stalled-loading watchdog trigger mpv fallback; old async operations use a generation check.
 - Video mode is disabled while the beta toggle is on. Radio/podcasts stay on mpv for now. Downloads are unchanged.
-- Apolo's five-band EQ is **not** equivalent to Thrum's ten-band presets, and EQ is intentionally not migrated in this beta.
+- Apolo's five-band EQ is **not** equivalent to Apollo's ten-band presets, and EQ is intentionally not migrated in this beta.
 
 ### Manual acceptance check (required on iPhone)
 
@@ -43,13 +43,13 @@ Build + link succeeds, audio-only routing works with one owner of system control
 
 ### CI caveat
 
-Trop's SwiftLint job reports pre-existing serious violations in other files; review the diff separately and avoid weakening lint globally. The iOS IPA build is the first compilation gate; success is not a guarantee of runtime playback.
+Apollo's SwiftLint job reports pre-existing serious violations in other files; review the diff separately and avoid weakening lint globally. The iOS IPA build is the first compilation gate; success is not a guarantee of runtime playback.
 
 
 ## IPA experiment — Live Radio (PR 3, opt-in)
 
 This stacked draft integrates the already-tested `ApoloEngine` live radio
-transport in Thrum, pinned to `a4b81bb8a8c85dd68f8d2f67e3e8fe0026fbdf94`
+transport in Apollo, pinned to `a4b81bb8a8c85dd68f8d2f67e3e8fe0026fbdf94`
 (Apolo v8 physical-device crash-containment draft, stacked on v7). Radio no longer uses the
 finite-music `load` API: the app's adapter calls `loadLive`.
 
@@ -83,7 +83,7 @@ finite-music `load` API: the app's adapter calls `loadLive`.
   explicit security decision, not a reason to silently relax all app traffic.
 - The Apolo/MPVKit fallback is one-way per selection; no automatic switch
   back to Apolo until a new station is selected.
-- iOS CI produces an **unsigned** `Trop.ipa` artifact, not an already
+- iOS CI produces an **unsigned** `Apollo.ipa` artifact, not an already
   provisioned or App Store-signed build. Sideloading requires signing it
   with the user's own chosen installation tool.
 - Simulator compile and unit tests are not proof of real-device memory,
@@ -93,7 +93,7 @@ finite-music `load` API: the app's adapter calls `loadLive`.
 ### Build route
 
 The existing GitHub Actions **Nightly Build** workflow runs on pull requests
-and executes `build_ipa.sh`, uploading `Trop-iOS` with `Trop.ipa` if
+and executes `build_ipa.sh`, uploading `Apollo-iOS` with `Apollo.ipa` if
 the device build succeeds. No main/nightly release is modified by this draft.
 
 
@@ -113,7 +113,7 @@ still work. Treat this as crash containment, not proven root-cause resolution.
 The full player now displays `Connecting…`, `LIVE`, `Reconnecting…`
 or `Paused` rather than fake `0:00 / -0:00` progress. The mini-player
 shows the same connection status; neither player presents a radio seek
-slider. Radio EOF/error cannot advance Thrum's music queue.
+slider. Radio EOF/error cannot advance Apollo's music queue.
 
 **Retest on iPhone:** select the same station that previously caused
 the crash, run at least 5 minutes, switch stations 20–30 times, then

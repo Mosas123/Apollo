@@ -1,10 +1,10 @@
-# Thrum beta: UI/audio stabilization + independent Apolo Podcasts
+# Apollo beta: UI/audio stabilization + independent Apolo Podcasts
 
 **Status:** Draft, requires GitHub Actions and physical-iPhone acceptance.
 **Base:** stacked on PR #16. We manually integrated the two files from
 `main` commit `bb4e00a8` (FFmpeg session-token ownership and duration-cache
 cleanup) before continuing. Never overwrite these with a previous branch.
-The consolidation is one Thrum PR; the main branch is unchanged.
+The consolidation is one Apollo PR; the main branch is unchanged.
 
 ## User-reported regressions and scope
 
@@ -15,7 +15,7 @@ The consolidation is one Thrum PR; the main branch is unchanged.
 | 3 | Lyrics screen empty when no provider | Loading / unavailable / failed states and retry; preserve layout | No lyrics, offline error, successful lyrics |
 | 4 | Atmos selected, download tries an E-AC3 source as FLAC | Audio download preference ignores Atmos playback toggle; require true Lossless + FLAC codec for FLAC muxer | Download while Atmos playback preference is on: FLAC/AAC, not mislabeled Atmos |
 | 5 | Niagara Falls vocal resolved from Instrumentals album | Version-sensitive title/album matching and cache keys, plus unnormalized album edition comparisons in ATV matcher | Vocal vs instrumental both directions, same-duration, missing metadata |
-| 6 | Tiny silence at track boundary despite metadata prefetch | **Still open**. Current prefetch warms URLs and metadata, not a queued decoded source in Apolo. Do not falsely claim gapless | Needs Apolo/Thrum queue ownership design and iPhone waveform/timestamps |
+| 6 | Tiny silence at track boundary despite metadata prefetch | **Still open**. Current prefetch warms URLs and metadata, not a queued decoded source in Apolo. Do not falsely claim gapless | Needs Apolo/Apollo queue ownership design and iPhone waveform/timestamps |
 | 7 | Quick Picks / album cover replaced twice by wrong cover | Keep selected artwork as trusted source, resize same URL rather than substituting a cross-catalogue or video cover | Raindrops (Insane), Volver a Nacer, album switch, lockscreen |
 | P | Podcasts need independent Apolo route | Music / Podcast / Live Radio switches; podcast finite audio bypasses music add-ons and ATV matching; resume tied to generation and actual source load | Streamed and downloaded episode, resume, 15/30s seek, AirPods, background, fallback |
 
@@ -59,20 +59,20 @@ playback generation and consumed during PlayerController's source load;
 the previous loop waiting for `currentVideoId` incorrectly assumed ID
 publication meant the audio was ready.
 
-MPVKit remains the fallback. Thrum still owns AVAudioSession,
+MPVKit remains the fallback. Apollo still owns AVAudioSession,
 MPRemoteCommandCenter, queue, and lockscreen metadata.
 
 ## Not safely solvable in a cosmetic PR
 
 **True gapless (#6):** Apolo's `enqueueNext` and AVQueuePlayer exist,
-but Thrum's metadata/stream prefetch does not call them. Enqueueing now
-without Thrum detecting Apolo's internal auto-advance would leave the UI
+but Apollo's metadata/stream prefetch does not call them. Enqueueing now
+without Apollo detecting Apolo's internal auto-advance would leave the UI
 on the old track and risk a duplicate reload. The FFmpeg route currently
 opens the next decoder at the previous track's end. A release-quality
 implementation needs:
 1. a prepared source object bound to `videoId` and source generation;
 2. preload the next decoded audio (not just URL), with memory/time bounds;
-3. a single handoff event that advances both Apolo and Thrum queues;
+3. a single handoff event that advances both Apolo and Apollo queues;
 4. cancellation on manual skip, shuffle, source expiry, quality changes;
 5. tests for AVPlayer-to-AVPlayer, FFmpeg-to-FFmpeg and mixed format routes.
 Do not claim this is fixed merely because `gaplessPlayback` is true.
@@ -111,7 +111,7 @@ failure or a confirmed missing autoplay event. No device timestamps yet.
 ### Code-path audit
 
 - `PlaybackManager.prefetchUpcomingUpgrades` prefetches the **resolved signed
-  URL/PlaybackResult**, including the Atmos add-on result, but Thrum does not
+  URL/PlaybackResult**, including the Atmos add-on result, but Apollo does not
   yet feed `ApoloEngine.enqueueNext`; it is not a decoded/ready AVPlayerItem.
 - On EOF, `NowPlaying.stopped` calls `playNext(automatic: true)`, which starts
   a fresh resolve/load rather than using an engine-level queued item.
@@ -123,7 +123,7 @@ failure or a confirmed missing autoplay event. No device timestamps yet.
   routed through native AVFoundation without a processing tap. Additional
   codec/asset/route preparation time is a credible explanation for a longer
   gap, not yet measured.
-- Apolo supports `enqueueNext` and AVQueuePlayer already, but Thrum must
+- Apolo supports `enqueueNext` and AVQueuePlayer already, but Apollo must
   synchronize its own queue identity/state with Apolo auto-advance before
   enabling it, particularly for mixed Atmos → AAC/FLAC and vice versa.
 
@@ -154,7 +154,7 @@ this issue at the time of logging.
 ## Bug #9 — Instagram interruption triggers premature MPVKit fallback (FIXED IN CODE, NEEDS DEVICE TEST)
 
 **Reproduction:** With *Raindrops (Insane)* playing under Apolo, Instagram pauses
-music. Without reopening Thrum, after Instagram's audio session eventually
+music. Without reopening Apollo, after Instagram's audio session eventually
 releases ownership, the song resumes under **MPVKit instead of Apolo**.
 
 Evidence from uploaded `log(2).txt`, 19 Nov 2026:
@@ -167,7 +167,7 @@ Evidence from uploaded `log(2).txt`, 19 Nov 2026:
 There was no logged Apolo decoder error. Prior *Superhero* case showed the
 same post-interruption premature watchdog behavior.
 
-**Root cause in Thrum:** `monitorApolo` used `Date().timeIntervalSince(begun)`
+**Root cause in Apollo:** `monitorApolo` used `Date().timeIntervalSince(begun)`
 to enforce a 20-second `.loading`/`.idle` timeout even after Apolo had
 already reached `.playing`. A transient recovery state after >20 seconds
 of ordinary playback or a long iOS interruption therefore immediately
@@ -191,12 +191,12 @@ post-interruption recovery deadline.
 **Remaining question:** iOS owns the exact duration of Instagram's
 interruption. The log proves the interruption lasted ~40.7 seconds but
 cannot tell when the user physically left Instagram. This fix removes
-Thrum's *incorrect* forced engine switch; it does not guarantee that
+Apollo's *incorrect* forced engine switch; it does not guarantee that
 Instagram relinquishes the audio session within 15 seconds.
 
 **Acceptance:** With Apolo music beta on and the engine indicator visible,
 play a track for >30 seconds, open Instagram with audio enabled, return
-without reopening Thrum, and verify it resumes via **Apolo**, not MPVKit.
+without reopening Apollo, and verify it resumes via **Apolo**, not MPVKit.
 Repeat with short and long interruptions, background/suspended application,
 paused-before-interruption, lockscreen and AirPods. Deliberately simulate
 a genuine >20-second pending audio state to confirm MPVKit fallback remains.

@@ -10,7 +10,7 @@ on:
 
 concurrency:
   # PRs each get their own group so they do not cancel one another
-  group: trop-nightly-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
+  group: apollo-nightly-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
   cancel-in-progress: true
 
 env:
@@ -47,16 +47,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/DerivedDataApp
-          key: trop-dd-${{ runner.os }}-${{ hashFiles('Trop.xcodeproj/**', '**/Package.resolved', 'Trop/**/*.swift') }}
+          key: apollo-dd-${{ runner.os }}-${{ hashFiles('Apollo.xcodeproj/**', '**/Package.resolved', 'Apollo/**/*.swift') }}
           restore-keys: |
-            trop-dd-${{ runner.os }}-
+            apollo-dd-${{ runner.os }}-
 
       - name: Make build script executable
         run: chmod +x ./build_ipa.sh
 
       - name: Validate logging and source-scoped playback before IPA
         run: |
-          bash scripts/test-trop-log-session.sh
+          bash scripts/test-apollo-log-session.sh
           bash scripts/test-sponsorblock-source-scope.sh
           bash scripts/test-eclipse-addon-url.sh
 
@@ -71,15 +71,15 @@ jobs:
       - name: Upload iOS IPA artifact
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: Trop-iOS
-          path: build/Trop.ipa
+          name: Apollo-iOS
+          path: build/Apollo.ipa
 
       - name: Publish safe area test release
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/fix/safe-area-display'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create safe-area-test-${{ github.run_number }} build/Trop.ipa \
+          gh release create safe-area-test-${{ github.run_number }} build/Apollo.ipa \
             --target "$GITHUB_SHA" --prerelease --title "Prueba de pantalla completa" \
             --notes "Compilación de prueba del ajuste de áreas seguras. Requiere comprobarse en un iPhone. IPA sin firmar."
 
@@ -91,7 +91,7 @@ jobs:
           COMMIT_SUBJECT: ${{ github.event.head_commit.message }}
         run: |
           set -euo pipefail
-          IPA_PATH="build/Trop.ipa"
+          IPA_PATH="build/Apollo.ipa"
           test -f "$IPA_PATH"
 
           # GitHub immutable releases forbid deleting/replacing existing assets.

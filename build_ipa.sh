@@ -94,18 +94,18 @@ inject_plist_string() {
         || /usr/libexec/PlistBuddy -c "Set :$key string $value" "$plist" 2>/dev/null || true
 }
 
-APPLICATION_NAME=Trop
-PROJECT_NAME=Trop
+APPLICATION_NAME=Apollo
+PROJECT_NAME=Apollo
 # MPVKit and FFmpegKit both ship ffmpeg libraries whose framework names differ
 # only by case (Libavcodec.framework vs libavcodec.framework). On the default
 # case-INSENSITIVE macOS volume those collapse into one directory and the wrong
 # binary wins the merge, breaking the link. Build derived data on a case-SENSITIVE
 # volume so the two framework sets stay distinct
-CASE_SENSITIVE_VOL="$HOME/Library/Caches/TropBuild.sparseimage"
-CASE_SENSITIVE_MOUNT="/Volumes/TropBuild"
+CASE_SENSITIVE_VOL="$HOME/Library/Caches/ApolloBuild.sparseimage"
+CASE_SENSITIVE_MOUNT="/Volumes/ApolloBuild"
 if [ ! -f "$CASE_SENSITIVE_VOL" ]; then
     echo "Creating case-sensitive build volume at $CASE_SENSITIVE_VOL..."
-    hdiutil create -size 20g -type SPARSE -fs 'Case-sensitive APFS' -volname TropBuild "$CASE_SENSITIVE_VOL"
+    hdiutil create -size 20g -type SPARSE -fs 'Case-sensitive APFS' -volname ApolloBuild "$CASE_SENSITIVE_VOL"
 fi
 if ! mount | grep -q " $CASE_SENSITIVE_MOUNT "; then
     hdiutil attach "$CASE_SENSITIVE_VOL" -mountpoint "$CASE_SENSITIVE_MOUNT" -nobrowse >/dev/null 2>&1 \
@@ -204,7 +204,7 @@ fi
 # Inject Last.fm secrets from the local scheme or GitHub Actions secrets.
 # Scheme variables are used for local builds; workflow environment variables
 # take precedence when the build runs in GitHub Actions.
-SCHEME_PATH="$WORKING_LOCATION/Trop.xcodeproj/xcshareddata/xcschemes/$APPLICATION_NAME.xcscheme"
+SCHEME_PATH="$WORKING_LOCATION/Apollo.xcodeproj/xcshareddata/xcschemes/$APPLICATION_NAME.xcscheme"
 scheme_environment_value() {
     local wanted_key="$1"
     [ -f "$SCHEME_PATH" ] || return 0
@@ -246,13 +246,13 @@ if [ "${GITHUB_ACTIONS:-}" = "true" ] || [ -n "$LASTFM_API_KEY_TRIMMED" ] || [ -
 
     if [ -n "$LASTFM_API_KEY_TRIMMED" ]; then
         echo "Injecting LASTFM_API_KEY (len=${#LASTFM_API_KEY_TRIMMED})"
-        inject_plist_string "LASTFM_API_KEY" "$LASTFM_API_KEY_TRIMMED" "$WORKING_LOCATION/Trop/Resources/Info.plist"
+        inject_plist_string "LASTFM_API_KEY" "$LASTFM_API_KEY_TRIMMED" "$WORKING_LOCATION/Apollo/Resources/Info.plist"
     else
         echo "Warning: LASTFM_API_KEY empty - Last.fm login will fail with error 6"
     fi
     if [ -n "$LASTFM_SECRET_TRIMMED" ]; then
         echo "Injecting LASTFM_SECRET (len=${#LASTFM_SECRET_TRIMMED})"
-        inject_plist_string "LASTFM_SECRET" "$LASTFM_SECRET_TRIMMED" "$WORKING_LOCATION/Trop/Resources/Info.plist"
+        inject_plist_string "LASTFM_SECRET" "$LASTFM_SECRET_TRIMMED" "$WORKING_LOCATION/Apollo/Resources/Info.plist"
     else
         echo "Warning: LASTFM_SECRET empty - Last.fm login will fail with error 6"
     fi

@@ -22,7 +22,7 @@ are separate later phases. No remote audio is downloaded.
 - Reads only selected file bytes; no third-party upload, network or API
   access. Rejects malformed CSV, missing titles, files over 8 MiB, over
   25,000 rows, overly long fields or headers, and invalid UTF-8.
-- The user-selected Trop profile ID is required. Neither the file name nor
+- The user-selected Apollo profile ID is required. Neither the file name nor
   the CSV is trusted to identify a logged-in Google/Spotify account.
 - Verified provider + track IDs and ISRCs can help merge identities.
 - When no trustworthy ID is present, source identity is scoped to the

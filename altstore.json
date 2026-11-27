@@ -1,35 +1,35 @@
 {
-  "name": "Thrum",
-  "subtitle": "YouTube Music client for iOS (Thrum)",
+  "name": "Apollo",
+  "subtitle": "YouTube Music client for iOS (Apollo)",
   "description": "Free and open source YouTube Music client. Stable releases from GitHub \u2014 unsigned IPAs that Feather, AltStore, or SideStore re-sign with your Apple ID.",
-  "iconURL": "https://raw.githubusercontent.com/SwiftyMedia/Trop/main/.github/assets/icon.png",
-  "website": "https://github.com/SwiftyMedia/Trop",
+  "iconURL": "https://raw.githubusercontent.com/Mosas123/Apollo/main/.github/assets/icon.png",
+  "website": "https://github.com/Mosas123/Apollo",
   "tintColor": "#007AFF",
   "featuredApps": [
-    "com.cl0udly.Thrum"
+    "com.cl0udly.Apollo"
   ],
   "apps": [
     {
-      "name": "Thrum",
-      "bundleIdentifier": "com.cl0udly.Thrum",
+      "name": "Apollo",
+      "bundleIdentifier": "com.cl0udly.Apollo",
       "developerName": "SwiftyMedia",
-      "subtitle": "YouTube Music client for iOS (Thrum)",
+      "subtitle": "YouTube Music client for iOS (Apollo)",
       "localizedDescription": "A free and open source YouTube Music client for iOS.\n\n\u2022 No ads\n\u2022 Stream songs and videos from YouTube Music\n\u2022 Background playback with lock screen controls\n\u2022 Equalizer & audio normalization\n\u2022 Video mode\n\u2022 Queue management & listening history\n\u2022 Discord status \u2013 show current song\n\u2022 Last.fm scrobbling\n\u2022 Synced lyrics (Musixmatch, Netease, Kugou, LRCLIB, Genius)\n\u2022 Library sync (playlists, albums, artists, podcasts)\n\u2022 Downloads\n\u2022 Custom app icons\n\nRequires iOS 26 or later and a YouTube Music account.",
-      "iconURL": "https://raw.githubusercontent.com/SwiftyMedia/Trop/main/.github/assets/icon.png",
+      "iconURL": "https://raw.githubusercontent.com/Mosas123/Apollo/main/.github/assets/icon.png",
       "tintColor": "#007AFF",
       "category": "entertainment",
       "screenshotURLs": [
-        "https://raw.githubusercontent.com/SwiftyMedia/Trop/main/.github/assets/1.jpg",
-        "https://raw.githubusercontent.com/SwiftyMedia/Trop/main/.github/assets/2.jpg",
-        "https://raw.githubusercontent.com/SwiftyMedia/Trop/main/.github/assets/3.jpg"
+        "https://raw.githubusercontent.com/Mosas123/Apollo/main/.github/assets/1.jpg",
+        "https://raw.githubusercontent.com/Mosas123/Apollo/main/.github/assets/2.jpg",
+        "https://raw.githubusercontent.com/Mosas123/Apollo/main/.github/assets/3.jpg"
       ],
       "versions": [
         {
           "version": "0.0.5",
           "buildVersion": "4",
           "date": "2026-11-14T12:11:47Z",
-          "localizedDescription": "## What's Changed\n* feat: add YouTube comment section for songs (#20) by @lawrence-millard in https://github.com/SwiftyMedia/Trop/pull/27\n\n\n**Full Changelog**: https://github.com/SwiftyMedia/Trop/compare/v0.0.4...v0.0.5\n\n[Discord](https://discord.gg/QrMwZAfU97)",
-          "downloadURL": "https://github.com/SwiftyMedia/Trop/releases/download/v0.0.5/Trop.ipa",
+          "localizedDescription": "## What's Changed\n* feat: add YouTube comment section for songs (#20) by @lawrence-millard in https://github.com/Mosas123/Apollo/pull/27\n\n\n**Full Changelog**: https://github.com/Mosas123/Apollo/compare/v0.0.4...v0.0.5\n\n[Discord](https://discord.gg/QrMwZAfU97)",
+          "downloadURL": "https://github.com/Mosas123/Apollo/releases/download/v0.0.5/Apollo.ipa",
           "size": 35924605,
           "minOSVersion": "26.0"
         }

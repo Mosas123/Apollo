@@ -3,9 +3,9 @@ name: SponsorBlock Provider Provenance Checks
 on:
   pull_request:
     paths:
-      - "Trop/SponsorBlock/SponsorBlockIntegration.swift"
-      - "Trop/SponsorBlock/SponsorBlockSkipPolicy.swift"
-      - "Trop/Audio/PlaybackManager.swift"
+      - "Apollo/SponsorBlock/SponsorBlockIntegration.swift"
+      - "Apollo/SponsorBlock/SponsorBlockSkipPolicy.swift"
+      - "Apollo/Audio/PlaybackManager.swift"
       - "tests/SponsorBlock/SponsorBlockSourceScopeChecks.swift"
       - "scripts/test-sponsorblock-source-scope.sh"
       - ".github/workflows/sponsorblock-source-scope-checks.yml"

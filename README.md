@@ -1,4 +1,4 @@
-# Trop
+# Apollo
 
 A free and open source YouTube Music client for iOS.
 
@@ -51,10 +51,10 @@ Requires iOS 26 or later and a YouTube Music account (sign in through the in-app
 
 ### Feather / AltStore / SideStore
 
-Add the Trop source, then install the latest stable release (unsigned - your client re-signs it with your Apple ID):
+Add the Apollo source, then install the latest stable release (unsigned - your client re-signs it with your Apple ID):
 
 ```
-https://raw.githubusercontent.com/SwiftyMedia/Trop/main/altstore.json
+https://raw.githubusercontent.com/Mosas123/Apollo/main/altstore.json
 ```
 
 
@@ -64,7 +64,7 @@ Stable releases are available from the [releases page](../../releases). Nightly 
 
 ### Manual Installation
 
- To build an unsigned IPA locally, run `./build_ipa.sh`; the output is `build/Trop.ipa`.
+ To build an unsigned IPA locally, run `./build_ipa.sh`; the output is `build/Apollo.ipa`.
 
 ## Notable mentions
 
@@ -78,4 +78,4 @@ Stable releases are available from the [releases page](../../releases). Nightly 
 
 ## License
 
-This repo is licensed under [GPLv3](LICENSE.txt). Trop is not affiliated with, endorsed, or sponsored by Google or YouTube.
+This repo is licensed under [GPLv3](LICENSE.txt). Apollo is not affiliated with, endorsed, or sponsored by Google or YouTube.

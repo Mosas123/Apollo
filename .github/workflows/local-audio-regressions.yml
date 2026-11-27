@@ -3,9 +3,9 @@ name: Local Audio Regression Checks
 on:
   pull_request:
     paths:
-      - "Trop/Services/LocalAudioFilePolicy.swift"
-      - "Trop/Services/DownloadManager.swift"
-      - "Trop/Library/DownloadsView.swift"
+      - "Apollo/Services/LocalAudioFilePolicy.swift"
+      - "Apollo/Services/DownloadManager.swift"
+      - "Apollo/Library/DownloadsView.swift"
       - "tests/Playback/LocalAudioFileChecks.swift"
       - ".github/workflows/local-audio-regressions.yml"
 
@@ -18,7 +18,7 @@ jobs:
         run: |
           set -euo pipefail
           swiftc \
-            Trop/Services/LocalAudioFilePolicy.swift \
+            Apollo/Services/LocalAudioFilePolicy.swift \
             tests/Playback/LocalAudioFileChecks.swift \
             -o "$RUNNER_TEMP/local-audio-checks"
           "$RUNNER_TEMP/local-audio-checks"

@@ -110,7 +110,7 @@ struct MusicAddonManagerChecks {
         // A standard Stremio addon with only catalog search stays Stremio.
         precondition(stremioPackage.manifest.stremio?.usesEclipseRouting == false)
 
-        // Native Trop manifests remain installable.
+        // Native Apollo manifests remain installable.
         var registry = MusicAddonRegistry()
         try registry.install(data: first, from: alpha)
         try registry.install(data: second, from: beta)

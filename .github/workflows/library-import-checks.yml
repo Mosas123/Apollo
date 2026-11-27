@@ -3,7 +3,7 @@ name: Library Import Planner Checks
 on:
   pull_request:
     paths:
-      - "Trop/Core/LibrarySync/**"
+      - "Apollo/Core/LibrarySync/**"
       - "tests/LibrarySync/**"
       - "scripts/test-library-import.sh"
       - ".github/workflows/library-import-checks.yml"

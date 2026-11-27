@@ -3,12 +3,12 @@ name: Addon Quality Policy Checks
 on:
   pull_request:
     paths:
-      - "Trop/Core/MusicAddons/AddonStreamQualityPolicy.swift"
-      - "Trop/Core/MusicAddons/MusicAddonClient.swift"
-      - "Trop/Core/MusicAddons/AddonSourceResolver.swift"
-      - "Trop/Audio/PlaybackManager.swift"
-      - "Trop/Settings/MusicQualityMode.swift"
-      - "Trop/Settings/SettingsStore.swift"
+      - "Apollo/Core/MusicAddons/AddonStreamQualityPolicy.swift"
+      - "Apollo/Core/MusicAddons/MusicAddonClient.swift"
+      - "Apollo/Core/MusicAddons/AddonSourceResolver.swift"
+      - "Apollo/Audio/PlaybackManager.swift"
+      - "Apollo/Settings/MusicQualityMode.swift"
+      - "Apollo/Settings/SettingsStore.swift"
       - "tests/MusicAddons/AddonQualityPolicyChecks.swift"
       - "scripts/test-addon-quality-policy.sh"
       - ".github/workflows/addon-quality-policy-checks.yml"

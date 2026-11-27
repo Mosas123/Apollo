@@ -1,12 +1,12 @@
 # Music sources (work in progress)
 
-Trop currently searches and plays YouTube Music via `SwiftyTube` and stores queue
+Apollo currently searches and plays YouTube Music via `SwiftyTube` and stores queue
 entries as `SongItem.videoId`. Those IDs and YouTube-specific features **must not**
 be reused for tracks from other providers.
 
 ## Phase 1: Audius catalogue foundation
 
-`Trop/Core/MusicSources` introduces:
+`Apollo/Core/MusicSources` introduces:
 
 - `MusicCatalogID`, which scopes IDs by source (e.g. `audius:TRACK_ID`).
 - `MusicCatalogTrack`, a separate representation of a search result.

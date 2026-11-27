@@ -7,7 +7,7 @@
 *.xcodeproj/*.xcworkspace/*
 !*.xcodeproj/*.xcworkspace/contents.xcworkspacedata
 !*.xcodeproj/*.xcworkspace/xcshareddata/
-Trop.xcodeproj/xcshareddata/xcschemes/Trop.xcscheme
+Apollo.xcodeproj/xcshareddata/xcschemes/Apollo.xcscheme
 
 *.xcodeproj/*.xcworkspace/xcshareddata/*
 !*.xcodeproj/*.xcworkspace/xcshareddata/swiftpm/

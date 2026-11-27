@@ -1,4 +1,4 @@
-# Trop — Import Replay & Music Sync Routing (Phase 8)
+# Apollo — Import Replay & Music Sync Routing (Phase 8)
 
 This phase prepares protections for **repeat imports** and **outbound changes**
 when users have connected YouTube Music and optional trackers. It is a
@@ -7,23 +7,23 @@ writes, token usage or user-facing settings in this PR.
 
 ## Existing behaviour verified
 
-- Trop currently uses YouTube Music \`MutationService\` for likes/unlikes,
+- Apollo currently uses YouTube Music \`MutationService\` for likes/unlikes,
   add/remove library items, playlist edits, artist and podcast subscriptions.
-- Trop already has Last.fm scrobbling and optional love/unlove support.
+- Apollo already has Last.fm scrobbling and optional love/unlove support.
 - Phase 6 plans canonical library identity mapping; Phase 7 adds a read-only
   CSV parser. Neither is yet a fully transactional import or history merger.
 
 ## Replay-safe import design
 
 - After a successful, **transactional** import (future PR), persist an
-  \`MusicImportReceipt\`: destination Trop profile ID, import mode, SHA-256
+  \`MusicImportReceipt\`: destination Apollo profile ID, import mode, SHA-256
   of source file and an optional confirmed stable source identifier.
 - Same content + same source + same profile + same mode => already applied.
 - An updated export from the same source => present a delta preview, never
   create a second automatic copy and never infer deletion from missing rows.
 - Same content belonging to a *different* playlist/source => do not blindly
   collapse two legitimate playlists.
-- Different Trop profiles always remain separate.
+- Different Apollo profiles always remain separate.
 - Within each import, Phase 6 source-ID and validated-ISRC matching will
   link identical recordings; metadata-only ambiguous matches need review.
 - Preserve duplicate track occurrences **within a playlist** when
@@ -37,7 +37,7 @@ writes, token usage or user-facing settings in this PR.
 - **Only user-initiated changes** may produce outbound actions. Remote
   refreshes, file imports and restored backups are always local-only.
   In particular, importing a year's history NEVER re-scrobbles it.
-- Connected accounts are explicitly scoped to one Trop profile, with
+- Connected accounts are explicitly scoped to one Apollo profile, with
   separately enabled favorites/library/playlists/listens categories.
 - YouTube Music: eligible likes, library saves, artist subscriptions,
   podcast subscriptions and owned playlist edits, **only after**
@@ -46,7 +46,7 @@ writes, token usage or user-facing settings in this PR.
 - Last.fm: loved/unloved tracks and eligible listens only. It does not
   support syncing a full podcast library or playlists as such.
 - ListenBrainz: listens and recording love feedback when a verified
-  MusicBrainz recording MBID exists. This is a *future* connector; Trop
+  MusicBrainz recording MBID exists. This is a *future* connector; Apollo
   does not currently have it built in.
 - Each local action gets a stable event ID and each destination gets its
   own idempotency key. Duplicate delivery plans do not multiply actions.

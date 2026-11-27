@@ -8,7 +8,7 @@ third-party, community-shared, bundled, expired or leaked credentials.
 
 1. Obtain Qobuz application credentials and an account token that you are
    authorized to use, under Qobuz's API and account conditions.
-2. Open Trop → Settings → Integrations → Qobuz.
+2. Open Apollo → Settings → Integrations → Qobuz.
 3. Enter Application ID, Application secret and user authentication token.
 4. Save credentials securely in iOS Keychain (never UserDefaults).
 5. Search again. When authenticated and streamable, tracks appear in the

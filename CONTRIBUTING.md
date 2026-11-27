@@ -1,12 +1,12 @@
-# Contributing to Trop
+# Contributing to Apollo
 
-Thank you for your interest in contributing to Trop! Please follow these guidelines for translations and code contributions.
+Thank you for your interest in contributing to Apollo! Please follow these guidelines for translations and code contributions.
 
 ---
 
 ## Contributing Translations
 
-Trop keeps its translations in JSON files inside the `languages/` directory.
+Apollo keeps its translations in JSON files inside the `languages/` directory.
 The English source is `languages/en.json`. Each additional language uses its locale as the filename, for example:
 
 ```text
@@ -26,7 +26,7 @@ python3 scripts/generate_localizations.py
 ```
 
 
-5. Include both your new JSON file and the generated `Trop/Resources/<locale>.lproj/Localizable.strings` file in your pull request.
+5. Include both your new JSON file and the generated `Apollo/Resources/<locale>.lproj/Localizable.strings` file in your pull request.
 
 The generator uses English as a fallback for keys that have not been translated yet and checks that translations do not introduce unknown keys. If you are adding brand-new English strings, add them to `languages/en.json` first.
 

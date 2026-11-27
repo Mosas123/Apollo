@@ -268,7 +268,7 @@ struct PlaybackGuardChecks {
             decoderPosition: 192,
             expectedDuration: 200
         ), "At least 5 percent difference is also required")
-        // Apple Music -> Trop: an unsuccessful AVAudioSession activation
+        // Apple Music -> Apollo: an unsuccessful AVAudioSession activation
         // leaves Play deferred; only the same generation's live intent may
         // retry when the app becomes active. Explicit Pause always wins.
         func canRetrySession(

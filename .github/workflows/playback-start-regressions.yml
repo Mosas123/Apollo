@@ -3,16 +3,16 @@ name: Playback Start Regression Checks
 on:
   pull_request:
     paths:
-      - "Trop/Audio/PlaybackIntentGuard.swift"
-      - "Trop/Audio/PlayerController/PlayerController.swift"
-      - "Trop/Audio/PlayerController/AudioRouteChangePolicy.swift"
-      - "Trop/Audio/PlayerController/ApoloFiniteAudioWatchdog.swift"
-      - "Trop/Audio/NowPlaying.swift"
-      - "Trop/Audio/PlaybackQueue.swift"
-      - "Trop/Playback/PlaybackStateService.swift"
-      - "Trop/Playback/ListeningTimeAccumulator.swift"
-      - "Trop/SponsorBlock/SponsorBlockSkipPolicy.swift"
-      - "Trop/SponsorBlock/SponsorBlockIntegration.swift"
+      - "Apollo/Audio/PlaybackIntentGuard.swift"
+      - "Apollo/Audio/PlayerController/PlayerController.swift"
+      - "Apollo/Audio/PlayerController/AudioRouteChangePolicy.swift"
+      - "Apollo/Audio/PlayerController/ApoloFiniteAudioWatchdog.swift"
+      - "Apollo/Audio/NowPlaying.swift"
+      - "Apollo/Audio/PlaybackQueue.swift"
+      - "Apollo/Playback/PlaybackStateService.swift"
+      - "Apollo/Playback/ListeningTimeAccumulator.swift"
+      - "Apollo/SponsorBlock/SponsorBlockSkipPolicy.swift"
+      - "Apollo/SponsorBlock/SponsorBlockIntegration.swift"
       - "tests/Playback/**"
       - ".github/workflows/playback-start-regressions.yml"
 
@@ -25,10 +25,10 @@ jobs:
         run: |
           set -euo pipefail
           swiftc \
-            Trop/Audio/PlaybackIntentGuard.swift \
-            Trop/Playback/ListeningTimeAccumulator.swift \
-            Trop/Audio/PlayerController/ApoloFiniteAudioWatchdog.swift \
-            Trop/SponsorBlock/SponsorBlockSkipPolicy.swift \
+            Apollo/Audio/PlaybackIntentGuard.swift \
+            Apollo/Playback/ListeningTimeAccumulator.swift \
+            Apollo/Audio/PlayerController/ApoloFiniteAudioWatchdog.swift \
+            Apollo/SponsorBlock/SponsorBlockSkipPolicy.swift \
             tests/Playback/PlaybackGuardChecks.swift \
             tests/Playback/ListeningTimeChecks.swift \
             -o "$RUNNER_TEMP/playback-guard-checks"
@@ -36,8 +36,8 @@ jobs:
       - name: Verify list and playlist taps use protected queue start
         run: |
           set -euo pipefail
-          grep -Fq 'NowPlaying.shared.playCurrentSong(logContext: context)' Trop/Audio/PlaybackQueue.swift
-          if grep -Fq 'loggedTask(log, "\(context) failed")' Trop/Audio/PlaybackQueue.swift; then
+          grep -Fq 'NowPlaying.shared.playCurrentSong(logContext: context)' Apollo/Audio/PlaybackQueue.swift
+          if grep -Fq 'loggedTask(log, "\(context) failed")' Apollo/Audio/PlaybackQueue.swift; then
             echo "PlaybackQueue must not use unhandled fire-and-forget playlist resolution"
             exit 1
           fi
@@ -45,7 +45,7 @@ jobs:
         run: |
           set -euo pipefail
           swiftc \
-            Trop/Audio/PlayerController/AudioRouteChangePolicy.swift \
+            Apollo/Audio/PlayerController/AudioRouteChangePolicy.swift \
             tests/Playback/AudioRouteChangeChecks.swift \
             -o "$RUNNER_TEMP/audio-route-change-checks"
           "$RUNNER_TEMP/audio-route-change-checks"

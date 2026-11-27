@@ -10,7 +10,7 @@ This is **not merely a progress slider animation**: titles, total durations
 and quality badges alternate. The video alone cannot prove whether both
 audio sources switch; audio logs are still required for that distinction.
 
-The earlier SponsorBlock tuning landed in Trop commit
+The earlier SponsorBlock tuning landed in Apollo commit
 `e2e6875d7fe1dda12d898767652d99836034e84f`: prefetched segments,
 24-hour cache and 250 ms prefire. SponsorBlock itself only requests
 `PlayerController.seek(to:)` and never selects the next track.

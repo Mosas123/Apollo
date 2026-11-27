@@ -3,9 +3,9 @@ name: Radio Advanced Regression Checks
 on:
   pull_request:
     paths:
-      - "Trop/Core/Radio/**"
-      - "Trop/Audio/NowPlaying.swift"
-      - "Trop/Features/Radio/RadioView.swift"
+      - "Apollo/Core/Radio/**"
+      - "Apollo/Audio/NowPlaying.swift"
+      - "Apollo/Features/Radio/RadioView.swift"
       - "tests/Radio/**"
       - ".github/workflows/radio-advanced-regressions.yml"
   workflow_dispatch:
@@ -19,10 +19,10 @@ jobs:
         run: |
           set -euo pipefail
           swiftc \
-            Trop/Core/Radio/RadioBrowser.swift \
-            Trop/Core/Radio/RadioTransportResolver.swift \
-            Trop/Core/Radio/ICYTitleParser.swift \
-            Trop/Core/Radio/RadioMetadataProviders.swift \
+            Apollo/Core/Radio/RadioBrowser.swift \
+            Apollo/Core/Radio/RadioTransportResolver.swift \
+            Apollo/Core/Radio/ICYTitleParser.swift \
+            Apollo/Core/Radio/RadioMetadataProviders.swift \
             tests/Radio/RadioAdvancedChecks.swift \
             -o "$RUNNER_TEMP/radio-advanced-checks"
           "$RUNNER_TEMP/radio-advanced-checks"

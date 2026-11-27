@@ -3,7 +3,7 @@ name: Portable Library CSV Checks
 on:
   pull_request:
     paths:
-      - "Trop/Core/LibrarySync/**"
+      - "Apollo/Core/LibrarySync/**"
       - "tests/LibrarySync/**"
       - "scripts/test-portable-library-csv.sh"
       - ".github/workflows/portable-library-csv-checks.yml"

@@ -2,7 +2,7 @@
 
 ## Root cause candidate (strongly supported; confirm by on-device A/B)
 
-Trop historically uses a raw YouTube `videoId` for the entire album
+Apollo historically uses a raw YouTube `videoId` for the entire album
 queue, including when its resolver selects a different studio master
 from an addon. SponsorBlockIntegration.tick previously checked only:
 - `NowPlaying.playbackKind == .music`
@@ -58,7 +58,7 @@ those checks. A video `music_offtopic` segment then called
 ## iPhone acceptance
 
 1. Install an experimental IPA from this branch or a QA branch
-   stacked on the existing [clock-audit IPA PR #59](https://github.com/Mosas123/Trop/pull/59).
+   stacked on the existing [clock-audit IPA PR #59](https://github.com/Mosas123/Apollo/pull/59).
 2. Select album **DeBÍ TiRAR MáS FOToS > NUEVAYoL** with the default
    SponsorBlock setting **enabled**. Play with addon Lossless (CD)
    selected; do not seek or tap Next. The complete audio should run

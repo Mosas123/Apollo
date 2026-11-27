@@ -3,7 +3,7 @@ name: Music Addon Foundation Checks
 on:
   pull_request:
     paths:
-      - "Trop/Core/MusicAddons/**"
+      - "Apollo/Core/MusicAddons/**"
       - "tests/MusicAddons/**"
       - "scripts/test-music-addons.sh"
       - ".github/workflows/music-addons-checks.yml"
