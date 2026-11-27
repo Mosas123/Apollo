@@ -124,9 +124,10 @@ struct AsyncImageView: View {
             guard !Task.isCancelled else { return }
             StickyArtwork.store(image, for: normalized)
             loadedKey = normalized
-            withAnimation(.easeInOut(duration: 0.2)) {
-                loadedImage = image
-            }
+            // No per-image implicit animation: dozens of covers appearing
+            // while a shelf enters the viewport otherwise animate the whole
+            // scroll transaction, which shows up as podcast-scroll jank.
+            loadedImage = image
             onImageLoaded?(image)
             return
         }
@@ -139,9 +140,7 @@ struct AsyncImageView: View {
             guard !Task.isCancelled else { return }
             StickyArtwork.store(image, for: normalized)
             loadedKey = normalized
-            withAnimation(.easeInOut(duration: 0.2)) {
-                loadedImage = image
-            }
+            loadedImage = image
             onImageLoaded?(image)
         }
     }

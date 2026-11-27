@@ -187,18 +187,12 @@ struct HomeScreenView: View {
             }
             .task(id: selectedCategory) {
                 await viewModel.loadCategoryFeed(selectedCategory)
+                if selectedCategory == .podcast || selectedCategory == .audiobook {
+                    await preloadArtwork()
+                }
             }
             .task(id: catalogCacheSignature) {
                 rebuildCatalogCache()
-            }
-            .task(id: viewModel.homeSections.count) {
-                guard !viewModel.homeSections.isEmpty else { return }
-                // Give the first frames and the user's first scroll room.
-                try? await Task.sleep(for: .seconds(1))
-                // Podcast and audiobook feeds make the unified orbit complete.
-                await viewModel.loadCategoryFeed(.podcast)
-                await viewModel.loadCategoryFeed(.audiobook)
-                await preloadArtwork()
             }
             .onChange(of: settings.hideExplicit) { _, _ in
                 viewModel.syncSettings()
@@ -717,8 +711,6 @@ struct HomeScreenView: View {
             result += Array(base.filter { $0.category == .music }.prefix(4))
             result += Array(base.filter { $0.category == .podcast }.prefix(2))
             result += Array(base.filter { $0.category == .audiobook }.prefix(2))
-            result += Array(categorySections(.podcast, offset: 100).prefix(1))
-            result += Array(categorySections(.audiobook, offset: 200).prefix(1))
         }
 
         var seen = Set<String>()
@@ -841,11 +833,20 @@ struct HomeScreenView: View {
     }
 
     private func preloadArtwork() async {
-        var urls = viewModel.homeSections
+        if selectedCategory == .podcast || selectedCategory == .audiobook {
+            let urls = (viewModel.categoryFeeds[selectedCategory] ?? [])
+                .prefix(2)
+                .flatMap(\.items)
+                .prefix(16)
+                .compactMap(\.thumbnailUrl)
+                .compactMap(URL.init)
+            await ImagePreloader.shared.preload(urls)
+            return
+        }
+        let urls = viewModel.homeSections
             .flatMap(\.items)
             .compactMap(\.thumbnailUrl)
             .compactMap(URL.init)
-
         await ImagePreloader.shared.preload(urls)
     }
 
