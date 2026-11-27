@@ -637,6 +637,19 @@ struct HomeScreenView: View {
         for (videoId, cover) in episodeCovers {
             map["vid:\(videoId)"] = cover
         }
+
+        // Resolve each episode once into an O(1) videoId key instead of
+        // scanning all show keys from every card while scrolling.
+        for case .episode(let episode) in allHomeItems {
+            guard let videoId = episode.videoId,
+                  map["vid:\(videoId)"] == nil else { continue }
+            for artist in episode.artists {
+                let key = podcastCoverKey(artist.name)
+                guard key.count >= 4, let cover = map[key] else { continue }
+                map["vid:\(videoId)"] = cover
+                break
+            }
+        }
         return map
     }
 

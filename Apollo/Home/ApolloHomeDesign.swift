@@ -287,11 +287,6 @@ func podcastCoverURL(for item: YTItem, in covers: [String: String]) -> String? {
         let key = podcastCoverKey(candidate)
         guard key.count >= 4 else { continue }
         if let cover = covers[key] { return cover }
-        if let match = covers.first(where: {
-            !$0.key.hasPrefix("vid:") && ($0.key.contains(key) || key.contains($0.key))
-        }) {
-            return match.value
-        }
     }
     return nil
 }
