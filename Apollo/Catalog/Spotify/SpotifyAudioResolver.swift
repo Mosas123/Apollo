@@ -100,7 +100,7 @@ final class SpotifyAudioResolver {
         }
 
         if allowsLossless {
-            tracks.append(contentsOf: await QobuzCredentialStore.shared.searchIfConfigured(query: query, limit: 8))
+            tracks.append(contentsOf: await QobuzCatalogService.shared.searchIfConfigured(query: query, limit: 8))
         }
 
         if allowsLossless, SettingsStore.shared.hasMusicAddons {
