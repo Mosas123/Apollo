@@ -57,6 +57,8 @@ depender de YouTube Music para metadatos y con YouTube únicamente como audio.
       búsquedas de Spotify (podcasts, true crime, comedy, news, audiobooks…).
 
 ### Fase 2 — Identidad y deduplicación
+- [x] MusicBrainz ISRC/MBID (rate limit 1 req/s, caché 24 h).
+- [ ] Conectar ISRC/MBID al catálogo y a la UI.
 - [ ] Clave canónica: ISRC/MBID primero.
 - [ ] Huella secundaria: título normalizado + artistas + duración ±2 s +
       álbum/año.
@@ -89,5 +91,5 @@ depender de YouTube Music para metadatos y con YouTube únicamente como audio.
 
 - Rama: `feat/spotify-catalog`.
 - Build de referencia: 877 (compila).
-- Pendiente inmediato: fotos Spotify-first, iTunes artwork/ISRC y bug de
-  podcasts vacíos.
+- Pendiente inmediato: conectar el enriquecedor (Apple/MusicBrainz) a las
+  vistas y al catálogo en segundo plano.
