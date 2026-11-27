@@ -74,6 +74,7 @@ actor RadioLearningStore {
 
     private struct Snapshot {
         let style: String
+        let source: String
         let features: [Double]
         let at: Date
     }
@@ -87,9 +88,9 @@ actor RadioLearningStore {
         return all[style] ?? .initial(for: style)
     }
 
-    func snapshot(key: String, style: String, features: RadioFeatureVector) {
+    func snapshot(key: String, style: String, source: String, features: RadioFeatureVector) {
         if snapshots.count > 500 { snapshots.removeAll(keepingCapacity: true) }
-        snapshots[key] = Snapshot(style: style, features: features.values, at: Date())
+        snapshots[key] = Snapshot(style: style, source: source, features: features.values, at: Date())
     }
 
     func record(key: String, label: Double) {
@@ -102,12 +103,19 @@ actor RadioLearningStore {
         all[snapshot.style] = current
         weights = all
         saveWeights(all)
+
+        await RadioBanditStore.shared.update(
+            style: snapshot.style,
+            source: snapshot.source,
+            reward: label
+        )
     }
 
-    func clear() {
+    func clear() async {
         weights = [:]
         snapshots.removeAll(keepingCapacity: true)
         UserDefaults.standard.removeObject(forKey: weightsKey)
+        await RadioBanditStore.shared.reset()
     }
 
     private func loadWeights() -> [String: RadioWeights] {

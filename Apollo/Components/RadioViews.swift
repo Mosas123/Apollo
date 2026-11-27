@@ -41,6 +41,30 @@ struct RadioOptionsSheet: View {
                         }
                     }
                     Toggle("Include explicit", isOn: $options.allowExplicit)
+                    Stepper {
+                        HStack {
+                            Text("Max per artist")
+                            Spacer()
+                            Text(options.maxPerArtist == 0 ? "Auto" : "\(options.maxPerArtist)")
+                                .foregroundStyle(.secondary)
+                        }
+                    } onIncrement: {
+                        options.maxPerArtist = min(5, options.maxPerArtist + 1)
+                    } onDecrement: {
+                        options.maxPerArtist = max(0, options.maxPerArtist - 1)
+                    }
+                    Stepper {
+                        HStack {
+                            Text("Max per album")
+                            Spacer()
+                            Text(options.maxPerAlbum == 0 ? "Auto" : "\(options.maxPerAlbum)")
+                                .foregroundStyle(.secondary)
+                        }
+                    } onIncrement: {
+                        options.maxPerAlbum = min(4, options.maxPerAlbum + 1)
+                    } onDecrement: {
+                        options.maxPerAlbum = max(0, options.maxPerAlbum - 1)
+                    }
                 } header: {
                     Text("Queue")
                 }

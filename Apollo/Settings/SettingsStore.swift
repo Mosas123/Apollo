@@ -461,6 +461,14 @@ final class SettingsStore: @unchecked Sendable {
         didSet { Self.defaults.set(lastRadioAllowExplicit, forKey: Keys.lastRadioAllowExplicit) }
     }
 
+    var lastRadioMaxPerArtist: Int {
+        didSet { Self.defaults.set(lastRadioMaxPerArtist, forKey: Keys.lastRadioMaxPerArtist) }
+    }
+
+    var lastRadioMaxPerAlbum: Int {
+        didSet { Self.defaults.set(lastRadioMaxPerAlbum, forKey: Keys.lastRadioMaxPerAlbum) }
+    }
+
     var playerVolume: Double {
         didSet { Self.defaults.set(playerVolume, forKey: Keys.playerVolume) }
     }
@@ -600,6 +608,8 @@ final class SettingsStore: @unchecked Sendable {
         static let lastRadioStyle = "settings.lastRadioStyle"
         static let lastRadioLimit = "settings.lastRadioLimit"
         static let lastRadioAllowExplicit = "settings.lastRadioAllowExplicit"
+        static let lastRadioMaxPerArtist = "settings.lastRadioMaxPerArtist"
+        static let lastRadioMaxPerAlbum = "settings.lastRadioMaxPerAlbum"
         static let playerVolume = "settings.playerVolume"
         static let artworkSwipeNavigation = "settings.artworkSwipeNavigation"
         static let hideExplicit = "settings.hideExplicit"
@@ -714,6 +724,8 @@ final class SettingsStore: @unchecked Sendable {
         lastRadioStyle = Self.loadEnum(Keys.lastRadioStyle, default: .similar)
         lastRadioLimit = Self.load(Keys.lastRadioLimit, default: 25)
         lastRadioAllowExplicit = Self.load(Keys.lastRadioAllowExplicit, default: true)
+        lastRadioMaxPerArtist = Self.load(Keys.lastRadioMaxPerArtist, default: 0)
+        lastRadioMaxPerAlbum = Self.load(Keys.lastRadioMaxPerAlbum, default: 0)
         playerVolume = Self.load(Keys.playerVolume, default: 1)
         artworkSwipeNavigation = Self.load(Keys.artworkSwipeNavigation, default: true)
         hideExplicit = Self.load(Keys.hideExplicit, default: false)

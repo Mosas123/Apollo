@@ -137,7 +137,7 @@ con el pipeline actual.
 ### R0 — Datos y feedback
 - [x] Señales play/skip/complete/like vía `TasteProfileStore` (persistidas, con decaimiento).
 - [x] Afinidades por artista/género y penalización por skips en el ranker.
-- [ ] Ventanas de “no repetir” configurables por el usuario.
+- [x] Ventanas de “no repetir” configurables en Customize Radio (artista/álbum).
 
 ### R1 — StationService v1 (sin IA)
 - [x] Seed track/artist.
@@ -163,8 +163,9 @@ con el pipeline actual.
 ### R4 — IA
 - [x] Embeddings de metadata on-device (`NLEmbedding`) como feature de similitud.
 - [x] Learning-to-rank online local: pesos por estilo que aprenden de completions/skips/likes.
-- [ ] Bandits de exploración.
-- [ ] Modelo de secuencia de sesión.
+- [x] Bandit Beta por fuente/estilo (multiplicador 0.85–1.15) con feedback local.
+- [x] Contexto de sesión v1: refuerzo por artistas/álbumes recientes en la cola.
+- [ ] Modelo secuencial neuronal (SASRec/GRU).
 - [ ] Explicaciones generadas (opcional).
 
 ## 11. Estado y pendientes (27-nov)
@@ -179,7 +180,7 @@ con el pipeline actual.
 - Diagnóstico local (Settings → Radio diagnostics) y explicaciones en cola.
 
 ### Pendiente
-- [ ] Event store granular propio (hoy se apoya en TasteProfileStore + DB).
+- [x] Señales de feedback locales vía TasteProfileStore + DB (event store propio pendiente).
 - [ ] Tags/géneros normalizados por identidad para similitud y mood.
 - [ ] Co-ocurrencia/editorial y estaciones por mood.
 - [ ] Golden tests automáticos y cobertura de audio por candidato.
@@ -187,7 +188,7 @@ con el pipeline actual.
 - [ ] Bandits contextuales.
 - [ ] Modelo de secuencia de sesión (SASRec/GRU pequeño on-device).
 - [ ] Explicaciones generadas con LLM/Foundation Models.
-- [ ] Ventanas de “no repetir” configurables por el usuario.
+- [x] Ventanas de “no repetir” configurables en Customize Radio (artista/álbum).
 
 ## 12. Backlog de ideas avanzadas
 

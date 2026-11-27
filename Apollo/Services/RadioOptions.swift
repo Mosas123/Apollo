@@ -35,6 +35,10 @@ struct RadioOptions {
     var style: RadioStyle = .similar
     var limit: Int = 25
     var allowExplicit: Bool = true
+    /// 0 = use the style default.
+    var maxPerArtist: Int = 0
+    /// 0 = use the style default.
+    var maxPerAlbum: Int = 0
 
     static let `default` = RadioOptions()
 }
@@ -45,7 +49,9 @@ extension RadioOptions {
         return RadioOptions(
             style: settings.lastRadioStyle,
             limit: settings.lastRadioLimit,
-            allowExplicit: settings.lastRadioAllowExplicit
+            allowExplicit: settings.lastRadioAllowExplicit,
+            maxPerArtist: settings.lastRadioMaxPerArtist,
+            maxPerAlbum: settings.lastRadioMaxPerAlbum
         )
     }
 
@@ -54,5 +60,7 @@ extension RadioOptions {
         settings.lastRadioStyle = style
         settings.lastRadioLimit = limit
         settings.lastRadioAllowExplicit = allowExplicit
+        settings.lastRadioMaxPerArtist = maxPerArtist
+        settings.lastRadioMaxPerAlbum = maxPerAlbum
     }
 }

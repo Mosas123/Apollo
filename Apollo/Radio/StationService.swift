@@ -50,6 +50,7 @@ actor StationService {
     private let lastFM = LastFMDiscoveryClient()
     private let embeddings = CatalogEmbeddingStore.shared
     private let learning = RadioLearningStore.shared
+    private let bandit = RadioBanditStore.shared
     private var cache: [String: (songs: [SongItem], at: Date)] = [:]
     private let ttl: TimeInterval = 10 * 60
 
@@ -297,9 +298,32 @@ actor StationService {
         _ = await taste.snapshot()
         let seedText = CatalogEmbeddingStore.text(for: seedSong)
         let weights = await learning.weights(for: options.style.rawValue)
+        let style = options.style.rawValue
+        let artistMultiplier = await bandit.multiplier(style: style, source: "artist")
+        let albumMultiplier = await bandit.multiplier(style: style, source: "album")
+        let relatedMultiplier = await bandit.multiplier(style: style, source: "related")
+        let searchMultiplier = await bandit.multiplier(style: style, source: "search")
+        let banditMultipliers: [String: Double] = [
+            "artist": artistMultiplier,
+            "album": albumMultiplier,
+            "related": relatedMultiplier,
+            "search": searchMultiplier
+        ]
+        let session = await MainActor.run {
+            let recent = NowPlaying.shared.queueSongs.suffix(6)
+            var artists = Set<String>()
+            var albums = Set<String>()
+            for song in recent {
+                if let artist = song.artists.first?.name {
+                    artists.insert(TextMatch.normalizeArtist(artist))
+                }
+                if let album = song.album { albums.insert(TextMatch.normalizeTitle(album)) }
+            }
+            return (artists, albums)
+        }
 
         var seen = Set<String>()
-        var scored: [(SongItem, Double, String, String, String, RadioFeatureVector)] = []
+        var scored: [(SongItem, Double, String, String, String, RadioFeatureVector, String)] = []
 
         for candidate in candidates {
             if !options.allowExplicit, candidate.song.isExplicit == true { continue }
@@ -347,23 +371,28 @@ actor StationService {
             ])
 
             var score = weights.score(features)
+            score *= banditMultipliers[candidate.group.label] ?? 1
             score += Double.random(in: 0...0.01)
 
             let artistKey = candidate.song.artists.first.map { TextMatch.normalizeArtist($0.name) } ?? ""
             let albumKey = TextMatch.normalizeTitle(candidate.song.album ?? "")
-            scored.append((candidate.song, score, artistKey, albumKey, candidate.reason, features))
+            if !artistKey.isEmpty, session.0.contains(artistKey) { score += 0.12 }
+            if !albumKey.isEmpty, session.1.contains(albumKey) { score += 0.05 }
+            scored.append((candidate.song, score, artistKey, albumKey, candidate.reason, features, candidate.group.label))
         }
 
         scored.sort { $0.1 > $1.1 }
 
-        let maxPerArtist = options.style == .variety ? 1 : (options.style == .deepCuts ? 2 : 3)
-        let maxPerAlbum = options.style == .variety ? 1 : 2
+        let defaultArtistCap = options.style == .variety ? 1 : (options.style == .deepCuts ? 2 : 3)
+        let defaultAlbumCap = options.style == .variety ? 1 : 2
+        let maxPerArtist = options.maxPerArtist > 0 ? options.maxPerArtist : defaultArtistCap
+        let maxPerAlbum = options.maxPerAlbum > 0 ? options.maxPerAlbum : defaultAlbumCap
 
         var artistCounts: [String: Int] = [:]
         var albumCounts: [String: Int] = [:]
         var result: [SongItem] = []
 
-        for (song, _, artistKey, albumKey, reason, features) in scored {
+        for (song, _, artistKey, albumKey, reason, features, source) in scored {
             guard result.count < options.limit else { break }
             if !artistKey.isEmpty, (artistCounts[artistKey] ?? 0) >= maxPerArtist { continue }
             if !albumKey.isEmpty, (albumCounts[albumKey] ?? 0) >= maxPerAlbum { continue }
@@ -375,6 +404,7 @@ actor StationService {
             await learning.snapshot(
                 key: stamped.catalogID ?? stamped.videoId,
                 style: options.style.rawValue,
+                source: source,
                 features: features
             )
             if !artistKey.isEmpty { artistCounts[artistKey, default: 0] += 1 }
