@@ -15,9 +15,6 @@ struct IntegrationsSettingsView: View {
                 SettingsNavigationRow("Qobuz", icon: "waveform") {
                     QobuzSettingsView()
                 }
-                SettingsNavigationRow("Last.fm", icon: "music.note") {
-                    LastFMSettingsView()
-                }
                 SettingsNavigationRow("SponsorBlock", icon: "forward.end") {
                     SponsorBlockSettingsView()
                 }

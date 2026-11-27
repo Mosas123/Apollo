@@ -20,7 +20,7 @@ de YouTube Music. Primero un ranker determinista y bueno; después IA.
 - Artista(s), álbum, año, género/topics, duración, explícito.
 - Top tracks del artista y orden de popularidad.
 - Artistas relacionados (Spotify `relatedArtists`).
-- Tags/similitud de Last.fm / MusicBrainz.
+- Tags/géneros de MusicBrainz.
 - Co-ocurrencia en playlists/editorial.
 
 ### Del usuario (local)
@@ -40,8 +40,7 @@ de YouTube Music. Primero un ranker determinista y bueno; después IA.
 | Top tracks del artista semilla | Núcleo del artista |
 | Álbum/EPs del artista | Deep cuts |
 | Artistas relacionados Spotify | Descubrimiento cercano |
-| Last.fm `track.getSimilar` / `artist.getSimilar` | Variedad externa |
-| Tags/géneros (Spotify/Last.fm) | Estaciones por mood |
+| Tags/géneros (MusicBrainz → búsqueda Spotify) | Estaciones por mood |
 | Playlists editoriales/co-ocurrencia | Puentes entre artistas |
 | Likes/historial local | Familiaridad |
 | Audius trending | Electrónica/indie |
@@ -114,7 +113,7 @@ MMR = λ * relevance - (1-λ) * maxSimilarityToSelected
 ```
 StationService (actor)
  ├─ SeedResolver        (track/artist/album/genre → IDs canónicos)
- ├─ CandidateSources[]  (Spotify, LastFM, Local, Audius, Editorial)
+ ├─ CandidateSources[]  (Spotify, Local, Audius, Editorial)
  ├─ CatalogIdentity     (dedupe y merge)
  ├─ StationRanker       (score + MMR)
  ├─ AvailabilityFilter  (audio providers + calidad + región)
@@ -147,9 +146,8 @@ con el pipeline actual.
 - [x] Start Radio, Similar y autoplay sin radio de YouTube.
 
 ### R2 — Más recall
-- [x] Last.fm `track.getSimilar` (solo API key, cache 24 h).
-- [x] `artist.getSimilar` para ampliar artistas relacionados.
-- [x] Continuidad por género en la estación (tags del artista seed).
+- [x] Tags/géneros de MusicBrainz para el artista seed (sin API key, cache 24 h).
+- [x] Continuidad por género: tags del seed buscados en Spotify.
 - [ ] Estaciones por mood explícitas.
 - [ ] Co-ocurrencia/editorial.
 - [ ] Local taste y “para ti”.
@@ -173,7 +171,7 @@ con el pipeline actual.
 
 ### Hecho
 - Seed track/artist con resolución vía Spotify (también para seeds YouTube).
-- Candidatos: top tracks, álbum, relacionados Spotify, Last.fm track/artist similar.
+- Candidatos: top tracks, álbum, relacionados Spotify, tags de género MusicBrainz.
 - Taste local: plays, skips, completions, likes, follows, géneros.
 - Ranker con diversidad por artista/álbum y filtros de explícito/skips.
 - Embeddings on-device y learning-to-rank online por estilo.
@@ -182,7 +180,7 @@ con el pipeline actual.
 
 ### Pendiente
 - [x] Señales de feedback locales vía TasteProfileStore + DB (event store propio pendiente).
-- [x] Género del seed vía Last.fm `artist.getTopTags`; los tags se buscan en Spotify para continuidad de género.
+- [x] Género del seed vía MusicBrainz tags/genres; los tags se buscan en Spotify para continuidad de género.
 - [ ] Mood stations y normalización de tags por identidad.
 - [ ] Co-ocurrencia/editorial y estaciones por mood.
 - [ ] Golden tests automáticos y cobertura de audio por candidato.
@@ -200,7 +198,7 @@ Prioridad alta:
 2. **Grafo de gusto personal**: artistas/géneros/álbumes/eras/moods, propagación
    tipo PageRank desde likes/plays.
 3. **Co-ocurrencia pública sin backend**: playlists públicas/editorial,
-   ListenBrainz, Last.fm, MusicBrainz para item-item similarity.
+   ListenBrainz y MusicBrainz para item-item similarity.
 4. **Retrieval con embeddings + ANN local**: “user tower” con historial
    ponderado + contexto; “item tower” con metadata.
 5. **LTR pairwise**: pares completado vs skip; sustituir el logístico simple.
@@ -223,7 +221,7 @@ Prioridad baja / experimental:
     explicaciones; verificar siempre contra el catálogo.
 14. **Cold start onboarding** con 3–5 artistas/géneros + charts/editorial.
 15. **Datos públicos**: ListenBrainz para señales colaborativas sin subir datos
-    del usuario; MusicBrainz/Last.fm para tags y relaciones.
+    del usuario; MusicBrainz para tags y relaciones.
 
 Métricas:
 - Offline: NDCG, recall@k, cobertura, diversidad, novedad, intra-list

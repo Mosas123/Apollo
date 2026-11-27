@@ -55,7 +55,7 @@ preview new/already-present/review-needed items → user selects categories →
 atomic save / rollback → check unified library.
 
 Do not send imported tracks back to Spotify/Google or replay historical
-Last.fm scrobbles. User data imports require consent and transparent
+external listening history. User data imports require consent and transparent
 data-retention controls.
 
 Sources:

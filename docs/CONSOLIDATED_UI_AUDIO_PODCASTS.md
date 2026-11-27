@@ -11,7 +11,6 @@ The consolidation is one Apollo PR; the main branch is unchanged.
 | # | Reported problem | Implemented here | Verification |
 |---|---|---|---|
 | 1 | Queue button's overlaid Repeat accidentally toggled | Remove overlay; Repeat remains in QueueView | iPhone tap Queue on all layouts |
-| 2 | Last.fm API error 10, then blank auth sheet | Persistent inline failure and build-credential message; remove dismissible blanking alert | Invalid key and valid-key login required; **real credential is not available in repo** |
 | 3 | Lyrics screen empty when no provider | Loading / unavailable / failed states and retry; preserve layout | No lyrics, offline error, successful lyrics |
 | 4 | Atmos selected, download tries an E-AC3 source as FLAC | Audio download preference ignores Atmos playback toggle; require true Lossless + FLAC codec for FLAC muxer | Download while Atmos playback preference is on: FLAC/AAC, not mislabeled Atmos |
 | 5 | Niagara Falls vocal resolved from Instrumentals album | Version-sensitive title/album matching and cache keys, plus unnormalized album edition comparisons in ATV matcher | Vocal vs instrumental both directions, same-duration, missing metadata |
@@ -77,11 +76,6 @@ implementation needs:
 5. tests for AVPlayer-to-AVPlayer, FFmpeg-to-FFmpeg and mixed format routes.
 Do not claim this is fixed merely because `gaplessPlayback` is true.
 
-**Last.fm (#2):** error code 10 comes from the server rejecting the
-app's supplied API key. This PR prevents blank UI and gives the actual
-developer action needed, but does **not** create or replace a valid
-Last.fm key. Release and nightly workflows read configured secrets.
-A functional login requires valid secrets and a real on-device login.
 
 ## Acceptance gates
 
@@ -91,7 +85,6 @@ A functional login requires valid secrets and a real on-device login.
   Moscow Mule, NUEVAYoL, Raindrops and Volver a Nacer.
 - Listen through at least 10 continuous track transitions and
   measure actual audio gaps. Don't mark #6 closed from this PR.
-- Test Last.fm with valid and invalid key in a non-production build.
 - Test empty Lyrics with Wi-Fi off/on and a successful provider.
 - Download FLAC while Atmos preference is on, airplane-mode playback.
 - Podcasts: both switches on/off, 60+ minute source, resume position,

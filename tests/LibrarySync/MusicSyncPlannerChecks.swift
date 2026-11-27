@@ -7,8 +7,6 @@ struct MusicSyncPlannerChecks {
         let connections = [
             MusicSyncConnection(destination: .youtubeMusic, profileID: "p1", accountID: "google-A",
                                 enabledCategories: [.favorites, .library, .playlists]),
-            MusicSyncConnection(destination: .lastFM, profileID: "p1", accountID: "lastfm-A",
-                                enabledCategories: [.favorites, .listens]),
             MusicSyncConnection(destination: .listenBrainz, profileID: "p1", accountID: "lb-A",
                                 enabledCategories: [.favorites, .listens]),
             MusicSyncConnection(destination: .youtubeMusic, profileID: "p2", accountID: "google-B",
@@ -21,13 +19,13 @@ struct MusicSyncPlannerChecks {
                            trackTitle: "Track", artistName: "Artist", recordingMBID: mbid)
         }
         let like = planner.plan(event: event("like1", .user, .trackLiked(true)), connections: connections)
-        precondition(like.intents.map { $0.key.destination } == [.youtubeMusic, .lastFM])
+        precondition(like.intents.map { $0.key.destination } == [.youtubeMusic])
         precondition(like.excludedUnmapped == 1) // ListenBrainz requires recording MBID
         precondition(like.intents.allSatisfy { $0.profileID == "p1" })
 
         let noYoutube = planner.plan(event: event("like2", .user, .trackLiked(true), youtube: nil),
                                      connections: connections)
-        precondition(noYoutube.intents.map { $0.key.destination } == [.lastFM])
+        precondition(noYoutube.intents.isEmpty)
         precondition(noYoutube.excludedUnmapped == 2)
         precondition(planner.plan(event: event("from-file", .fileImport, .trackLiked(true)),
                                   connections: connections).intents.isEmpty)
@@ -50,12 +48,12 @@ struct MusicSyncPlannerChecks {
         let listened = planner.plan(event: event("listen-1", .user,
                                                  .listenCompleted(sessionID: "session-A", startedAt: 100)),
                                      connections: connections)
-        precondition(listened.intents.count == 2)
+        precondition(listened.intents.count == 1)
         precondition(!listened.intents.contains { $0.key.destination == .youtubeMusic })
         let loved = planner.plan(event: event("liked-mbid", .user, .trackLiked(true),
                                                 mbid: "7f2b9f43-e5cb-49f4-83fb-6830ac60bf61"),
                                  connections: connections)
-        precondition(loved.intents.count == 3)
+        precondition(loved.intents.count == 2)
 
         var outbox = MusicSyncOutbox()
         outbox.enqueue(like.intents)

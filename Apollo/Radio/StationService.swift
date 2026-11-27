@@ -47,7 +47,7 @@ actor StationService {
 
     private let source = SpotifyStationSource()
     private let taste = RadioTasteStore.shared
-    private let lastFM = LastFMDiscoveryClient()
+    private let musicBrainz = MusicBrainzClient()
     private let embeddings = CatalogEmbeddingStore.shared
     private let learning = RadioLearningStore.shared
     private let bandit = RadioBanditStore.shared
@@ -200,12 +200,12 @@ actor StationService {
             }
         }
 
-        // Genre continuity: Last.fm tags of the seed artist are searched in
+        // Genre continuity: MusicBrainz tags of the seed artist are searched in
         // Spotify so a salsa station keeps serving salsa, not just one artist.
         let seedArtistName = seedSong.artists.first?.name ?? snapshot.artist.name
-        let tags = await lastFM.topTags(artist: seedArtistName, limit: 6)
+        let tags = await musicBrainz.artistTags(name: seedArtistName, limit: 6)
         for tag in tags.prefix(2) {
-            let searchTerm = tag.name
+            let searchTerm = tag
             guard let results = try? await SpotifyCatalogProvider().search(searchTerm, limit: 12) else {
                 continue
             }
@@ -215,61 +215,9 @@ actor StationService {
                     base: 0.68,
                     popularity: 0.5,
                     group: .related,
-                    reason: "\(tag.name.capitalized) · same genre"
+                    reason: "\(tag.capitalized) · same genre"
                 ))
             }
-        }
-
-        let similarTracks = await lastFM.similarTracks(
-            title: seedSong.title,
-            artist: seedSong.artists.first?.name ?? "",
-            limit: 10
-        )
-        for (index, match) in similarTracks.prefix(5).enumerated() {
-            let query = "\(match.title) \(match.artist)"
-            guard let results = try? await SpotifyCatalogProvider().search(query, limit: 2) else { continue }
-            let normalizedTitle = TextMatch.normalizeTitle(match.title)
-            guard let track = results.tracks.first(where: {
-                TextMatch.normalizeTitle($0.title) == normalizedTitle
-            }) ?? results.tracks.first else { continue }
-            candidates.append(Candidate(
-                song: SpotifyCatalogMapper.song(from: track),
-                base: 0.72 - Double(index) * 0.03,
-                popularity: min(max(match.match / 100, 0), 1),
-                group: .related,
-                reason: "Discovered via Last.fm"
-            ))
-        }
-
-        let relatedNames = Set(
-            snapshot.related.map { TextMatch.normalizeArtist($0.name) }
-                + [TextMatch.normalizeArtist(snapshot.artist.name)]
-        )
-        let additionalArtists = await lastFM.similarArtists(
-            name: snapshot.artist.name,
-            limit: 8
-        )
-        var addedArtists = 0
-        for match in additionalArtists where addedArtists < 2 {
-            let name = TextMatch.normalizeArtist(match.name)
-            guard !relatedNames.contains(name) else { continue }
-            guard let results = try? await SpotifyCatalogProvider().search(match.name, limit: 3),
-                  let artist = results.artists.first(where: {
-                      TextMatch.normalizeArtist($0.name) == name
-                  }),
-                  let relatedSnapshot = try? await source.snapshot(artistID: artist.id) else {
-                continue
-            }
-            for (index, song) in relatedSnapshot.topTracks.prefix(8).enumerated() {
-                candidates.append(Candidate(
-                    song: song,
-                    base: 0.7 - Double(index) * 0.02,
-                    popularity: popularity(index: index, count: max(relatedSnapshot.topTracks.count, 1)),
-                    group: .related,
-                    reason: "Similar to \(snapshot.artist.name)"
-                ))
-            }
-            addedArtists += 1
         }
 
         return candidates.filter { !isSeed($0.song, seedSong: seedSong, seedTrackID: seed.trackID) }

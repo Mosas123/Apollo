@@ -15,7 +15,7 @@ The first beta tests ApoloEngine for **music playback only**. It does not add or
 
 1. Merge/validate ApoloEngine's embedding API and update this dependency to the merged commit or a tagged release.
 2. Add a single music-only playback router with a debug toggle defaulting to MPVKit; make it the only writer of the audio session and remote commands.
-3. Feed Apolo's current time, duration, playback state and errors into `NowPlaying`, and preserve the existing queue, artwork, lyrics, Last.fm and history.
+3. Feed Apolo's current time, duration, playback state and errors into `NowPlaying`, and preserve the existing queue, artwork, lyrics, listening history and sync.
 4. Route downloaded audio and authorized direct MP3/AAC/FLAC URLs into Apolo; keep mpv fallback for incompatible/live sources; do not enable video playback in the beta mode.
 5. Port or disable features that depend on mpv's ten-band `firequalizer`, SponsorBlock seeking, and mid-track quality switches until verified.
 6. Validate screen lock, background playback, pause/seek/skip races, memory over long sessions, audio output changes and offline/online recovery on a physical iPhone.

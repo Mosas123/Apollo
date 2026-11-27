@@ -127,7 +127,6 @@
 "Connect to enable scrobbling" = "Conecte-se para registrar suas reproduções";
 "Connect to show listening activity" = "Conecte-se para mostrar o que você está ouvindo";
 "Connected" = "Conectado";
-"Connected to Last.fm" = "Conectado ao Last.fm";
 "Connection" = "Conexão";
 "Content" = "Conteúdo";
 "Content & Lyrics" = "Conteúdo e letras";
@@ -300,9 +299,6 @@
 "Keep Listening" = "Continue ouvindo";
 "Label" = "Gravadora";
 "Last week" = "Semana passada";
-"Last.fm" = "Last.fm";
-"Last.fm Login" = "Entrar no Last.fm";
-"Last.fm User" = "Usuário do Last.fm";
 "Left" = "Esquerda";
 "Lesser-known related tracks" = "Músicas parecidas menos conhecidas";
 "Library" = "Biblioteca";
@@ -526,7 +522,6 @@
 "Report comment" = "Denunciar comentário";
 "Report submitted" = "Denúncia enviada";
 "Requested capabilities" = "Recursos solicitados";
-"Requesting Last.fm token…" = "Solicitando token do Last.fm…";
 "Reset offset" = "Redefinir ajuste de tempo";
 "Results" = "Resultados";
 "Retry" = "Tentar novamente";
@@ -550,10 +545,6 @@
 "Saved securely. Search again to see eligible Qobuz tracks." = "Credenciais salvas com segurança. Faça uma nova busca para ver as músicas disponíveis no Qobuz.";
 "Saving “%@”…" = "Salvando “%@”…";
 "Saving…" = "Salvando…";
-"Scrobble Configuration" = "Registro de reproduções";
-"Scrobble Delay" = "Tempo para registrar reproduções";
-"Scrobble Delay Limit" = "Tempo máximo para registrar";
-"Scrobble Percent" = "Porcentagem para registrar";
 "Scroll to see the blur effect" = "Role para ver o efeito de desfoque";
 "Search" = "Buscar";
 "Search Online" = "Buscar online";
@@ -640,7 +631,6 @@
 "Sync Albums" = "Sincronizar álbuns";
 "Sync Artists" = "Sincronizar artistas";
 "Sync Liked Songs" = "Sincronizar músicas curtidas";
-"Sync Likes to Last.fm" = "Sincronizar curtidas com o Last.fm";
 "Sync Playlists" = "Sincronizar playlists";
 "Sync Podcasts" = "Sincronizar podcasts";
 "Sync playlist" = "Sincronizar playlist";
@@ -685,7 +675,6 @@
 "Track Play History" = "Histórico de reprodução";
 "Track Search History" = "Histórico de buscas";
 "Tracks" = "Músicas";
-"Tracks shorter than this will not be scrobbled (10–60s)." = "Músicas mais curtas não serão registradas no Last.fm (10 a 60 s).";
 "Treble Boost" = "Reforço de agudos";
 "Treble Reducer" = "Redução de agudos";
 "Trending" = "Em alta";
@@ -746,7 +735,6 @@
 "Your recent searches will appear here." = "Suas buscas recentes aparecerão aqui.";
 "episodes.count" = "%ld episódios";
 "https://provider.example/manifest.json" = "https://provider.example/manifest.json";
-"last.fm" = "last.fm";
 "offline_tracks.count" = "%ld músicas baixadas";
 "s" = "s";
 "songs.count" = "%ld músicas";

@@ -87,13 +87,6 @@ sanitize_framework_binaries() {
     done
 }
 
-# Adds or updates a string key in a plist (never fails the build).
-inject_plist_string() {
-    local key="$1" value="$2" plist="$3"
-    /usr/libexec/PlistBuddy -c "Add :$key string $value" "$plist" 2>/dev/null \
-        || /usr/libexec/PlistBuddy -c "Set :$key string $value" "$plist" 2>/dev/null || true
-}
-
 APPLICATION_NAME=Apollo
 PROJECT_NAME=Apollo
 # MPVKit and FFmpegKit both ship ffmpeg libraries whose framework names differ
@@ -201,73 +194,6 @@ if [ "${CLEAN_BUILD:-0}" = "1" ]; then
     XCODEBUILD_ACTION="clean build"
 fi
 
-# Inject Last.fm secrets from the local scheme or GitHub Actions secrets.
-# Scheme variables are used for local builds; workflow environment variables
-# take precedence when the build runs in GitHub Actions.
-SCHEME_PATH="$WORKING_LOCATION/Apollo.xcodeproj/xcshareddata/xcschemes/$APPLICATION_NAME.xcscheme"
-scheme_environment_value() {
-    local wanted_key="$1"
-    [ -f "$SCHEME_PATH" ] || return 0
-    awk -v wanted_key="$wanted_key" '
-        /<EnvironmentVariable/ { in_variable = 1; key = ""; value = "" }
-        in_variable && /key = "/ {
-            line = $0
-            sub(/^.*key = "/, "", line)
-            sub(/".*$/, "", line)
-            key = line
-        }
-        in_variable && /value = "/ {
-            line = $0
-            sub(/^.*value = "/, "", line)
-            sub(/".*$/, "", line)
-            value = line
-        }
-        in_variable && /<\/EnvironmentVariable>/ {
-            if (key == wanted_key) print value
-            in_variable = 0
-        }
-    ' "$SCHEME_PATH" | head -n 1
-}
-
-LASTFM_API_KEY_SOURCE="${LASTFM_API_KEY:-}"
-LASTFM_SECRET_SOURCE="${LASTFM_SECRET:-}"
-if [ -z "$LASTFM_API_KEY_SOURCE" ]; then
-    LASTFM_API_KEY_SOURCE="$(scheme_environment_value LASTFM_API_KEY)"
-fi
-if [ -z "$LASTFM_SECRET_SOURCE" ]; then
-    LASTFM_SECRET_SOURCE="$(scheme_environment_value LASTFM_SECRET)"
-fi
-
-# Trim whitespace/newlines (secrets pasted with newline cause Last.fm error 6).
-LASTFM_API_KEY_TRIMMED="$(echo "$LASTFM_API_KEY_SOURCE" | tr -d '\r\n' | xargs 2>/dev/null || echo "$LASTFM_API_KEY_SOURCE")"
-LASTFM_SECRET_TRIMMED="$(echo "$LASTFM_SECRET_SOURCE" | tr -d '\r\n' | xargs 2>/dev/null || echo "$LASTFM_SECRET_SOURCE")"
-
-if [ "${GITHUB_ACTIONS:-}" = "true" ] || [ -n "$LASTFM_API_KEY_TRIMMED" ] || [ -n "$LASTFM_SECRET_TRIMMED" ]; then
-
-    if [ -n "$LASTFM_API_KEY_TRIMMED" ]; then
-        echo "Injecting LASTFM_API_KEY (len=${#LASTFM_API_KEY_TRIMMED})"
-        inject_plist_string "LASTFM_API_KEY" "$LASTFM_API_KEY_TRIMMED" "$WORKING_LOCATION/Apollo/Resources/Info.plist"
-    else
-        echo "Warning: LASTFM_API_KEY empty - Last.fm login will fail with error 6"
-    fi
-    if [ -n "$LASTFM_SECRET_TRIMMED" ]; then
-        echo "Injecting LASTFM_SECRET (len=${#LASTFM_SECRET_TRIMMED})"
-        inject_plist_string "LASTFM_SECRET" "$LASTFM_SECRET_TRIMMED" "$WORKING_LOCATION/Apollo/Resources/Info.plist"
-    else
-        echo "Warning: LASTFM_SECRET empty - Last.fm login will fail with error 6"
-    fi
-    XCODE_LASTFM_ARGS=()
-    if [ -n "$LASTFM_API_KEY_TRIMMED" ]; then
-        XCODE_LASTFM_ARGS+=("INFOPLIST_KEY_LASTFM_API_KEY=$LASTFM_API_KEY_TRIMMED")
-    fi
-    if [ -n "$LASTFM_SECRET_TRIMMED" ]; then
-        XCODE_LASTFM_ARGS+=("INFOPLIST_KEY_LASTFM_SECRET=$LASTFM_SECRET_TRIMMED")
-    fi
-
-else
-    echo "Last.fm credentials not found in environment or scheme - skipping credential injection."
-fi
-
 # CI sets CURRENT_PROJECT_VERSION to the run number
 # so AltStore/Feather can detect nightly updates while marketing version stays put.
 XCODE_VERSION_ARGS=()
@@ -288,7 +214,6 @@ xcodebuild -project "$WORKING_LOCATION/$PROJECT_NAME.xcodeproj" \
     $XCODEBUILD_ACTION \
     SKIP_SWIFTLINT=YES \
     CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGN_ENTITLEMENTS="" CODE_SIGNING_ALLOWED="NO" \
-    ${XCODE_LASTFM_ARGS[@]+"${XCODE_LASTFM_ARGS[@]}"} \
     ${XCODE_VERSION_ARGS[@]+"${XCODE_VERSION_ARGS[@]}"}
 
 DD_APP_PATH="$DERIVED_DATA_PATH/Build/Products/Release-iphoneos/$APPLICATION_NAME.app"

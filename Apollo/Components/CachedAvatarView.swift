@@ -3,7 +3,7 @@
 //  Apollo
 //
 //  Nuke-backed profile avatar: memory + disk cached via the shared pipeline,
-//  so Discord/Last.fm pictures don't refetch every time settings opens.
+//  so remote avatars don't refetch every time settings opens.
 //  (SwiftUI's AsyncImage uses URLCache, not Nuke's disk cache.)
 //
 

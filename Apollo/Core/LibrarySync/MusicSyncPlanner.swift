@@ -33,7 +33,7 @@ enum MusicSyncCategory: String, Hashable, Sendable {
 }
 
 enum MusicSyncDestination: String, Hashable, Sendable {
-    case youtubeMusic, lastFM, listenBrainz
+    case youtubeMusic, listenBrainz
 }
 
 enum MusicSyncStateAction: Hashable, Sendable {
@@ -144,14 +144,6 @@ struct MusicSyncPlanner: Sendable {
                     continue
                 }
                 destinationID = remoteID
-            case .lastFM:
-                switch event.change {
-                case .trackLiked, .listenCompleted: break
-                default: continue
-                }
-                guard !(event.trackTitle ?? "").isEmpty,
-                      !(event.artistName ?? "").isEmpty else { excluded += 1; continue }
-                destinationID = nil
             case .listenBrainz:
                 switch event.change {
                 case .listenCompleted:
@@ -196,7 +188,7 @@ struct MusicSyncQueuedIntent: Sendable {
 }
 
 /// In-memory state machine to be persisted transactionally in a future PR.
-/// A timeout on a scrobble MUST NOT auto-retry: the remote API might have
+/// A timeout on an outbound write MUST NOT auto-retry: the remote API might have
 /// accepted it. Reconciliation is needed to avoid double submissions.
 struct MusicSyncOutbox: Sendable {
     private(set) var entries: [MusicSyncQueuedIntent] = []

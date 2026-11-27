@@ -28,7 +28,7 @@ The checks do not compile or launch the app.
   “Músicas curtidas”, “Baixar” and “Sem perdas”. Avoid European Portuguese
   terms such as “ficheiro”, “ecrã” or “transferir” for downloads.
 - Preserve provider names and technical identifiers such as FLAC, Qobuz and
-  Last.fm. Song titles, artist names and fetched descriptions are content.
+  MusicBrainz. Song titles, artist names and fetched descriptions are content.
 - Preserve printf argument types (`%@`, `%ld`) and escaped percentages (`%%`).
   Use numbered arguments when a translation needs to change argument order.
 - Localize a complete sentence before inserting a title, name or number.

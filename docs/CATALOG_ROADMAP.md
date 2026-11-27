@@ -28,9 +28,9 @@ depender de YouTube Music para metadatos y con YouTube únicamente como audio.
 | ISRC / MBID | Apple Music API / MusicBrainz | Spotify Web API |
 | Portada | Apple (hasta 3000 px) | Spotify → Deezer/iTunes |
 | Fecha de lanzamiento | Apple/iTunes | Spotify → MusicBrainz |
-| Géneros / tags | Apple/iTunes | Spotify → Last.fm |
+| Géneros / tags | Apple/iTunes | MusicBrainz |
 | Créditos | MusicBrainz | Apple Music API |
-| Bio / relacionados | Spotify | MusicBrainz/Last.fm |
+| Bio / relacionados | Spotify | MusicBrainz |
 | Podcasts | Spotify | PodcastIndex/iTunes |
 | Audiolibros | Spotify | fuente de audiolibros (TBD) |
 | Disponibilidad de audio | YouTube | add-ons |
@@ -81,7 +81,7 @@ depender de YouTube Music para metadatos y con YouTube únicamente como audio.
 - [ ] Afinidades locales con decaimiento.
 - [x] `StationService` v1: seed track/artist, top tracks + álbum + related.
 - [x] Ranker ponderado (gusto local, popularidad, novedad) + límites por artista/álbum.
-- [x] Last.fm similar; tags/géneros pendientes.
+- [x] Tags/géneros de MusicBrainz para continuidad de radio.
 - [ ] Filtro de disponibilidad/calidad y explicaciones en UI.
 - [x] Diagnóstico local de estaciones (diversidad, repetición, latencia, fuentes).
 - [ ] Golden tests automáticos y cobertura de audio.

@@ -38,7 +38,7 @@ Settings → Integrations → Music Addons:
   with a specific compatibility explanation, not a generic JSON failure.
   This includes Flix-Music (https://flix-music.vercel.app/manifest.json),
   which advertises Stremio `catalog/meta/stream` resources and a `movie`
-  content type for its Last.fm-based music catalogs. Apollo currently accepts
+  content type for its chart/list-based music catalogs. Apollo currently accepts
   only its own v1 declarative manifest format. Stremio compatibility needs
   a dedicated protocol adapter and a source/rights review; silently mapping
   Stremio endpoints to Apollo's schema would create unusable addons.
@@ -100,7 +100,7 @@ Settings → Integrations → Music Addons:
 - Validate audio stream URLs against allowed MIME types, HTTPS and
   authorized origins; do not trust a random user-controlled redirect.
 - Live streams may have unknown duration and no seeking. Podcast/live
-  progress and Last.fm tracking require their own logic.
+  progress and external tracking require their own logic.
 - Do not bypass paywalls, DRM, geographical restrictions or copyright
   licensing to get a purportedly instant stream.
 - Apple App Store Guideline 2.5.2 restricts remotely downloaded executable

@@ -67,7 +67,7 @@ edited inside Apollo.
 - Account IDs should be opaque stable identifiers, not email addresses
   or cookies, and should be stored in a secure app-controlled data model.
 - No data is uploaded or synchronized to third-party services by this
-  planner, and imported history is never automatically scrobbled.
+  planner, and imported history is never automatically sent to external services.
 
 ## Future work, in separate PRs
 

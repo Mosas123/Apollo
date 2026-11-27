@@ -127,7 +127,6 @@
 "Connect to enable scrobbling" = "连接以启用音乐记录";
 "Connect to show listening activity" = "连接以显示聆听活动";
 "Connected" = "已连接";
-"Connected to Last.fm" = "已连接 Last.fm";
 "Connection" = "连接状态";
 "Content" = "内容";
 "Content & Lyrics" = "内容与歌词";
@@ -300,9 +299,6 @@
 "Keep Listening" = "继续聆听";
 "Label" = "标签";
 "Last week" = "上周";
-"Last.fm" = "Last.fm";
-"Last.fm Login" = "Last.fm 登录";
-"Last.fm User" = "Last.fm 用户";
 "Left" = "左对齐";
 "Lesser-known related tracks" = "较少人知的相关歌曲";
 "Library" = "资料库";
@@ -526,7 +522,6 @@
 "Report comment" = "报告评论";
 "Report submitted" = "举报已提交";
 "Requested capabilities" = "扩展所需功能";
-"Requesting Last.fm token…" = "正在获取 Last.fm 授权…";
 "Reset offset" = "重置偏移";
 "Results" = "结果";
 "Retry" = "重试";
@@ -550,10 +545,6 @@
 "Saved securely. Search again to see eligible Qobuz tracks." = "凭据已安全保存，重新搜索即可查看可用的 Qobuz 歌曲。";
 "Saving “%@”…" = "正在保存“%@”…";
 "Saving…" = "正在保存…";
-"Scrobble Configuration" = "音乐记录配置";
-"Scrobble Delay" = "音乐记录延迟";
-"Scrobble Delay Limit" = "音乐记录延迟上限";
-"Scrobble Percent" = "音乐记录百分比";
 "Scroll to see the blur effect" = "滚动查看模糊效果";
 "Search" = "搜索";
 "Search Online" = "在线搜索";
@@ -640,7 +631,6 @@
 "Sync Albums" = "同步专辑";
 "Sync Artists" = "同步艺人";
 "Sync Liked Songs" = "同步喜欢的歌曲";
-"Sync Likes to Last.fm" = "将喜欢同步到 Last.fm";
 "Sync Playlists" = "同步播放列表";
 "Sync Podcasts" = "同步播客";
 "Sync playlist" = "同步播放列表";
@@ -685,7 +675,6 @@
 "Track Play History" = "记录播放历史";
 "Track Search History" = "记录搜索历史";
 "Tracks" = "歌曲";
-"Tracks shorter than this will not be scrobbled (10–60s)." = "短于此时长的歌曲不会被记录（10–60 秒）。";
 "Treble Boost" = "增强高音";
 "Treble Reducer" = "降低高音";
 "Trending" = "热门趋势";
@@ -746,7 +735,6 @@
 "Your recent searches will appear here." = "你最近的搜索会显示在这里。";
 "episodes.count" = "%ld 期节目";
 "https://provider.example/manifest.json" = "https://provider.example/manifest.json";
-"last.fm" = "Last.fm";
 "offline_tracks.count" = "%ld 首已下载歌曲";
 "s" = "秒";
 "songs.count" = "%ld 首歌曲";

@@ -9,7 +9,7 @@ writes, token usage or user-facing settings in this PR.
 
 - Apollo currently uses YouTube Music \`MutationService\` for likes/unlikes,
   add/remove library items, playlist edits, artist and podcast subscriptions.
-- Apollo already has Last.fm scrobbling and optional love/unlove support.
+- Apollo records local listening history; external scrobbling integrations are out of scope.
 - Phase 6 plans canonical library identity mapping; Phase 7 adds a read-only
   CSV parser. Neither is yet a fully transactional import or history merger.
 
@@ -36,15 +36,13 @@ writes, token usage or user-facing settings in this PR.
 
 - **Only user-initiated changes** may produce outbound actions. Remote
   refreshes, file imports and restored backups are always local-only.
-  In particular, importing a year's history NEVER re-scrobbles it.
+  In particular, importing a year's history NEVER re-uploads it.
 - Connected accounts are explicitly scoped to one Apollo profile, with
   separately enabled favorites/library/playlists/listens categories.
 - YouTube Music: eligible likes, library saves, artist subscriptions,
   podcast subscriptions and owned playlist edits, **only after**
   mapping the track/podcast and verifying access to the active account.
   No guessing YouTube IDs from Spotify/Audius/Qobuz titles.
-- Last.fm: loved/unloved tracks and eligible listens only. It does not
-  support syncing a full podcast library or playlists as such.
 - ListenBrainz: listens and recording love feedback when a verified
   MusicBrainz recording MBID exists. This is a *future* connector; Apollo
   does not currently have it built in.
@@ -67,10 +65,10 @@ writes, token usage or user-facing settings in this PR.
 3. On-device settings to select destination services and action types.
    Imports must have their own optional, explicit **Export imported
    favorites** flow, never silently upload mass imported data.
-4. Live adapters behind the existing YouTube mutations and Last.fm
-   integration; implement ListenBrainz only when opted in.
+4. Live adapters behind the existing YouTube mutations; implement
+   ListenBrainz only when opted in.
 5. Offline queue, rate limits, session-change guards, error UI, retry/
-   reconciliation (especially for scrobbles) and end-to-end iOS tests.
+   reconciliation (especially for listens) and end-to-end iOS tests.
 6. Restrict changes to permitted provider operations and handle token
    expiration, account changes and cases with no matching remote item.
 
@@ -79,6 +77,5 @@ Fixture IDs are fictional. This PR is intentionally not active runtime
 sync and should remain **Draft** until owner review.
 
 References:
-- https://www.last.fm/api/scrobbling
 - https://listenbrainz.readthedocs.io/en/latest/users/api/core.html
 - https://listenbrainz.readthedocs.io/en/latest/users/api/recordings.html

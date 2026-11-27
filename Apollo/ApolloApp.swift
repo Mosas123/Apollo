@@ -38,7 +38,6 @@ struct ApolloApp: App {
         PlayerController.registerRemoteControlSupport()
         observePlaybackSettings()
         Task { await InnerTubeClient.apolloShared.syncApolloLocale() }
-        Task { @MainActor in LastFMIntegration.shared.start() }
     }
 
     /// Re-applies mpv playback settings whenever the user changes the

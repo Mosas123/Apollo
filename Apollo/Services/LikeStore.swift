@@ -66,11 +66,6 @@ class LikeStore: ObservableObject {
             Task {
                 await RadioLearningStore.shared.record(key: key, label: target ? 1 : 0)
             }
-            let artist = song.artists.map(\.name).joined(separator: ", ")
-            let track = song.title
-            if !artist.isEmpty, !track.isEmpty {
-                Task { await LastFMIntegration.shared.handleLove(artist: artist, track: track, love: target) }
-            }
             NotificationCenter.default.post(name: Notification.Name("apollo.likeChanged"), object: nil)
         } catch {
             var reverted = liked

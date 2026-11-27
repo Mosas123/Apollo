@@ -23,14 +23,14 @@ struct MusicAddonManagerChecks {
         // Verify protocol classification, permissions and disabled-by-default
         // installation rather than expecting the removed incompatibility error.
         let stremio = Data("""
-        {"id":"community.lastfm.telegram","name":"Flix-Music","version":"1.0.0",
+        {"id":"community.charts.telegram","name":"Flix-Music","version":"1.0.0",
          "resources":["catalog","meta","stream"],"types":["movie"],
-         "catalogs":[{"type":"movie","id":"lastfm-top","name":"Music - Top"}]}
+         "catalogs":[{"type":"movie","id":"charts-top","name":"Music - Top"}]}
         """.utf8)
         let stremioPackage = try MusicAddonPackage.parse(stremio, from: alpha)
         precondition(stremioPackage.manifest.protocolKind == .stremio)
         precondition(Set(stremioPackage.manifest.capabilities) == Set([.search, .stream, .metadata]))
-        precondition(stremioPackage.manifest.stremio?.catalogs.first?.id == "lastfm-top")
+        precondition(stremioPackage.manifest.stremio?.catalogs.first?.id == "charts-top")
         var stremioRegistry = MusicAddonRegistry()
         try stremioRegistry.install(data: stremio, from: alpha)
         precondition(stremioRegistry.installations.count == 1)
