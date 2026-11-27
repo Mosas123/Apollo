@@ -8,10 +8,28 @@ final class SpotifyAudioResolver {
     static let shared = SpotifyAudioResolver()
 
     private var cache: [String: SongItem] = [:]
+    private var tail: Task<Void, Never>?
 
     func resolve(_ song: SongItem) async -> SongItem? {
         if let cached = cache[song.videoId] { return cached }
 
+        // Downloads and queue prefetch can ask for several tracks at once.
+        // SearchService cancels its previous query, so resolutions are
+        // serialized instead of racing each other.
+        let previous = tail
+        let task = Task { @MainActor [weak self] () -> SongItem? in
+            await previous?.value
+            guard let self else { return nil }
+            if let cached = self.cache[song.videoId] { return cached }
+            let result = await self.resolveOne(song)
+            if let result { self.cache[song.videoId] = result }
+            return result
+        }
+        tail = Task { _ = await task.value }
+        return await task.value
+    }
+
+    private func resolveOne(_ song: SongItem) async -> SongItem? {
         let title = TextMatch.queryTitle(song.title)
         let artist = song.artists.first.map { TextMatch.normalizeArtist($0.name) } ?? ""
         let query = [title, artist].filter { !$0.isEmpty }.joined(separator: " ")
@@ -51,7 +69,6 @@ final class SpotifyAudioResolver {
         resolved.recordingPreference = .albumAudio
         resolved.contentKind = .music
 
-        cache[song.videoId] = resolved
         return resolved
     }
 

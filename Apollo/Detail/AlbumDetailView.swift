@@ -75,6 +75,40 @@ final class AlbumDetailViewModel {
         guard let album else { return }
         let currentlySaved = isSaved
         isSaved = !currentlySaved
+
+        if SpotifyCatalogID.isSpotify(browseId) {
+            do {
+                if currentlySaved {
+                    if let entity = try? await DatabaseService.shared.fetchOne(
+                        AlbumEntity.self,
+                        key: browseId
+                    ) {
+                        try await DatabaseService.shared.delete(entity)
+                    }
+                } else {
+                    try await DatabaseService.shared.save(
+                        AlbumEntity(
+                            id: browseId,
+                            title: album.title,
+                            playlistId: nil,
+                            thumbnailUrl: album.thumbnailUrl,
+                            songCount: album.songCount,
+                            duration: album.duration,
+                            bookmarkedAt: Date()
+                        )
+                    )
+                }
+                NotificationCenter.default.post(
+                    name: Notification.Name("apollo.libraryChanged"),
+                    object: nil
+                )
+            } catch {
+                Log.albumDetailViewModel.error("Spotify album save failed: \(error)")
+            }
+            await refreshSavedState()
+            return
+        }
+
         do {
             if currentlySaved {
                 try await SyncBridge.mutations.unsaveAlbum(browseId: browseId)
@@ -382,9 +416,7 @@ struct AlbumDetailView: View {
                 AlbumMoreSheet(
                     album: album,
                     isSaved: viewModel.isSaved,
-                    onToggleSave: SpotifyCatalogID.isSpotify(album.browseId)
-                        ? nil
-                        : { Task { await viewModel.toggleSave() } }
+                    onToggleSave: { Task { await viewModel.toggleSave() } }
                 )
             }
         }
@@ -737,16 +769,14 @@ struct AlbumMoreSheet: View {
                     addToQueue()
                     dismiss()
                 }
-                if !SpotifyCatalogID.isSpotify(album.browseId) {
-                    Divider()
-                    MenuRow(
-                        icon: "square.and.arrow.down",
-                        title: "Download",
-                        subtitle: "Download all songs for offline playback"
-                    ) {
-                        downloadAll()
-                        dismiss()
-                    }
+                Divider()
+                MenuRow(
+                    icon: "square.and.arrow.down",
+                    title: "Download",
+                    subtitle: "Download all songs for offline playback"
+                ) {
+                    downloadAll()
+                    dismiss()
                 }
                 Divider()
                 MenuRow(

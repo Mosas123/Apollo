@@ -34,7 +34,14 @@ final class ArtistDetailViewModel {
         if SpotifyCatalogID.isSpotify(browseId) {
             do {
                 let id = SpotifyCatalogID.rawID(browseId) ?? browseId
-                artist = try await SpotifyDetailService.shared.artistDetail(id: id)
+                var parsed = try await SpotifyDetailService.shared.artistDetail(id: id)
+                if let saved = try? await DatabaseService.shared.fetchOne(
+                    ArtistEntity.self,
+                    key: browseId
+                ) {
+                    parsed.isSubscribed = saved.bookmarkedAt != nil
+                }
+                artist = parsed
                 isLoading = false
             } catch {
                 self.error = error
@@ -651,18 +658,16 @@ struct ArtistDetailView: View {
                     .disabled(artist.songs.isEmpty)
                     .accessibilityLabel("Play artist")
 
-                    if !SpotifyCatalogID.isSpotify(artist.browseId) {
-                        Button { toggleSubscribe(artist) } label: {
-                            Image(systemName: artist.isSubscribed ? "star.fill" : "star")
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(.white)
-                                .frame(width: 48, height: 48)
-                                .background(Circle().fill(.white.opacity(0.22)))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isUpdatingSubscription)
-                        .accessibilityLabel(LocalizedStringKey(artist.isSubscribed ? "Unfollow artist" : "Follow artist"))
+                    Button { toggleSubscribe(artist) } label: {
+                        Image(systemName: artist.isSubscribed ? "star.fill" : "star")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 48, height: 48)
+                            .background(Circle().fill(.white.opacity(0.22)))
                     }
+                    .buttonStyle(.plain)
+                    .disabled(isUpdatingSubscription)
+                    .accessibilityLabel(LocalizedStringKey(artist.isSubscribed ? "Unfollow artist" : "Follow artist"))
                 }
 
             }
@@ -1092,7 +1097,7 @@ struct ArtistDetailView: View {
                     try await DatabaseService.shared.save(entity)
                     NotificationCenter.default.post(name: Notification.Name("apollo.libraryChanged"), object: nil)
                     // Guest favorites belong to this device, not a Google account.
-                    if await CookieStore().isLoggedIn() {
+                    if !SpotifyCatalogID.isSpotify(artist.browseId), await CookieStore().isLoggedIn() {
                         failureStage = "YouTube Music sync"
                         await AuthService.shared.loadPersistedSession()
                         if desiredState {

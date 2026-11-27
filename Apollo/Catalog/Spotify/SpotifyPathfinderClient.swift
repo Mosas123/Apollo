@@ -11,6 +11,7 @@ struct SpotifyPathfinderClient: @unchecked Sendable {
     private static let artistOverviewHash = "446130b4a0aa6522a686aafccddb0ae849165b5e0436fd802f96e0243617b5d8"
     private static let artistDiscographyHash = "5e07d323febb57b4a56a42abbf781490e58764aa45feb6e3dc0591564fc56599"
     private static let trackHash = "612585ae06ba435ad26369870deaae23b5c8800a256cd8a57e08eddc25a37294"
+    private static let homeHash = "3a67ee0ea6abad2ebad2e588a9aa130fc98d6b553f5b05ac6467503d02133bdc"
     private static let userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
 
@@ -41,6 +42,14 @@ struct SpotifyPathfinderClient: @unchecked Sendable {
             operationName: "searchDesktop",
             variables: variables,
             hash: Self.searchHash
+        )
+    }
+
+    func home(timeZone: String) async throws -> Data {
+        try await perform(
+            operationName: "home",
+            variables: ["timeZone": timeZone],
+            hash: Self.homeHash
         )
     }
 

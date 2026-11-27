@@ -413,6 +413,14 @@ extension DownloadManager {
         preResolved: DownloadSource? = nil,
         retried: Bool = false
     ) async {
+        var song = song
+        if SpotifyCatalogID.isSpotify(song.videoId) {
+            guard let resolved = await SpotifyAudioResolver.shared.resolve(song) else {
+                Log.downloadManager.error("No audio match for Spotify track \(song.videoId)")
+                return
+            }
+            song = resolved
+        }
         let videoId = song.videoId
         if case .downloading = downloads[videoId] {
             Log.downloadManager.debug("Download already in progress for \(videoId)")

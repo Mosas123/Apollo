@@ -488,7 +488,12 @@ final class SearchViewModel {
                 if let cached = self.suggestionCache[query] {
                     values = cached
                 } else {
-                    values = Array(try await SearchSuggestions.suggest(query: query).prefix(5))
+                    // Suggestions now come from the local search history, so
+                    // typing no longer depends on a YouTube catalogue call.
+                    let recent = self.searchHistory
+                        .map(\.query)
+                        .filter { $0.localizedCaseInsensitiveContains(query) }
+                    values = Array(recent.prefix(5))
                 }
                 guard !Task.isCancelled, self.submittedQuery == query else { return }
                 // Dedupe (case-insensitive) so `ForEach(id: \.self)` never hits

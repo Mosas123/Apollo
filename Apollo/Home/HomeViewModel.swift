@@ -202,14 +202,9 @@ final class HomeViewModel {
 
     private func fetchHomePage(generation: Int) async {
         do {
-            let json = try await InnerTubeClient.apolloShared.browse(browseId: "FEmusic_home").value
-            guard let page = HomePageParser.parseHomePage(from: json) else {
-                if generation == loadGeneration {
-                    error = InnerTubeError.decodingFailed
-                }
-                return
-            }
-            homePage = page
+            let sections = try await SpotifyHomeService.shared.sections()
+            guard generation == loadGeneration else { return }
+            homePage = HomePage(chips: [], sections: sections, continuation: nil)
         } catch {
             if generation == loadGeneration {
                 self.error = error
@@ -235,21 +230,9 @@ final class HomeViewModel {
     }
 
     private func loadPhase2Sections() async {
-        guard isLoggedIn else { return }
-
-        async let ap: HomeSection = personalization.buildAccountPlaylists()
-        async let dd: HomeSection = personalization.buildDailyDiscover()
-        async let ct: HomeSection = personalization.buildFromTheCommunity()
-        async let sr: [HomeSection] = personalization.buildSimilarRecommendations()
-
-        let (apResult, ddResult, ctResult, srResults) = await (ap, dd, ct, sr)
-        var phase2: [HomeSection] = []
-        if !apResult.items.isEmpty { phase2.append(apResult) }
-        if !ddResult.items.isEmpty { phase2.append(ddResult) }
-        if !ctResult.items.isEmpty { phase2.append(ctResult) }
-        phase2.append(contentsOf: srResults)
-        cachedPhase2Sections = phase2
-
+        // YouTube Music account shelves are no longer a catalogue source.
+        // The Spotify home feed above and the local library cover this space.
+        cachedPhase2Sections = []
         mergeSections()
     }
 
@@ -262,20 +245,9 @@ final class HomeViewModel {
     func loadCategoryFeed(_ category: ContentCategory) async {
         guard category == .podcast || category == .audiobook else { return }
         guard categoryFeeds[category] == nil else { return }
-        guard let chip = homePage?.chips.first(where: { chipMatches($0.title, category) }) else {
-            return
-        }
-        do {
-            let json = try await InnerTubeClient.apolloShared.browse(
-                browseId: chip.browseId ?? "FEmusic_home",
-                params: chip.params
-            ).value
-            if let page = HomePageParser.parseHomePage(from: json) {
-                categoryFeeds[category] = page.sections
-            }
-        } catch {
-            Log.homeViewModel.error("Category feed \(category.rawValue) failed: \(error)")
-        }
+        // Podcast/audiobook shelves are derived from the same Spotify home
+        // feed until their dedicated providers land.
+        categoryFeeds[category] = (homePage?.sections ?? []).filter { $0.category == category }
     }
 
     private func chipMatches(_ title: String, _ category: ContentCategory) -> Bool {
