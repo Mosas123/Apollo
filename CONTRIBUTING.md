@@ -64,3 +64,11 @@ Please open a pull request with the language name and locale in the title (e.g.,
 * **Async Loading:** Use `.task { }` instead of `.onAppear`.
 * **Rows:** Add `.contentShape(Rectangle())` to make entire rows tappable, and use `.buttonStyle(.plain)`.
 * **Decomposition:** Extract complex subviews into `private var` computed properties.
+
+---
+
+## License of contributions
+
+By submitting a contribution you agree that it is licensed under GPL-3.0, the
+same license as this repository. Do not submit code you cannot license under
+those terms. See [LICENSE.txt](LICENSE.txt) and [NOTICE](NOTICE).

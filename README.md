@@ -72,4 +72,8 @@ Stable releases are available from the [releases page](../../releases). Nightly 
 
 ## License
 
-This repo is licensed under [GPLv3](LICENSE.txt). Apollo is not affiliated with, endorsed, or sponsored by Google or YouTube.
+The code is licensed under [GPL-3.0](LICENSE.txt). Third-party components and their licenses are listed in [NOTICE](NOTICE).
+
+The Apollo name, icon and cl0udly branding are separate from the code license and are not granted by it. Forks must rebrand before distributing; see [TRADEMARK.md](TRADEMARK.md). Official builds are published only from this repository.
+
+Apollo is not affiliated with, endorsed, or sponsored by Google or YouTube.

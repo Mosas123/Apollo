@@ -1,0 +1,28 @@
+Apollo
+Copyright (C) 2026 the Apollo contributors.
+
+This product is based on Trop by SwiftyMedia
+(https://github.com/SwiftyMedia/Trop), licensed under GPL-3.0. The original
+copyright notices are retained in the source files.
+
+The Apollo source code is licensed under GPL-3.0; see LICENSE.txt. The Apollo
+name, icon and cl0udly branding are not part of that license; see
+TRADEMARK.md.
+
+Third-party components
+----------------------
+
+- ApolloTube (vendored in ApolloTube/) - GPL-3.0. Derived from SwiftyTube by
+  SwiftyMedia.
+- GRDB.swift - MIT. https://github.com/groue/GRDB.swift
+- Nuke - MIT. https://github.com/kean/Nuke
+- Marquee - MIT. https://github.com/SwiftUIKit/Marquee
+- MPVKit / mpv - LGPL-3.0 (mpv itself is GPL-2.0-or-later / LGPL-2.1-or-later
+  depending on the build). https://github.com/mpvkit/MPVKit
+- FFmpegKit / FFmpeg - LGPL-3.0 for the library; prebuilt packages may include
+  additional codecs under their own licenses.
+  https://github.com/arthenica/ffmpeg-kit
+
+The full text of each license is available in the corresponding upstream
+repository. When redistributing a build, keep this notice and make the
+corresponding source available as required by GPL-3.0 and the LGPL.
