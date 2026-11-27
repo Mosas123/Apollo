@@ -18,11 +18,23 @@ struct CatalogIdentity: Hashable, Sendable {
         let title = TextMatch.normalizeTitle(track.title)
         let artist = track.artists.first.map { TextMatch.normalizeArtist($0.name) } ?? ""
         let durationBucket = track.durationMS > 0 ? track.durationMS / 2000 : 0
+        let edition = editionToken(track.title)
         return CatalogIdentity(
-            key: "fallback:\(title)|\(artist)|\(durationBucket)",
+            key: "fallback:\(title)|\(artist)|\(durationBucket)|\(edition)",
             isrc: nil,
             mbid: nil
         )
+    }
+
+    /// Live/remix/remaster versions must not collapse into the studio cut when
+    /// there is no ISRC/MBID to prove they are the same recording.
+    private static func editionToken(_ title: String) -> String {
+        let lower = title.lowercased()
+        let markers = [
+            "live", "remix", "remaster", "acoustic", "instrumental",
+            "sped up", "slowed", "demo", "session", "edit", "version"
+        ]
+        return markers.filter { lower.contains($0) }.sorted().joined(separator: ",")
     }
 }
 

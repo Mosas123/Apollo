@@ -11,6 +11,10 @@ final class SpotifyAudioResolver {
     private var tail: Task<Void, Never>?
 
     func resolve(_ song: SongItem) async -> SongItem? {
+        if let stub = CatalogTrack.spotifyStub(from: song) {
+            Task { await CatalogEnrichmentWorker.shared.enqueue([stub]) }
+        }
+
         if let cached = cache[song.videoId] { return cached }
 
         // Downloads and queue prefetch can ask for several tracks at once.

@@ -62,7 +62,7 @@ depender de YouTube Music para metadatos y con YouTube únicamente como audio.
 - [x] Clave canónica: ISRC → MBID → fallback título/artista/duración (en memoria).
 - [ ] Huella secundaria: título normalizado + artistas + duración ±2 s +
       álbum/año.
-- [ ] Reglas para no fusionar remix/live/remaster/versiones explícitas.
+- [x] Reglas para no fusionar remix/live/remaster/sped up/demo/version sin ISRC/MBID.
 - [ ] Resolver IDs entre Spotify, Apple, YouTube y add-ons.
 
 ### Fase 3 — Enriquecimiento asíncrono
