@@ -308,6 +308,9 @@ struct SongItem: Codable, Hashable {
     /// playable `videoId` may later be replaced by an audio carrier.
     var catalogID: String?
 
+    /// Recording ISRC when the catalog or an enricher knows it.
+    var isrc: String?
+
     /// The watch endpoint's music type is authoritative even when the
     /// localized subtitle omits the word "Video".
     var isMusicVideo: Bool {

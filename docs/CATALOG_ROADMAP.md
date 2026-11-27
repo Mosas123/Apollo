@@ -90,8 +90,9 @@ Detalle completo en [RADIO_ENGINE.md](RADIO_ENGINE.md).
 
 ### Fase 5 — Audio
 - [x] Fallback integrado: YouTube → JioSaavn/Audius (lossy) → Qobuz/add-ons (lossless) respetando el quality mode.
-- [ ] Abstracción formal `AudioProvider` y matching por ISRC.
-- [ ] Matching por ISRC → título/artista/duración (hoy se usa título/artista/duración).
+- [x] Abstracción formal `AudioProvider` + `AudioProviderRegistry`.
+- [x] Matching por ISRC cuando el proveedor lo expone; fallback metadata.
+- [x] Matching por ISRC; fallback título/artista/duración.
 - [ ] Fallback y disponibilidad por región.
 - [ ] Sin metadatos de YouTube en la UI nueva.
 

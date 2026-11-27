@@ -117,3 +117,16 @@ actor CatalogMerger {
         records.removeAll(keepingCapacity: true)
     }
 }
+
+enum CatalogIdentityStore {
+    /// ISRC previously persisted for a Spotify track, used to strengthen audio
+    /// matching without another network request.
+    static func isrc(forSpotifyTrackID id: String) async -> String? {
+        let rows = try? await DatabaseService.shared.fetchAll(
+            CatalogIdentityEntity.self,
+            sql: "SELECT * FROM catalog_identity WHERE spotify_id = ? LIMIT 1",
+            arguments: [id]
+        )
+        return rows?.first?.isrc
+    }
+}

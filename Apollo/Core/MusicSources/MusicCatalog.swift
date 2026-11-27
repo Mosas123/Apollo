@@ -44,6 +44,7 @@ struct MusicCatalogTrack: Hashable, Sendable {
     let artworkURL: URL?
     let permalinkURL: URL?
     let isStreamable: Bool
+    var isrc: String? = nil
 }
 
 enum MusicCatalogError: Error, Equatable {

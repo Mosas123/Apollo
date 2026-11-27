@@ -15,7 +15,8 @@ extension MusicCatalogTrack {
             isExplicit: false,
             playlistId: nil,
             likeStatus: nil,
-            contentKind: .music
+            contentKind: .music,
+            isrc: isrc
         )
     }
 }

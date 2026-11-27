@@ -76,7 +76,8 @@ struct QobuzClient: Sendable {
                 durationSeconds: max(track.duration ?? 0, 0),
                 artworkURL: track.album?.image?.url,
                 permalinkURL: nil,
-                isStreamable: true
+                isStreamable: true,
+                isrc: track.isrc
             )
         }
     }
@@ -149,6 +150,7 @@ private struct QobuzTrackPage: Decodable {
 }
 
 private struct QobuzTrack: Decodable {
+    let isrc: String?
     let id: Int64
     let title: String
     let duration: Int?
