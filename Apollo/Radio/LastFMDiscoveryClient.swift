@@ -6,6 +6,30 @@ struct LastFMTrackMatch: Hashable, Sendable {
     let match: Double
 }
 
+struct LastFMArtistMatch: Hashable, Sendable {
+    let name: String
+    let match: Double
+}
+
+actor LastFMArtistCache {
+    static let shared = LastFMArtistCache()
+    private struct Entry { let artists: [LastFMArtistMatch]; let at: Date }
+    private var entries: [String: Entry] = [:]
+    private let ttl: TimeInterval = 24 * 60 * 60
+
+    func artists(for key: String) -> [LastFMArtistMatch]? {
+        guard let entry = entries[key], Date().timeIntervalSince(entry.at) < ttl else {
+            entries[key] = nil
+            return nil
+        }
+        return entry.artists
+    }
+
+    func store(_ artists: [LastFMArtistMatch], for key: String) {
+        entries[key] = Entry(artists: artists, at: Date())
+    }
+}
+
 actor LastFMDiscoveryCache {
     static let shared = LastFMDiscoveryCache()
     private struct Entry { let tracks: [LastFMTrackMatch]; let at: Date }
@@ -77,6 +101,64 @@ struct LastFMDiscoveryClient: @unchecked Sendable {
 
         await LastFMDiscoveryCache.shared.store(matches, for: key)
         return matches
+    }
+
+    func similarArtists(name: String, limit: Int = 10) async -> [LastFMArtistMatch] {
+        let apiKey = LastFMDefaults.apiKey
+        guard !apiKey.isEmpty, !name.isEmpty else { return [] }
+
+        let key = "\(name.lowercased())|\(limit)"
+        if let cached = await LastFMArtistCache.shared.artists(for: key) {
+            return cached
+        }
+
+        var components = URLComponents(string: LastFMDefaults.baseUrl)
+        components?.queryItems = [
+            URLQueryItem(name: "method", value: "artist.getSimilar"),
+            URLQueryItem(name: "artist", value: name),
+            URLQueryItem(name: "autocorrect", value: "1"),
+            URLQueryItem(name: "limit", value: String(max(1, min(limit, 30)))),
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "format", value: "json")
+        ]
+        guard let url = components?.url else { return [] }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 12
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        guard let (data, response) = try? await session.data(for: request),
+              let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode),
+              let decoded = try? JSONDecoder().decode(ArtistResponse.self, from: data) else {
+            return []
+        }
+
+        let matches = (decoded.similarArtists?.artists ?? []).compactMap { artist -> LastFMArtistMatch? in
+            guard !artist.name.isEmpty else { return nil }
+            return LastFMArtistMatch(
+                name: artist.name,
+                match: Double(artist.match ?? "0") ?? 0
+            )
+        }
+
+        await LastFMArtistCache.shared.store(matches, for: key)
+        return matches
+    }
+
+    private struct ArtistResponse: Decodable {
+        let similarArtists: Container?
+        enum CodingKeys: String, CodingKey {
+            case similarArtists = "similarartists"
+        }
+        struct Container: Decodable {
+            let artists: [Artist]
+            enum CodingKeys: String, CodingKey { case artists = "artist" }
+        }
+        struct Artist: Decodable {
+            let name: String
+            let match: String?
+        }
     }
 
     private struct Response: Decodable {

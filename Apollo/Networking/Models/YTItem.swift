@@ -311,6 +311,10 @@ struct SongItem: Codable, Hashable {
     /// Recording ISRC when the catalog or an enricher knows it.
     var isrc: String?
 
+    /// Why a station included this song. Shown in the queue, never persisted to
+    /// the library.
+    var stationReason: String?
+
     /// The watch endpoint's music type is authoritative even when the
     /// localized subtitle omits the word "Video".
     var isMusicVideo: Bool {

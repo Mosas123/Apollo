@@ -103,6 +103,7 @@ final class SpotifyAudioResolver {
         resolved.contentKind = .music
         resolved.catalogID = song.catalogID
         resolved.isrc = match.isrc ?? isrc
+        resolved.stationReason = song.stationReason
         return resolved
     }
 

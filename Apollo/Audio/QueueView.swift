@@ -376,6 +376,13 @@ struct QueueSongRow: View {
                         .foregroundStyle(.white.opacity(isPlayed ? 0.35 : 0.6))
                         .lineLimit(1)
                 }
+
+                if let reason = song.stationReason, !reason.isEmpty {
+                    Text(reason)
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(isPlayed ? 0.25 : 0.45))
+                        .lineLimit(1)
+                }
             }
 
             Spacer()

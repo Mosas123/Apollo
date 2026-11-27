@@ -148,7 +148,8 @@ con el pipeline actual.
 
 ### R2 — Más recall
 - [x] Last.fm `track.getSimilar` (solo API key, cache 24 h).
-- [ ] `artist.getSimilar` y estaciones por mood/tags.
+- [x] `artist.getSimilar` para ampliar artistas relacionados.
+- [ ] Estaciones por mood/tags.
 - [ ] Co-ocurrencia/editorial.
 - [ ] Local taste y “para ti”.
 

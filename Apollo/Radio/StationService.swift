@@ -17,6 +17,7 @@ actor StationService {
         let base: Double
         let popularity: Double
         let group: Group
+        var reason: String = ""
     }
 
     private enum Group {
@@ -122,7 +123,8 @@ actor StationService {
                 song: song,
                 base: seedTopBase,
                 popularity: popularity(index: index, count: max(snapshot.topTracks.count, 1)),
-                group: .seedTop
+                group: .seedTop,
+                reason: "More from \(snapshot.artist.name)"
             ))
         }
 
@@ -134,7 +136,8 @@ actor StationService {
                     song: song,
                     base: albumBase,
                     popularity: popularity(index: index, count: max(album.songs.count, 1)),
-                    group: .album
+                    group: .album,
+                    reason: "From \(album.title)"
                 ))
             }
         }
@@ -151,7 +154,8 @@ actor StationService {
                     song: song,
                     base: base,
                     popularity: popularity(index: index, count: max(relatedSnapshot.topTracks.count, 1)),
-                    group: .related
+                    group: .related,
+                    reason: "Similar to \(relatedSnapshot.artist.name)"
                 ))
             }
         }
@@ -172,8 +176,40 @@ actor StationService {
                 song: SpotifyCatalogMapper.song(from: track),
                 base: 0.72 - Double(index) * 0.03,
                 popularity: min(max(match.match / 100, 0), 1),
-                group: .related
+                group: .related,
+                reason: "Discovered via Last.fm"
             ))
+        }
+
+        let relatedNames = Set(
+            snapshot.related.map { TextMatch.normalizeArtist($0.name) }
+                + [TextMatch.normalizeArtist(snapshot.artist.name)]
+        )
+        let additionalArtists = await lastFM.similarArtists(
+            name: snapshot.artist.name,
+            limit: 8
+        )
+        var addedArtists = 0
+        for match in additionalArtists where addedArtists < 2 {
+            let name = TextMatch.normalizeArtist(match.name)
+            guard !relatedNames.contains(name) else { continue }
+            guard let results = try? await SpotifyCatalogProvider().search(match.name, limit: 3),
+                  let artist = results.artists.first(where: {
+                      TextMatch.normalizeArtist($0.name) == name
+                  }),
+                  let relatedSnapshot = try? await source.snapshot(artistID: artist.id) else {
+                continue
+            }
+            for (index, song) in relatedSnapshot.topTracks.prefix(8).enumerated() {
+                candidates.append(Candidate(
+                    song: song,
+                    base: 0.7 - Double(index) * 0.02,
+                    popularity: popularity(index: index, count: max(relatedSnapshot.topTracks.count, 1)),
+                    group: .related,
+                    reason: "Similar to \(snapshot.artist.name)"
+                ))
+            }
+            addedArtists += 1
         }
 
         return candidates.filter { !isSeed($0.song, seedSong: seedSong, seedTrackID: seed.trackID) }
@@ -222,7 +258,7 @@ actor StationService {
         _ = await taste.snapshot()
 
         var seen = Set<String>()
-        var scored: [(SongItem, Double, String, String)] = []
+        var scored: [(SongItem, Double, String, String, String)] = []
 
         for candidate in candidates {
             if !options.allowExplicit, candidate.song.isExplicit == true { continue }
@@ -264,7 +300,7 @@ actor StationService {
 
             let artistKey = candidate.song.artists.first.map { TextMatch.normalizeArtist($0.name) } ?? ""
             let albumKey = TextMatch.normalizeTitle(candidate.song.album ?? "")
-            scored.append((candidate.song, score, artistKey, albumKey))
+            scored.append((candidate.song, score, artistKey, albumKey, candidate.reason))
         }
 
         scored.sort { $0.1 > $1.1 }
@@ -276,12 +312,14 @@ actor StationService {
         var albumCounts: [String: Int] = [:]
         var result: [SongItem] = []
 
-        for (song, _, artistKey, albumKey) in scored {
+        for (song, _, artistKey, albumKey, reason) in scored {
             guard result.count < options.limit else { break }
             if !artistKey.isEmpty, (artistCounts[artistKey] ?? 0) >= maxPerArtist { continue }
             if !albumKey.isEmpty, (albumCounts[albumKey] ?? 0) >= maxPerAlbum { continue }
 
-            result.append(song)
+            var stamped = song
+            stamped.stationReason = reason
+            result.append(stamped)
             if !artistKey.isEmpty { artistCounts[artistKey, default: 0] += 1 }
             if !albumKey.isEmpty { albumCounts[albumKey, default: 0] += 1 }
         }
@@ -309,7 +347,8 @@ actor StationService {
         var songs: [SongItem] = []
         for track in results.tracks {
             if !options.allowExplicit, track.isExplicit { continue }
-            let item = SpotifyCatalogMapper.song(from: track)
+            var item = SpotifyCatalogMapper.song(from: track)
+            item.stationReason = "Related to \(song.title)"
             let key = "\(TextMatch.normalizeTitle(item.title))|\(item.duration / 2)"
             guard seen.insert(key).inserted, !isSeed(item, seedSong: song, seedTrackID: nil) else { continue }
             songs.append(item)
