@@ -76,6 +76,18 @@ depender de YouTube Music para metadatos y con YouTube únicamente como audio.
 - [ ] Charts/recomendaciones multi-proveedor.
 - [ ] Podcasts/audiolibros con providers propios además de Spotify.
 
+### Fase 4.5 — Radio propia (ver RADIO_ENGINE.md)
+- [ ] Event store granular de play/skip/complete/save.
+- [ ] Afinidades locales con decaimiento.
+- [ ] `StationService` v1: seed track/artist, top tracks + related.
+- [ ] Ranker ponderado + MMR + ventanas anti-repetición.
+- [ ] Last.fm similar y tags/géneros.
+- [ ] Filtro de disponibilidad/calidad y explicaciones en UI.
+- [ ] Evaluación offline (diversidad, skip, cobertura) y golden tests.
+- [ ] IA posterior: embeddings, learning-to-rank, bandits.
+
+Detalle completo en [RADIO_ENGINE.md](RADIO_ENGINE.md).
+
 ### Fase 5 — Audio
 - [x] Fallback integrado: YouTube → JioSaavn/Audius (lossy) → Qobuz/add-ons (lossless) respetando el quality mode.
 - [ ] Abstracción formal `AudioProvider` y matching por ISRC.
