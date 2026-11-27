@@ -21,23 +21,23 @@ final class SpotifyDetailService {
     }
 
     private static func parseAlbum(_ data: Data, requestedID: String) throws -> AlbumDetailInfo {
-        guard let root = try object(from: data),
+        guard let root = try Self.object(from: data),
               let payload = root["data"] as? [String: Any],
               let album = payload["albumUnion"] as? [String: Any] else {
             throw CatalogError.notFound
         }
 
         let title = (album["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown Album"
-        let albumID = identifier(album) ?? requestedID
-        let albumArtists = artists(from: album["artists"])
-        let cover = coverURLString(album["coverArt"])
-        let year = year(from: album["date"])
+        let albumID = Self.identifier(album) ?? requestedID
+        let albumArtists = Self.artists(from: album["artists"])
+        let cover = Self.coverURLString(album["coverArt"])
+        let year = Self.year(from: album["date"])
 
         let tracksNode = album["tracksV2"] ?? album["tracks"]
-        let rawTracks = items(of: tracksNode)
+        let rawTracks = Self.items(of: tracksNode)
         let songs = rawTracks.compactMap { wrapper -> SongItem? in
             let track = (wrapper["track"] as? [String: Any]) ?? wrapper
-            return song(
+            return Self.song(
                 from: track,
                 fallbackAlbumTitle: title,
                 fallbackAlbumID: albumID,
@@ -46,7 +46,7 @@ final class SpotifyDetailService {
                 fallbackYear: year
             )
         }
-        let totalCount = max(intValue((tracksNode as? [String: Any])?["totalCount"]), songs.count)
+        let totalCount = max(Self.intValue((tracksNode as? [String: Any])?["totalCount"]), songs.count)
 
         return AlbumDetailInfo(
             title: title,
@@ -58,7 +58,7 @@ final class SpotifyDetailService {
             playlistId: nil,
             browseId: SpotifyCatalogID.album(albumID),
             songs: songs,
-            descriptionText: copyrightText(album["copyright"]),
+            descriptionText: Self.copyrightText(album["copyright"]),
             relatedAlbums: [],
             videos: [],
             featuredPlaylists: []
@@ -76,16 +76,16 @@ final class SpotifyDetailService {
 
         while offset < 2000 {
             let data = try await client.playlist(id: id, offset: offset, limit: pageSize)
-            guard let root = try object(from: data),
+            guard let root = try Self.object(from: data),
                   let payload = root["data"] as? [String: Any],
                   let node = payload["playlistV2"] as? [String: Any] else {
                 throw CatalogError.notFound
             }
             if playlist == nil {
                 playlist = node
-                totalCount = intValue((node["content"] as? [String: Any])?["totalCount"])
+                totalCount = Self.intValue((node["content"] as? [String: Any])?["totalCount"])
             }
-            let pageItems = items(of: node["content"])
+            let pageItems = Self.items(of: node["content"])
             allItems.append(contentsOf: pageItems)
             if pageItems.isEmpty || allItems.count >= totalCount || pageItems.count < pageSize {
                 break
@@ -96,18 +96,18 @@ final class SpotifyDetailService {
         guard let playlist else { throw CatalogError.notFound }
 
         let title = (playlist["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown Playlist"
-        let cover = coverURLString(playlist["images"]) ?? coverURLString(playlist["visualIdentity"])
+        let cover = Self.coverURLString(playlist["images"]) ?? Self.coverURLString(playlist["visualIdentity"])
         let owner = ((playlist["ownerV2"] as? [String: Any])?["data"] as? [String: Any])
         let ownerName = (owner?["name"] as? String)
             ?? (owner?["displayName"] as? String)
             ?? (owner?["username"] as? String)
-        let ownerAvatar = coverURLString(owner?["avatar"])
+        let ownerAvatar = Self.coverURLString(owner?["avatar"])
 
         let songs = allItems.compactMap { wrapper -> SongItem? in
             let track = ((wrapper["itemV2"] as? [String: Any])?["data"] as? [String: Any])
                 ?? ((wrapper["itemV3"] as? [String: Any])?["data"] as? [String: Any])
             guard let track else { return nil }
-            return song(
+            return Self.song(
                 from: track,
                 fallbackAlbumTitle: nil,
                 fallbackAlbumID: nil,
@@ -135,7 +135,7 @@ final class SpotifyDetailService {
 
     func artistDetail(id: String) async throws -> ArtistDetailInfo {
         let data = try await client.artistOverview(id: id)
-        guard let root = try object(from: data),
+        guard let root = try Self.object(from: data),
               let payload = root["data"] as? [String: Any],
               let artist = payload["artistUnion"] as? [String: Any] else {
             throw CatalogError.notFound
@@ -144,16 +144,16 @@ final class SpotifyDetailService {
         let profile = artist["profile"] as? [String: Any]
         let name = (profile?["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown Artist"
         let stats = artist["stats"] as? [String: Any]
-        let monthly = intValue(stats?["monthlyListeners"])
-        let followers = intValue(stats?["followers"])
-        let avatar = coverURLString((artist["visuals"] as? [String: Any])?["avatarImage"])
-            ?? coverURLString(artist["visualIdentity"])
-        let header = coverURLString(artist["headerImage"])
+        let monthly = Self.intValue(stats?["monthlyListeners"])
+        let followers = Self.intValue(stats?["followers"])
+        let avatar = Self.coverURLString((artist["visuals"] as? [String: Any])?["avatarImage"])
+            ?? Self.coverURLString(artist["visualIdentity"])
+        let header = Self.coverURLString(artist["headerImage"])
 
-        let topTracks = items(of: (artist["discography"] as? [String: Any])?["topTracks"])
+        let topTracks = Self.items(of: (artist["discography"] as? [String: Any])?["topTracks"])
         let songs = topTracks.compactMap { wrapper -> SongItem? in
             let track = (wrapper["track"] as? [String: Any]) ?? wrapper
-            return song(
+            return Self.song(
                 from: track,
                 fallbackAlbumTitle: nil,
                 fallbackAlbumID: nil,
@@ -166,14 +166,14 @@ final class SpotifyDetailService {
         var albums: [AlbumItem] = []
         var singles: [AlbumItem] = []
         if let discographyData = try? await client.artistDiscography(id: id),
-           let discographyRoot = try? object(from: discographyData),
+           let discographyRoot = try? Self.object(from: discographyData),
            let discographyPayload = discographyRoot["data"] as? [String: Any],
            let discographyArtist = discographyPayload["artistUnion"] as? [String: Any] {
-            let releases = items(of: ((discographyArtist["discography"] as? [String: Any])?["all"]))
+            let releases = Self.items(of: ((discographyArtist["discography"] as? [String: Any])?["all"]))
             for wrapper in releases {
-                let releaseItems = items(of: wrapper["releases"])
+                let releaseItems = Self.items(of: wrapper["releases"])
                 guard let release = releaseItems.first,
-                      let album = albumItem(from: release, artistName: name, artistID: id) else { continue }
+                      let album = Self.albumItem(from: release, artistName: name, artistID: id) else { continue }
                 let type = (release["type"] as? String)?.uppercased() ?? ""
                 if type == "ALBUM" || type == "COMPILATION" {
                     albums.append(album)
@@ -183,13 +183,13 @@ final class SpotifyDetailService {
             }
         }
 
-        let related = items(of: ((artist["relatedContent"] as? [String: Any])?["relatedArtists"]))
+        let related = Self.items(of: ((artist["relatedContent"] as? [String: Any])?["relatedArtists"]))
             .compactMap { node -> ArtistItem? in
-                guard let relatedID = identifier(node),
+                guard let relatedID = Self.identifier(node),
                       let relatedProfile = node["profile"] as? [String: Any],
                       let relatedName = relatedProfile["name"] as? String else { return nil }
-                let image = coverURLString((node["visuals"] as? [String: Any])?["avatarImage"])
-                    ?? coverURLString(node["visualIdentity"])
+                let image = Self.coverURLString((node["visuals"] as? [String: Any])?["avatarImage"])
+                    ?? Self.coverURLString(node["visualIdentity"])
                 return ArtistItem(
                     browseId: SpotifyCatalogID.artist(relatedID),
                     name: relatedName,
@@ -202,8 +202,8 @@ final class SpotifyDetailService {
             .map(Self.stripHTML)
             .flatMap { $0.isEmpty ? nil : $0 }
         let subtitle = monthly > 0
-            ? "\(compactCount(monthly)) monthly listeners"
-            : (followers > 0 ? "\(compactCount(followers)) followers" : nil)
+            ? "\(Self.compactCount(monthly)) monthly listeners"
+            : (followers > 0 ? "\(Self.compactCount(followers)) followers" : nil)
 
         return ArtistDetailInfo(
             name: name,
@@ -369,7 +369,7 @@ final class SpotifyDetailService {
             let name = (entry["name"] as? String)
                 ?? ((entry["profile"] as? [String: Any])?["name"] as? String)
             guard let name, !name.isEmpty else { return nil }
-            return CatalogArtist(id: identifier(entry) ?? name, name: name, artworkURL: nil)
+            return CatalogArtist(id: Self.identifier(entry) ?? name, name: name, artworkURL: nil)
         }
     }
 
@@ -383,13 +383,13 @@ final class SpotifyDetailService {
         fallbackArtists: [YTArtist],
         fallbackYear: Int?
     ) -> SongItem? {
-        guard let trackID = identifier(track) else { return nil }
+        guard let trackID = Self.identifier(track) else { return nil }
         let title = (track["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown"
         let albumNode = track["albumOfTrack"] as? [String: Any]
-        let trackArtists = artists(from: track["artists"])
+        let trackArtists = Self.artists(from: track["artists"])
         let durationNode = track["duration"] ?? track["trackDuration"]
-        let durationMS = intValue((durationNode as? [String: Any])?["totalMilliseconds"])
-        let cover = coverURLString(albumNode?["coverArt"]) ?? fallbackCover
+        let durationMS = Self.intValue((durationNode as? [String: Any])?["totalMilliseconds"])
+        let cover = Self.coverURLString(albumNode?["coverArt"]) ?? fallbackCover
         let albumTitle = (albumNode?["name"] as? String) ?? fallbackAlbumTitle
         let albumID = albumNode.flatMap(identifier) ?? fallbackAlbumID
         let explicit = (track["contentRating"] as? [String: Any])?["label"] as? String == "EXPLICIT"
@@ -405,7 +405,7 @@ final class SpotifyDetailService {
             isExplicit: explicit,
             playlistId: nil,
             viewCount: nil,
-            year: year(from: albumNode?["date"]) ?? fallbackYear,
+            year: Self.year(from: albumNode?["date"]) ?? fallbackYear,
             isVideo: false,
             musicVideoType: nil,
             recordingPreference: .albumAudio,
@@ -414,15 +414,15 @@ final class SpotifyDetailService {
     }
 
     private static func albumItem(from release: [String: Any], artistName: String, artistID: String) -> AlbumItem? {
-        guard let releaseID = identifier(release),
+        guard let releaseID = Self.identifier(release),
               let title = release["name"] as? String,
               !title.isEmpty else { return nil }
         return AlbumItem(
             browseId: SpotifyCatalogID.album(releaseID),
             title: title,
             artists: [YTArtist(name: artistName, id: SpotifyCatalogID.artist(artistID))],
-            year: year(from: release["date"]),
-            thumbnailUrl: coverURLString(release["coverArt"]),
+            year: Self.year(from: release["date"]),
+            thumbnailUrl: Self.coverURLString(release["coverArt"]),
             playlistId: nil,
             isExplicit: false
         )
@@ -454,7 +454,7 @@ final class SpotifyDetailService {
             let profile = entry["profile"] as? [String: Any]
             guard let name = (profile?["name"] as? String) ?? (entry["name"] as? String),
                   !name.isEmpty else { return nil }
-            return YTArtist(name: name, id: identifier(entry).map(SpotifyCatalogID.artist))
+            return YTArtist(name: name, id: Self.identifier(entry).map(SpotifyCatalogID.artist))
         }
     }
 
@@ -474,7 +474,7 @@ final class SpotifyDetailService {
         }
         let candidates = sources.compactMap { source -> (Int, String)? in
             guard let raw = source["url"] as? String, !raw.isEmpty else { return nil }
-            return (max(intValue(source["width"]), intValue(source["maxWidth"])), raw)
+            return (max(Self.intValue(source["width"]), Self.intValue(source["maxWidth"])), raw)
         }
         return candidates.max { $0.0 < $1.0 }?.1
     }
