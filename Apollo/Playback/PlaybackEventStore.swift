@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 
 /// Buffered writer for the append-only playback_event table. It never blocks
 /// the player: inserts happen on a small actor with a 5 s / 20 event flush.

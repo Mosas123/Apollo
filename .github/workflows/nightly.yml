@@ -54,6 +54,12 @@ jobs:
       - name: Make build script executable
         run: chmod +x ./build_ipa.sh
 
+      - name: Compile and run station policy checks
+        run: bash scripts/test-station-policy.sh
+
+      - name: Compile and run playback event policy checks
+        run: bash scripts/test-playback-events.sh
+
       - name: Validate logging and source-scoped playback before IPA
         run: |
           bash scripts/test-apollo-log-session.sh
