@@ -77,8 +77,9 @@ depender de YouTube Music para metadatos y con YouTube únicamente como audio.
 - [ ] Podcasts/audiolibros con providers propios además de Spotify.
 
 ### Fase 5 — Audio
-- [ ] Abstracción `AudioProvider` (YouTube/add-ons) separada del catálogo.
-- [ ] Matching por ISRC → título/artista/duración.
+- [x] Fallback integrado: YouTube → JioSaavn/Audius (lossy) → Qobuz/add-ons (lossless) respetando el quality mode.
+- [ ] Abstracción formal `AudioProvider` y matching por ISRC.
+- [ ] Matching por ISRC → título/artista/duración (hoy se usa título/artista/duración).
 - [ ] Fallback y disponibilidad por región.
 - [ ] Sin metadatos de YouTube en la UI nueva.
 
