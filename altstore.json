@@ -1,7 +1,7 @@
 {
   "name": "Apollo",
   "subtitle": "YouTube Music client for iOS (Apollo)",
-  "description": "Free and open source YouTube Music client. Stable releases from GitHub \u2014 unsigned IPAs that Feather, AltStore, or SideStore re-sign with your Apple ID.",
+  "description": "Free and open source YouTube Music client. Stable releases from GitHub — unsigned IPAs that Feather, AltStore, or SideStore re-sign with your Apple ID.",
   "iconURL": "https://raw.githubusercontent.com/Mosas123/Apollo/main/.github/assets/icon.png",
   "website": "https://github.com/Mosas123/Apollo",
   "tintColor": "#007AFF",
@@ -14,7 +14,7 @@
       "bundleIdentifier": "com.cl0udly.Apollo",
       "developerName": "cl0udly",
       "subtitle": "YouTube Music client for iOS (Apollo)",
-      "localizedDescription": "A free and open source YouTube Music client for iOS.\n\n\u2022 No ads\n\u2022 Stream songs and videos from YouTube Music\n\u2022 Background playback with lock screen controls\n\u2022 Equalizer & audio normalization\n\u2022 Video mode\n\u2022 Queue management & listening history\n\u2022 Discord status \u2013 show current song\n\u2022 Last.fm scrobbling\n\u2022 Synced lyrics (Musixmatch, Netease, Kugou, LRCLIB, Genius)\n\u2022 Library sync (playlists, albums, artists, podcasts)\n\u2022 Downloads\n\u2022 Custom app icons\n\nRequires iOS 26 or later and a YouTube Music account.",
+      "localizedDescription": "A free and open source YouTube Music client for iOS.\n\n• No ads\n• Stream songs and videos from YouTube Music\n• Background playback with lock screen controls\n• Equalizer & audio normalization\n• Video mode\n• Queue management & listening history\n• Discord status – show current song\n• Last.fm scrobbling\n• Synced lyrics (Musixmatch, Netease, Kugou, LRCLIB, Genius)\n• Library sync (playlists, albums, artists, podcasts)\n• Downloads\n• Custom app icons\n\nRequires iOS 26 or later and a YouTube Music account.",
       "iconURL": "https://raw.githubusercontent.com/Mosas123/Apollo/main/.github/assets/icon.png",
       "tintColor": "#007AFF",
       "category": "entertainment",
@@ -25,12 +25,12 @@
       ],
       "versions": [
         {
-          "version": "0.0.5",
-          "buildVersion": "4",
-          "date": "2026-11-14T12:11:47Z",
-          "localizedDescription": "## What's Changed\n* feat: add YouTube comment section for songs (#20) by @lawrence-millard in https://github.com/Mosas123/Apollo/pull/27\n\n\n**Full Changelog**: https://github.com/Mosas123/Apollo/compare/v0.0.4...v0.0.5\n\n[Discord](https://discord.gg/QrMwZAfU97)",
-          "downloadURL": "https://github.com/Mosas123/Apollo/releases/download/v0.0.5/Apollo.ipa",
-          "size": 35924605,
+          "version": "0.14.0",
+          "buildVersion": "862",
+          "date": "2026-11-27T03:12:00Z",
+          "localizedDescription": "Apollo 0.14.0 (862)\n\n• Nuevo nombre, bundle e icono Apollo\n• Dolby Atmos Automatic / Always On / Off\n• Calidad por red: Cellular, 5G & Wi-Fi y Downloads (High Quality / Lossless / Hi-Res)\n• Hi-Res y Atmos solo cuando se activan\n• Menos resolves duplicados en TorBox",
+          "downloadURL": "https://github.com/Mosas123/Apollo/releases/download/v0.14.0-apollo/Apollo.ipa",
+          "size": 32160084,
           "minOSVersion": "26.0"
         }
       ]
