@@ -74,6 +74,19 @@ enum PlaybackQueue {
     /// Plays a single song, then continues with its radio queue when available.
     /// Used by Home/Search/Explore tap-to-play.
     static func playSingleWithRadio(_ song: SongItem, log: AppLogger) {
+        // Spotify catalogue tracks have no YouTube id until an audio carrier
+        // is resolved. YouTube is a stream source here, not the catalogue.
+        if SpotifyCatalogID.isSpotify(song.videoId) {
+            Task { @MainActor in
+                guard let resolved = await SpotifyAudioResolver.shared.resolve(song) else {
+                    log.error("No audio match for Spotify track \(song.videoId)")
+                    return
+                }
+                playSingleWithRadio(resolved, log: log)
+            }
+            return
+        }
+
         NowPlaying.shared.setQueue([song], startIndex: 0)
         let intent = NowPlaying.shared.playbackGeneration
         PlayerController.shared.markExplicitSelectionForInterruptionRecovery(
