@@ -169,6 +169,12 @@ struct HomeScreenView: View {
                             .padding(.top, 28)
                     }
 
+                    Text("Catalogue data from Spotify · Audio by YouTube")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 24)
+
                     Color.clear.frame(height: 40)
                 }
             }
@@ -187,14 +193,6 @@ struct HomeScreenView: View {
             }
             .task(id: selectedCategory) {
                 await viewModel.loadCategoryFeed(selectedCategory)
-            }
-            .task {
-                async let songsTask = DiscoveryService.songs()
-                async let artistsTask = DiscoveryService.artists()
-                async let podcastsTask = DiscoveryService.podcasts()
-                forYouSongs = await songsTask
-                discoverArtists = await artistsTask
-                podcastSuggestions = await podcastsTask
             }
             .task(id: viewModel.homeSections.count) {
                 guard !viewModel.homeSections.isEmpty else { return }
