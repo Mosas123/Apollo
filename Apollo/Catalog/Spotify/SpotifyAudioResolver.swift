@@ -57,19 +57,24 @@ final class SpotifyAudioResolver {
                 }
                 return nil
             }
-            group.addTask { @MainActor in
-                if let resolved = await PodcastYouTubeResolver.shared.resolve(for: song) {
+            group.addTask {
+                let resolved = await Task { @MainActor in
+                    await PodcastYouTubeResolver.shared.resolve(for: song)
+                }.value
+                if let resolved {
                     return .youtube(resolved)
                 }
                 return nil
             }
-            for await result in group {
-                if let result {
+            var winner: PodcastCarrier?
+            while let candidate = await group.next() {
+                if candidate != nil {
+                    winner = candidate
                     group.cancelAll()
-                    return result
+                    break
                 }
             }
-            return nil
+            return winner
         }
 
         switch carrier {
