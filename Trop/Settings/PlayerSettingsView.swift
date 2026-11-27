@@ -10,17 +10,8 @@ import SwiftUI
 struct PlayerSettingsView: View {
     @Environment(\.settingsStore) private var settings
 
-    private var addonCapabilities: AddonCapabilities {
-        MusicAddonsStore.shared.availableAudioCapabilities
-    }
-
-    private var addonQualityOptions: [MusicQualityMode] {
-        var options: [MusicQualityMode] = [.off, .auto]
-        if addonCapabilities.hasLossless {
-            options.append(.cd)
-            options.append(.lossless)
-        }
-        return options
+    private var audioQualitySummary: String {
+        settings.wifiStreamingTier.displayName
     }
 
     var body: some View {
@@ -53,58 +44,39 @@ struct PlayerSettingsView: View {
             }
 
             Section {
+                SettingsNavigationRow(
+                    "Dolby Atmos",
+                    icon: "spatial.audio",
+                    detail: settings.atmosMode.displayName
+                ) {
+                    AtmosSettingsView()
+                }
+                SettingsNavigationRow(
+                    "Audio Quality",
+                    icon: "waveform",
+                    detail: audioQualitySummary
+                ) {
+                    AudioQualitySettingsView()
+                }
                 SettingsNavigationRow("Equalizer", icon: "slider.vertical.3") {
                     EqualizerView()
                 }
-            } header: {
-                Text("Equalizer")
-            } footer: {
-                Text("Adjust the sound with presets or a custom curve.")
-            }
-
-            Section {
-                SettingsPickerRow("Audio Quality", icon: "waveform", selection: $settings.audioQuality)
-                SettingsPickerRow(
-                    "Add-on Quality",
-                    icon: "opticaldisc",
-                    options: addonQualityOptions,
-                    isEnabled: true,
-                    selection: Binding(
-                        get: {
-                            let mode = settings.musicQualityMode
-                            if mode == .high { return .auto }
-                            if !addonQualityOptions.contains(mode) { return .auto }
-                            return mode
-                        },
-                        set: { settings.musicQualityMode = $0 }
-                    )
+                SettingsToggleRow(
+                    "Sound Check",
+                    icon: "checkmark.circle",
+                    isOn: $settings.audioNormalization
                 )
-                if addonCapabilities.hiRes,
-                   settings.musicQualityMode == .auto || settings.musicQualityMode == .lossless {
-                    SettingsToggleRow("Allow Hi-Res (24-bit)", icon: "waveform.path.ecg", isOn: $settings.preferHiRes)
+                SettingsNavigationRow(
+                    "Song Transitions",
+                    icon: "arrow.right.arrow.left",
+                    detail: settings.gaplessPlayback ? "Gapless" : "Off"
+                ) {
+                    SongTransitionsSettingsView()
                 }
-                if settings.hasMusicAddons,
-                   settings.musicQualityMode == .auto || settings.musicQualityMode == .lossless {
-                    SettingsToggleRow("Prefer Dolby Atmos when available", icon: "spatial.audio", isOn: $settings.preferAtmos)
-                }
-                SettingsToggleRow("Upgrade to best quality during playback", icon: "arrow.up.circle", isOn: $settings.upgradeDuringPlayback)
-                SettingsToggleRow("Audio Normalization", icon: "speaker.wave.2", isOn: $settings.audioNormalization)
-                SettingsToggleRow("Gapless Playback", icon: "arrow.right.arrow.left", isOn: $settings.gaplessPlayback)
             } header: {
                 Text("Audio")
             } footer: {
-                Text(LocalizedStringKey(
-                    settings.hasMusicAddons
-                        ? "Add-on Quality picks which copy to look for in your add-ons: Auto takes the best FLAC available and falls back to JioSaavn/AAC 320 then " +
-                          "YouTube; CD forces 16-bit / 44.1 kHz; Best FLAC keeps FLAC only (no 320 fallback). \"Allow Hi-Res\" unlocks 24-bit copies; with it off they " +
-                          "are neither downloaded nor played (the iPhone DAC tops out at 24/48 and hi-res needs an external DAC). \"Prefer Dolby Atmos\" plays the " +
-                          "add-on's E-AC3 5.1 copy when it exists and falls back to FLAC/CD otherwise; it plays spatially on AirPods/AVR and the iPhone speaker downmixes " +
-                          "it. Audio Quality picks the lossy pool: with Auto or High it races YouTube, JioSaavn and add-on AAC 320 and keeps the best; Standard and Low " +
-                          "stay on YouTube and only use JioSaavn/AAC if YouTube has no stream. If \"Upgrade to best quality during playback\" is on, the app may switch " +
-                          "mid-song with a short fade."
-                        : "Off and Auto work with YouTube alone. CD, Best FLAC and Dolby Atmos need an installed music add-on, because the add-on is the search engine " +
-                          "for those qualities. Add one in Settings → Integrations → Music Addons to unlock them."
-                ))
+                Text("Dolby Atmos and Lossless Audio need a music add-on. Automatic Atmos uses it only with capable outputs.")
             }
 
             Section {

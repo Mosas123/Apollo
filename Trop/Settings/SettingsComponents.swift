@@ -11,11 +11,18 @@ struct SettingsNavigationRow<Destination: View>: View {
     @Environment(SettingsStore.self) private var settings
     let title: String
     let icon: String
+    let detail: String?
     @ViewBuilder var destination: () -> Destination
 
-    init(_ title: String, icon: String, @ViewBuilder destination: @escaping () -> Destination) {
+    init(
+        _ title: String,
+        icon: String,
+        detail: String? = nil,
+        @ViewBuilder destination: @escaping () -> Destination
+    ) {
         self.title = title
         self.icon = icon
+        self.detail = detail
         self.destination = destination
     }
 
@@ -33,6 +40,11 @@ struct SettingsNavigationRow<Destination: View>: View {
                         in: RoundedRectangle(cornerRadius: 7, style: .continuous)
                     )
                 Text(LocalizedStringKey(title))
+                Spacer()
+                if let detail, !detail.isEmpty {
+                    Text(detail)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .tint(settings.accentColor)

@@ -67,6 +67,35 @@ enum AddonStreamQuality: String, Sendable {
     case high
 }
 
+/// Search-tier hint for Eclipse addons. Without it NullBeat serves its MAX
+/// (hi-res) master in Auto, bypassing the independent Hi-Res opt-in.
+private enum AddonSearchQualityHint {
+    static func item() -> URLQueryItem? {
+        let settings = SettingsStore.shared
+        let value: String?
+        switch settings.activeStreamingMode {
+        case .off:
+            value = nil
+        case .high:
+            value = "high"
+        case .cd:
+            value = "lossless"
+        case .auto, .lossless:
+            if settings.preferAtmos && settings.activeStreamingPreferHiRes {
+                // "max" only with both opt-ins: alone it may return hi-res
+                // even when Hi-Res is off. Atmos alone uses the resolve flag.
+                value = "max"
+            } else if settings.activeStreamingPreferHiRes {
+                value = "hires"
+            } else {
+                value = "lossless"
+            }
+        }
+        guard let value else { return nil }
+        return URLQueryItem(name: "quality", value: value)
+    }
+}
+
 struct AddonStream: Sendable {
     enum Kind: Sendable {
         case url(URL)
@@ -245,9 +274,9 @@ actor MusicAddonClient {
             resolvingAgainstBaseURL: false
         )
         var items = [URLQueryItem(name: "q", value: term)]
-        if SettingsStore.shared.musicQualityMode.prefersLossless || SettingsStore.shared.preferHiRes {
-            items.append(URLQueryItem(name: "quality", value: "lossless"))
-        }
+        // Ask for the CD/lossless tier instead of letting NullBeat default to
+        // its MAX/hi-res master; Atmos and High are explicit opt-ins.
+        if let hint = AddonSearchQualityHint.item() { items.append(hint) }
         components?.queryItems = items
         guard let url = components?.url,
               let data = await cachedFetch(url, key: "search|\(url.absoluteString)"),
@@ -270,7 +299,10 @@ actor MusicAddonClient {
                 detail: album,
                 artist: artist,
                 album: album,
-                durationSeconds: duration
+                durationSeconds: duration,
+                isAtmos: (track["isAtmos"] as? Bool) ?? false,
+                isHiRes: (track["isHiRes"] as? Bool) ?? false,
+                isAtmosOnly: (track["isAtmosOnly"] as? Bool) ?? false
             )
         }
     }
@@ -419,12 +451,18 @@ actor MusicAddonClient {
         type: String,
         id: String,
         preferAtmos: Bool = false,
-        quality: AddonStreamQuality = .max
+        quality: AddonStreamQuality = .max,
+        allowHiRes: Bool = false,
+        requireLossless: Bool = false
     ) async throws -> AddonStream {
         if eclipseMode {
             return try await eclipseStream(id: id, preferAtmos: preferAtmos, quality: quality)
         }
-        return try await stremioStream(type: type, id: id)
+        return try await stremioStream(
+            type: type, id: id, preferAtmos: preferAtmos,
+            quality: quality, allowHiRes: allowHiRes,
+            requireLossless: requireLossless
+        )
     }
 
     private func eclipseStream(
@@ -464,7 +502,9 @@ actor MusicAddonClient {
             || (bitDepth ?? 0) >= 24 || (sampleRate ?? 0) > 48_000
         let size = root["size"] as? Int
         let haystack = format + " " + quality
-        if haystack.contains("atmos") {
+        if haystack.contains("atmos") || haystack.contains("eac3")
+            || haystack.contains("e-ac-3") || haystack.contains("ec-3")
+            || haystack.contains("dolby") {
             return AddonStream(
                 kind: .url(streamURL),
                 mimeType: "audio/mp4",
@@ -513,7 +553,14 @@ actor MusicAddonClient {
         )
     }
 
-    private func stremioStream(type: String, id: String) async throws -> AddonStream {
+    private func stremioStream(
+        type: String,
+        id: String,
+        preferAtmos: Bool,
+        quality: AddonStreamQuality,
+        allowHiRes: Bool,
+        requireLossless: Bool
+    ) async throws -> AddonStream {
         guard isMusicItemType(type) else {
             throw MusicAddonClientError.noStream
         }
@@ -527,11 +574,19 @@ actor MusicAddonClient {
               let streams = root["streams"] as? [[String: Any]] else {
             throw MusicAddonClientError.noStream
         }
+        let policy = AddonStreamQualityPolicy.stremio(
+            requested: quality, preferAtmos: preferAtmos,
+            allowHiRes: allowHiRes, requireLossless: requireLossless
+        )
         var best: (AddonStream, Int)?
         for stream in streams {
             if let ytId = stream["ytId"] as? String, !ytId.isEmpty {
-                let candidate = AddonStream(kind: .youtube(ytId), mimeType: "audio/mp4", bitrate: 0, qualityTier: "Standard", isEncrypted: (stream["encrypted"] as? Bool) ?? false)
-                if best == nil { best = (candidate, 0) }
+                let candidate = AddonStream(
+                    kind: .youtube(ytId), mimeType: "audio/mp4",
+                    bitrate: 0, qualityTier: "Standard",
+                    isEncrypted: (stream["encrypted"] as? Bool) ?? false
+                )
+                if policy.accepts(candidate), best == nil { best = (candidate, 0) }
                 continue
             }
             let raw = (stream["url"] as? String) ?? (stream["externalUrl"] as? String)
@@ -540,24 +595,26 @@ actor MusicAddonClient {
                   scheme == "http" || scheme == "https" else { continue }
             let hints = Self.describe(stream)
             let quality = Self.quality(from: hints, url: streamURL)
+            let hintsObject = stream["behaviorHints"] as? [String: Any]
+            let bitDepth = (stream["bitDepth"] as? Int) ?? (hintsObject?["bitDepth"] as? Int)
+            let sampleRate = (stream["sampleRate"] as? Int)
+                ?? (hintsObject?["sampleRate"] as? Int)
             let hiRes = hints.contains("hi-res") || hints.contains("hires")
                 || hints.contains("24bit") || hints.contains("24-bit")
-            let rank: Int
-            switch quality.tier {
-            case "Lossless": rank = 3
-            case "High": rank = 2
-            default: rank = 1
-            }
-            let hintsObject = stream["behaviorHints"] as? [String: Any]
+                || (bitDepth ?? 0) >= 24 || (sampleRate ?? 0) > 48_000
             let candidate = AddonStream(
                 kind: .url(streamURL),
                 mimeType: quality.mime,
                 bitrate: quality.bitrate,
                 qualityTier: quality.tier,
                 isEncrypted: (stream["encrypted"] as? Bool) ?? false,
+                sampleRateHz: sampleRate,
+                bitDepth: bitDepth,
                 isHiRes: hiRes,
                 sizeBytes: hintsObject?["videoSize"] as? Int
             )
+            let rank = policy.rank(candidate)
+            guard rank >= 0, !candidate.isEncrypted else { continue }
             if best == nil || rank > best!.1 { best = (candidate, rank) }
         }
         guard let best else { throw MusicAddonClientError.noStream }
@@ -618,6 +675,11 @@ actor MusicAddonClient {
     private static func quality(from text: String, url: URL) -> (tier: String, mime: String, bitrate: Int) {
         let ext = url.pathExtension.lowercased()
         let haystack = (text + " " + url.absoluteString.lowercased())
+        if haystack.contains("atmos") || haystack.contains("eac3")
+            || haystack.contains("e-ac-3") || haystack.contains("ec-3")
+            || haystack.contains("dolby") {
+            return ("Atmos", "audio/mp4", 768_000)
+        }
         if ext == "flac" || haystack.contains("flac") || haystack.contains("lossless") {
             return ("Lossless", "audio/flac", 0)
         }

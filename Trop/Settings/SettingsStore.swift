@@ -242,10 +242,113 @@ final class SettingsStore: @unchecked Sendable {
         didSet { Self.defaults.set(preferHiRes, forKey: Keys.preferHiRes) }
     }
 
+    /// Apple Music-style Atmos choice. `preferAtmos` below turns it into the
+    /// boolean the resolver expects, checking the current output for Automatic.
+    var atmosMode: AtmosMode {
+        didSet { Self.defaults.set(atmosMode.rawValue, forKey: Keys.atmosMode) }
+    }
+
     /// Take the Dolby Atmos copy (E-AC3 5.1, downmixed to stereo by iOS) when an
-    /// addon offers one. Off by default: it is a preference, not "better".
+    /// addon offers one and the current setting allows it.
     var preferAtmos: Bool {
-        didSet { Self.defaults.set(preferAtmos, forKey: Keys.preferAtmos) }
+        switch atmosMode {
+        case .off: return false
+        case .alwaysOn: return true
+        case .automatic: return SpatialAudioRoute.shared.isSpatialCapable
+        }
+    }
+
+    /// Cellular tier (Apple Music-style). Lossless tiers only survive while
+    /// Lossless Audio is on.
+    var cellularStreaming: StreamingTier {
+        didSet { Self.defaults.set(cellularStreaming.rawValue, forKey: Keys.cellularStreaming) }
+    }
+
+    /// 5G & Wi-Fi tier, derived from the existing Auto/High/Lossless mode so
+    /// playback keeps one source of truth.
+    var wifiStreamingTier: StreamingTier {
+        get {
+            if musicQualityMode == .high || musicQualityMode == .off { return .highQuality }
+            return preferHiRes ? .hiRes : .lossless
+        }
+        set {
+            switch newValue {
+            case .highEfficiency, .highQuality:
+                musicQualityMode = .high
+                preferHiRes = false
+            case .lossless:
+                musicQualityMode = .auto
+                preferHiRes = false
+            case .hiRes:
+                musicQualityMode = .lossless
+                preferHiRes = true
+            }
+        }
+    }
+
+    /// Download tier. Reuses Lossless When Available plus a separate Hi-Res
+    /// flag so downloads stay independent from streaming.
+    var downloadTier: DownloadTier {
+        get {
+            guard losslessDownloads else { return .highQuality }
+            return downloadPreferHiRes ? .hiRes : .lossless
+        }
+        set {
+            switch newValue {
+            case .highQuality:
+                losslessDownloads = false
+                downloadQuality = .high
+                downloadPreferHiRes = false
+            case .lossless:
+                losslessDownloads = true
+                // YouTube cannot serve FLAC; keep its fallback at AAC 256.
+                downloadQuality = .high
+                downloadPreferHiRes = false
+            case .hiRes:
+                losslessDownloads = true
+                downloadQuality = .high
+                downloadPreferHiRes = true
+            }
+        }
+    }
+
+    /// Master "Lossless Audio" switch. Turning it off collapses streaming to
+    /// lossy; turning it on only reveals the lossless tiers (the chosen tier
+    /// may still be High Quality, like Apple Music).
+    var losslessEnabled: Bool {
+        didSet {
+            Self.defaults.set(losslessEnabled, forKey: Keys.losslessEnabled)
+            guard !losslessEnabled else { return }
+            if wifiStreamingTier.requiresLossless { wifiStreamingTier = .highQuality }
+            if cellularStreaming.requiresLossless { cellularStreaming = .highQuality }
+        }
+    }
+
+    /// Tier in effect for this playback; cellular overrides 5G & Wi-Fi.
+    var activeStreamingTier: StreamingTier {
+        NetworkStatus.shared.isCellular ? cellularStreaming : wifiStreamingTier
+    }
+
+    var activeStreamingMode: MusicQualityMode {
+        switch activeStreamingTier {
+        case .highEfficiency, .highQuality: return .high
+        case .lossless: return .auto
+        case .hiRes: return .lossless
+        }
+    }
+
+    var activeStreamingPreferHiRes: Bool {
+        activeStreamingTier == .hiRes
+    }
+
+    /// Lossy quality for streaming requests. Downloads keep using
+    /// `downloadQuality` directly.
+    var effectiveAudioQuality: AudioQuality {
+        switch activeStreamingTier {
+        case .highEfficiency: return .medium
+        case .highQuality: return .high
+        case .lossless, .hiRes: return .auto
+        }
     }
 
     /// When on, the app may switch to a better source *during* playback. The
@@ -414,6 +517,11 @@ final class SettingsStore: @unchecked Sendable {
         didSet { Self.defaults.set(losslessDownloads, forKey: Keys.losslessDownloads) }
     }
 
+    /// Separate Hi-Res opt-in for downloads (streaming has its own tier).
+    var downloadPreferHiRes: Bool {
+        didSet { Self.defaults.set(downloadPreferHiRes, forKey: Keys.downloadPreferHiRes) }
+    }
+
     var wifiOnlyDownloads: Bool {
         didSet { Self.defaults.set(wifiOnlyDownloads, forKey: Keys.wifiOnlyDownloads) }
     }
@@ -480,6 +588,9 @@ final class SettingsStore: @unchecked Sendable {
         static let apoloPodcastsBetaEnabled = "settings.apoloPodcastsBetaEnabled"
         static let apoloRadioBetaEnabled = "settings.apoloRadioBetaEnabled"
         static let preferAtmos = "settings.preferAtmos"
+        static let atmosMode = "settings.atmosMode"
+        static let cellularStreaming = "settings.cellularStreaming"
+        static let losslessEnabled = "settings.losslessEnabled"
         static let preferHiRes = "settings.preferHiRes"
         static let legacyPreferLossless = "settings.preferLossless"
         static let upgradeDuringPlayback = "settings.upgradeDuringPlayback"
@@ -515,6 +626,7 @@ final class SettingsStore: @unchecked Sendable {
         static let trackPlayHistory = "settings.trackPlayHistory"
         static let downloadQuality = "settings.downloadQuality"
         static let losslessDownloads = "settings.losslessDownloads"
+        static let downloadPreferHiRes = "settings.downloadPreferHiRes"
         static let wifiOnlyDownloads = "settings.wifiOnlyDownloads"
         static let autoDownloadOnLike = "settings.autoDownloadOnLike"
         static let autoDownloadNewEpisodes = "settings.autoDownloadNewEpisodes"
@@ -569,11 +681,26 @@ final class SettingsStore: @unchecked Sendable {
             default: Self.load(Keys.apoloBetaEnabled, default: false)
         )
         apoloRadioBetaEnabled = Self.load(Keys.apoloRadioBetaEnabled, default: false)
-        preferAtmos = Self.load(Keys.preferAtmos, default: false)
-        preferHiRes = Self.load(
-            Keys.preferHiRes,
-            default: (d.object(forKey: Keys.legacyPreferLossless) as? Bool) ?? false
-        )
+        // Migrate the old On/Off Atmos flag: an explicit choice is preserved;
+        // fresh installs start on Apple-style Automatic (capable output only).
+        if let stored = d.string(forKey: Keys.atmosMode),
+           let mode = AtmosMode(rawValue: stored) {
+            atmosMode = mode
+        } else if d.object(forKey: Keys.preferAtmos) != nil {
+            atmosMode = d.bool(forKey: Keys.preferAtmos) ? .alwaysOn : .off
+        } else {
+            atmosMode = .automatic
+        }
+        cellularStreaming = Self.loadEnum(Keys.cellularStreaming, default: .highEfficiency)
+        // Hi-Res is a SEPARATE opt-in from the old Lossless preference.
+        // Never turn on 24-bit/hi-rate files merely because a previous build
+        // saved "preferLossless". Preserve an explicit modern choice.
+        preferHiRes = Self.load(Keys.preferHiRes, default: false)
+        if d.object(forKey: Keys.losslessEnabled) != nil {
+            losslessEnabled = d.bool(forKey: Keys.losslessEnabled)
+        } else {
+            losslessEnabled = musicQualityMode != .high && musicQualityMode != .off
+        }
         upgradeDuringPlayback = Self.load(Keys.upgradeDuringPlayback, default: false)
         aiProvider = Self.loadString(Keys.aiProvider, default: AIProvider.off.rawValue)
         aiKey = Self.loadString(Keys.aiKey, default: "")
@@ -611,6 +738,7 @@ final class SettingsStore: @unchecked Sendable {
         trackPlayHistory = Self.load(Keys.trackPlayHistory, default: true)
         downloadQuality = Self.loadEnum(Keys.downloadQuality, default: .auto)
         losslessDownloads = Self.load(Keys.losslessDownloads, default: true)
+        downloadPreferHiRes = Self.load(Keys.downloadPreferHiRes, default: false)
         wifiOnlyDownloads = Self.load(Keys.wifiOnlyDownloads, default: false)
         autoDownloadOnLike = Self.load(Keys.autoDownloadOnLike, default: false)
         autoDownloadNewEpisodes = Self.load(Keys.autoDownloadNewEpisodes, default: false)

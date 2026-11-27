@@ -211,29 +211,41 @@ actor PlaybackManager {
             throw MusicCatalogError.unavailableTrack
         }
         let client = try MusicAddonClient(installation: installation)
-        let mode = SettingsStore.shared.musicQualityMode
-        let atmos = (mode == .auto || mode == .lossless) && SettingsStore.shared.preferAtmos
-        let streamQuality: AddonStreamQuality = atmos
-            ? .max
-            : (mode == .cd ? .lossless : (SettingsStore.shared.preferHiRes ? .hires : .lossless))
+        // Direct Search → Add-ons playback must obey the same user opt-ins
+        // as quality upgrades from a YouTube-origin song.
+        let policy = AddonStreamQualityPolicy(
+            mode: SettingsStore.shared.activeStreamingMode,
+            preferHiRes: SettingsStore.shared.activeStreamingPreferHiRes,
+            preferAtmos: SettingsStore.shared.preferAtmos
+        )
         let stream = try await client.resolveStream(
             type: ref.t,
             id: ref.i,
-            preferAtmos: atmos,
-            quality: streamQuality
+            preferAtmos: policy.allowAtmos,
+            quality: policy.requestedQuality,
+            allowHiRes: policy.allowHiRes,
+            requireLossless: policy.mode == .cd || policy.mode == .lossless
         )
-        guard !stream.isEncrypted else { throw MusicCatalogError.unavailableTrack }
+        guard !stream.isEncrypted, policy.accepts(stream) else {
+            Log.player.info(
+                "ADDON_QUALITY_REJECT mode=\(policy.mode.rawValue) " +
+                "hiresAllowed=\(policy.allowHiRes) atmosAllowed=\(policy.allowAtmos) " +
+                "tier=\(stream.qualityTier) bitDepth=\(stream.bitDepth ?? 0) " +
+                "sampleRate=\(stream.sampleRateHz ?? 0)"
+            )
+            throw MusicCatalogError.unavailableTrack
+        }
         let isAtmosStream = stream.qualityTier.lowercased().contains("atmos")
             || stream.mimeType.lowercased().contains("eac3")
             || stream.mimeType.lowercased().contains("ec+3")
         Log.player.info(
-            "ADDON_STREAM quality=\(stream.qualityTier) mime=\(stream.mimeType) atmos=\(isAtmosStream) requested=\(atmos)"
+            "ADDON_STREAM quality=\(stream.qualityTier) mime=\(stream.mimeType) atmos=\(isAtmosStream) requested=\(policy.allowAtmos)"
         )
         resolvedSourceNames[videoId] = installation.manifest.name
 
         if case .youtube(let youTubeId) = stream.kind {
             var request = StreamResolveRequest.playback(videoId: youTubeId)
-            request.options.audioQuality = SettingsStore.shared.audioQuality
+            request.options.audioQuality = SettingsStore.shared.effectiveAudioQuality
             let resolved = try await StreamFallback.resolveFirstValid(
                 request, using: InnerTubeClient.tropShared, providers: .tropLive
             )
@@ -297,7 +309,7 @@ actor PlaybackManager {
     /// Lossy sources (YouTube/JioSaavn/AAC) are allowed unless the user asked
     /// for FLAC explicitly (CD or Best FLAC).
     private var lossySourcesAllowed: Bool {
-        let mode = SettingsStore.shared.musicQualityMode
+        let mode = SettingsStore.shared.activeStreamingMode
         return mode != .cd && mode != .lossless
     }
 
@@ -307,8 +319,8 @@ actor PlaybackManager {
         guard lossySourcesAllowed else { return false }
         // The music High tier itself selects 320, regardless of the
         // separate YouTube-only audioQuality option.
-        if SettingsStore.shared.musicQualityMode == .high { return true }
-        let quality = SettingsStore.shared.audioQuality
+        if SettingsStore.shared.activeStreamingMode == .high { return true }
+        let quality = SettingsStore.shared.effectiveAudioQuality
         return quality == .auto || quality == .high
     }
 
@@ -321,7 +333,7 @@ actor PlaybackManager {
     /// What the add-ons should look for. Nil means no add-ons (or no upgrade).
     private var addonPreference: AddonQualityPreference? {
         guard SettingsStore.shared.hasMusicAddons else { return nil }
-        switch SettingsStore.shared.musicQualityMode {
+        switch SettingsStore.shared.activeStreamingMode {
         case .off:
             return nil
         case .cd:
@@ -333,13 +345,13 @@ actor PlaybackManager {
         case .lossless:
             return AddonQualityPreference(
                 requireCD: false,
-                preferHiRes: SettingsStore.shared.preferHiRes,
+                preferHiRes: SettingsStore.shared.activeStreamingPreferHiRes,
                 preferAtmos: SettingsStore.shared.preferAtmos
             )
         case .auto, .high:
             return AddonQualityPreference(
                 requireCD: false,
-                preferHiRes: SettingsStore.shared.preferHiRes,
+                preferHiRes: SettingsStore.shared.activeStreamingPreferHiRes,
                 preferAtmos: SettingsStore.shared.preferAtmos
             )
         }
@@ -373,13 +385,13 @@ actor PlaybackManager {
         preference: AddonQualityPreference
     ) -> Bool {
         let quality = result.audioQuality.lowercased()
-        let mode = SettingsStore.shared.musicQualityMode
+        let mode = SettingsStore.shared.activeStreamingMode
         guard MusicRecordingSelectionPolicy.acceptsPrefetchedQuality(
             mode: mode.rawValue, quality: quality
         ) else { return false }
         if quality.contains("addon-aac") || quality.contains("jiosaavn") {
             let allowedMode = mode != .cd && mode != .lossless
-            let qualitySetting = SettingsStore.shared.audioQuality
+            let qualitySetting = SettingsStore.shared.effectiveAudioQuality
             return allowedMode && (
                 mode == .high || qualitySetting == .auto || qualitySetting == .high
             )
@@ -410,7 +422,7 @@ actor PlaybackManager {
         if let cached, Self.resultMatches(cached, preference: preference) {
             return cached
         }
-        if SettingsStore.shared.musicQualityMode == .high {
+        if SettingsStore.shared.activeStreamingMode == .high {
             let fallback = await resolveLossyBestWithinBudget(
                 videoId: videoId,
                 seconds: budget ?? (interactive ? 6 : 12)
@@ -1104,7 +1116,7 @@ actor PlaybackManager {
         if let episode = await queueSong(for: videoId),
            episode.contentKind == .episode || episode.contentKind == .podcast {
             var request = StreamResolveRequest.playback(videoId: videoId)
-            request.options.audioQuality = SettingsStore.shared.audioQuality
+            request.options.audioQuality = SettingsStore.shared.effectiveAudioQuality
             let result = try await StreamFallback.resolveFirstValid(
                 request,
                 using: InnerTubeClient.tropShared,
@@ -1183,7 +1195,7 @@ actor PlaybackManager {
         // Explicitly requested video mode bypasses the music-source search.
         let selectedSong = await queueSong(for: videoId)
         let explicitlyVideo = selectedSong?.recordingPreference == .musicVideo
-        let qualityMode = SettingsStore.shared.musicQualityMode
+        let qualityMode = SettingsStore.shared.activeStreamingMode
         let probeFirst = MusicRecordingSelectionPolicy.shouldProbeSourcesBeforeYouTube(
             mode: qualityMode.rawValue,
             hasAddons: SettingsStore.shared.hasMusicAddons,
@@ -1296,7 +1308,7 @@ actor PlaybackManager {
         intentGeneration: Int
     ) async throws -> PlaybackResult {
         var request = StreamResolveRequest.playback(videoId: videoId)
-        request.options.audioQuality = SettingsStore.shared.audioQuality
+        request.options.audioQuality = SettingsStore.shared.effectiveAudioQuality
         let result = try await StreamFallback.resolveFirstValid(
             request,
             using: InnerTubeClient.tropShared,
@@ -1483,7 +1495,7 @@ actor PlaybackManager {
             return result
         }
         var request = StreamResolveRequest.playback(videoId: candidateID)
-        request.options.audioQuality = SettingsStore.shared.audioQuality
+        request.options.audioQuality = SettingsStore.shared.effectiveAudioQuality
         guard let albumAudio = try? await StreamFallback.resolveFirstValid(
             request,
             using: InnerTubeClient.tropShared,
@@ -1638,7 +1650,7 @@ actor PlaybackManager {
     /// that combines a DASH video-only stream with a separate audio stream.
     func resolveVideoStream(videoId: String) async throws -> String {
         var request = StreamResolveRequest(videoId: videoId)
-        request.options.audioQuality = SettingsStore.shared.audioQuality
+        request.options.audioQuality = SettingsStore.shared.effectiveAudioQuality
         switch try await StreamFallback.resolveVideo(
             request,
             using: InnerTubeClient.tropShared,
@@ -1734,7 +1746,7 @@ actor PlaybackManager {
     private func resolveFromNetwork(videoId: String, preferredFormat: Format?, forDownload: Bool, downloadQuality: DownloadQuality) async throws -> PlaybackResult {
         var request = forDownload ? StreamResolveRequest.download(videoId: videoId) : .playback(videoId: videoId)
         request.options.preferredFormat = preferredFormat
-        request.options.audioQuality = SettingsStore.shared.audioQuality
+        request.options.audioQuality = SettingsStore.shared.effectiveAudioQuality
         request.options.downloadQuality = downloadQuality
         return try await StreamFallback.resolveFirstValid(
             request,

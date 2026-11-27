@@ -26,19 +26,17 @@ struct DownloadSettingsView: View {
             }
 
             Section {
-                SettingsPickerRow(
+                SettingsNavigationRow(
                     "Download Quality",
                     icon: "waveform",
-                    options: [.auto, .high, .standard],
-                    selection: Binding(
-                        get: {
-                            settings.downloadQuality == .lossless ? .auto : settings.downloadQuality
-                        },
-                        set: { settings.downloadQuality = $0 }
+                    detail: settings.downloadTier.displayName
+                ) {
+                    DownloadTierPickerView(
+                        selection: Binding(
+                            get: { settings.downloadTier },
+                            set: { settings.downloadTier = $0 }
+                        )
                     )
-                )
-                if settings.hasMusicAddons {
-                    SettingsToggleRow("Lossless When Available", icon: "waveform.path", isOn: $settings.losslessDownloads)
                 }
                 SettingsToggleRow("Wi-Fi Only", icon: "wifi", isOn: $settings.wifiOnlyDownloads)
                 SettingsToggleRow("Auto-Download on Like", icon: "heart.fill", isOn: $settings.autoDownloadOnLike)
@@ -47,8 +45,8 @@ struct DownloadSettingsView: View {
                 Text("Preferences")
             } footer: {
                 Text(LocalizedStringKey(
-                    "Auto-download saves liked songs for offline playback. Lossless tries your music add-ons first and saves FLAC; without add-ons it uses the " +
-                    "quality above. Wi-Fi Only blocks downloads on cellular data."
+                    "Auto-download saves liked songs for offline playback. Lossless and Hi-Res try your music add-ons first; without add-ons the filename " +
+                    "quality above is used. Wi-Fi Only blocks downloads on cellular data."
                 ))
             }
         }

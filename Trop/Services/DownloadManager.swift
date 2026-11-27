@@ -56,35 +56,13 @@ final class DownloadManager: ObservableObject {
 
     private var addonPreference: AddonQualityPreference? {
         guard SettingsStore.shared.hasMusicAddons else { return nil }
-        switch SettingsStore.shared.musicQualityMode {
-        case .off:
-            // Downloads are independent from the playback source preference:
-            // the "Lossless When Available" toggle decides. Atmos stays off
-            // because its toggle is only meaningful in Auto/Lossless.
-            return AddonQualityPreference(
-                requireCD: false,
-                preferHiRes: SettingsStore.shared.preferHiRes,
-                preferAtmos: false
-            )
-        case .cd:
-            return AddonQualityPreference(
-                requireCD: true,
-                preferHiRes: false,
-                preferAtmos: false
-            )
-        case .lossless:
-            return AddonQualityPreference(
-                requireCD: false,
-                preferHiRes: SettingsStore.shared.preferHiRes,
-                preferAtmos: SettingsStore.shared.preferAtmos
-            )
-        case .auto, .high:
-            return AddonQualityPreference(
-                requireCD: false,
-                preferHiRes: SettingsStore.shared.preferHiRes,
-                preferAtmos: SettingsStore.shared.preferAtmos
-            )
-        }
+        // Downloads follow their own tier; Atmos stays off because offline
+        // files reject E-AC3 and resolving it would still start a torrent.
+        return AddonQualityPreference(
+            requireCD: false,
+            preferHiRes: SettingsStore.shared.downloadTier == .hiRes,
+            preferAtmos: false
+        )
     }
 
     enum DownloadState: Equatable {

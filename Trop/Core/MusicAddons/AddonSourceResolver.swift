@@ -97,8 +97,13 @@ enum AddonSourceResolver {
             preferAtmos: preferAtmos,
             preferHiRes: preferHiRes
         )
+        let policy = AddonStreamQualityPolicy(
+            mode: requireCD ? .cd : .lossless,
+            preferHiRes: preferHiRes, preferAtmos: preferAtmos
+        )
         if let cached = await AddonMatchCache.shared.get(cacheKey),
-           Self.verified(cached.track, for: criteria) {
+           Self.verified(cached.track, for: criteria),
+           policy.accepts(cached.stream) {
             return cached
         }
 
@@ -213,8 +218,7 @@ enum AddonSourceResolver {
                 }
                 for await list in group { collected.append(contentsOf: list) }
             }
-            var seen = Set<String>()
-            let unique = collected.filter { seen.insert($0.id).inserted }
+            let unique = dedupe(collected, preferAtmos: false, preferHiRes: false)
             guard !unique.isEmpty else { continue }
             let ranked = unique
                 .sorted {
@@ -318,8 +322,7 @@ enum AddonSourceResolver {
             }
         }
 
-        var seen = Set<String>()
-        let unique = collected.filter { seen.insert($0.id).inserted }
+        let unique = dedupe(collected, preferAtmos: preferAtmos, preferHiRes: preferHiRes)
         guard !unique.isEmpty else { return nil }
         let ranked = unique
             .sorted {
@@ -429,33 +432,77 @@ enum AddonSourceResolver {
         preferAtmos: Bool,
         preferHiRes: Bool
     ) async -> (Match, Int)? where C.Element == AddonTrack {
-        var best: (Match, Int)?
+        // Resolving an Eclipse/NullBeat id makes the provider start caching a
+        // torrent, so a second successful /stream for another edition of the
+        // same song costs the user a duplicate download. Candidates are already
+        // metadata-verified and de-duplicated by recording, so stop at the
+        // first acceptable stream; only try the next candidate when this one
+        // fails, is encrypted or is outside the user's quality limits.
         for track in tracks {
-            let streamQuality: AddonStreamQuality = preferAtmos
-                ? .max
-                : (requireCD ? .lossless : (preferHiRes ? .hires : .lossless))
+            let policy = AddonStreamQualityPolicy(
+                mode: requireCD ? .cd : .lossless,
+                preferHiRes: preferHiRes, preferAtmos: preferAtmos
+            )
             guard let stream = try? await client.resolveStream(
                       type: track.type,
                       id: track.id,
-                      preferAtmos: preferAtmos,
-                      quality: streamQuality
+                      preferAtmos: policy.allowAtmos,
+                      quality: policy.requestedQuality,
+                      allowHiRes: policy.allowHiRes,
+                      requireLossless: true
                   ),
-                  !stream.isEncrypted else { continue }
-            if stream.qualityTier == "Atmos", !preferAtmos { continue }
-            if requireCD, stream.isHiRes { continue }
-            let rank: Int
-            switch stream.qualityTier {
-            case "Lossless": rank = 3
-            case "Atmos": rank = preferAtmos ? 4 : 2
-            case "High": rank = 2
-            default: rank = 1
-            }
-            if best == nil || rank > best!.1 {
-                best = (Match(track: track, stream: stream), rank)
-            }
-            if rank == (preferAtmos ? 4 : 3) { break }
+                  !stream.isEncrypted, policy.accepts(stream) else { continue }
+            return (Match(track: track, stream: stream), policy.rank(stream))
         }
-        return best
+        return nil
+    }
+
+    /// One candidate per recording. NullBeat publishes several ids for the
+    /// same song (album, single, Atmos master); resolving two of them makes
+    /// TorBox cache two torrents for one playback. Keep the edition that best
+    /// matches the active opt-ins, and the first seen when tied.
+    private static func dedupe(
+        _ tracks: [AddonTrack],
+        preferAtmos: Bool,
+        preferHiRes: Bool
+    ) -> [AddonTrack] {
+        var seenIDs = Set<String>()
+        var byRecording: [String: AddonTrack] = [:]
+        var order: [String] = []
+        for track in tracks {
+            guard seenIDs.insert(track.id).inserted else { continue }
+            let key = recordingKey(track)
+            if let existing = byRecording[key] {
+                if editionPriority(track, preferAtmos: preferAtmos, preferHiRes: preferHiRes)
+                    > editionPriority(existing, preferAtmos: preferAtmos, preferHiRes: preferHiRes) {
+                    byRecording[key] = track
+                }
+            } else {
+                byRecording[key] = track
+                order.append(key)
+            }
+        }
+        return order.compactMap { byRecording[$0] }
+    }
+
+    private static func recordingKey(_ track: AddonTrack) -> String {
+        let title = TextMatch.normalize(track.title)
+        let artist = TextMatch.normalize(track.artist ?? "")
+        // Bucket to two seconds so providers that disagree by one still merge.
+        let duration = track.durationSeconds.map { String(($0 + 1) / 2) } ?? ""
+        return "\(title)|\(artist)|\(duration)"
+    }
+
+    private static func editionPriority(
+        _ track: AddonTrack,
+        preferAtmos: Bool,
+        preferHiRes: Bool
+    ) -> Int {
+        var priority = 0
+        if preferAtmos, track.isAtmos { priority += 4 }
+        if preferHiRes, track.isHiRes { priority += 2 }
+        if !preferHiRes, !track.isHiRes { priority += 1 }
+        return priority
     }
 
     /// Higher is a better metadata match: exact title, album, duration and
