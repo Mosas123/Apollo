@@ -28,7 +28,7 @@
 		14B578DC2FF20002006B3990 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 14B578DB2FF20001006B3990 /* GRDB */; };
 		14B578DF2FF20DCD006B3990 /* Nuke in Frameworks */ = {isa = PBXBuildFile; productRef = 14B578DE2FF20DCC006B3990 /* Nuke */; };
 		14B578E52FF20DCF006B3990 /* Marquee in Frameworks */ = {isa = PBXBuildFile; productRef = 14B578E42FF20DCF006B3990 /* Marquee */; };
-		14B578F32FF21002006B3990 /* SwiftyTube in Frameworks */ = {isa = PBXBuildFile; productRef = 14B578F22FF21001006B3990 /* SwiftyTube */; };
+		14B578F32FF21002006B3990 /* ApolloTube in Frameworks */ = {isa = PBXBuildFile; productRef = 14B578F22FF21001006B3990 /* ApolloTube */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -103,7 +103,7 @@
 				14B578DC2FF20002006B3990 /* GRDB in Frameworks */,
 				14B578DF2FF20DCD006B3990 /* Nuke in Frameworks */,
 				14B578E52FF20DCF006B3990 /* Marquee in Frameworks */,
-				14B578F32FF21002006B3990 /* SwiftyTube in Frameworks */,
+				14B578F32FF21002006B3990 /* ApolloTube in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -178,7 +178,7 @@
 				14B578DB2FF20001006B3990 /* GRDB */,
 				14B578DE2FF20DCC006B3990 /* Nuke */,
 				14B578E42FF20DCF006B3990 /* Marquee */,
-				14B578F22FF21001006B3990 /* SwiftyTube */,
+				14B578F22FF21001006B3990 /* ApolloTube */,
 			);
 			productName = Apollo;
 			productReference = 14B5762F2FF190EF006B3990 /* Apollo.app */;
@@ -218,7 +218,7 @@
 				14B578DA2FF20000006B3990 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
 				14B578DD2FF20DCC006B3990 /* XCRemoteSwiftPackageReference "Nuke" */,
 				14B578E32FF20DCF006B3990 /* XCRemoteSwiftPackageReference "Marquee" */,
-				14B578F12FF21000006B3990 /* XCLocalSwiftPackageReference "SwiftyTube" */,
+				14B578F12FF21000006B3990 /* XCLocalSwiftPackageReference "ApolloTube" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 14B576302FF190EF006B3990 /* Products */;
@@ -546,9 +546,9 @@
 				minimumVersion = 0.3.0;
 			};
 		};
-		14B578F12FF21000006B3990 /* XCLocalSwiftPackageReference "SwiftyTube" */ = {
+		14B578F12FF21000006B3990 /* XCLocalSwiftPackageReference "ApolloTube" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = SwiftyTube;
+			relativePath = ApolloTube;
 		};
 /* End XCRemoteSwiftPackageReference section */
 
@@ -578,10 +578,10 @@
 			package = 14B578E32FF20DCF006B3990 /* XCRemoteSwiftPackageReference "Marquee" */;
 			productName = Marquee;
 		};
-		14B578F22FF21001006B3990 /* SwiftyTube */ = {
+		14B578F22FF21001006B3990 /* ApolloTube */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 14B578F12FF21000006B3990 /* XCLocalSwiftPackageReference "SwiftyTube" */;
-			productName = SwiftyTube;
+			package = 14B578F12FF21000006B3990 /* XCLocalSwiftPackageReference "ApolloTube" */;
+			productName = ApolloTube;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -5,7 +5,7 @@
 //  Created by 686udjie on 03/07/2026.
 //
 
-@preconcurrency import SwiftyTube
+@preconcurrency import ApolloTube
 import SwiftUI
 import GRDB
 

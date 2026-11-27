@@ -38,7 +38,7 @@ those checks. A video `music_offtopic` segment then called
 ## Minimal safe fix
 
 - `SponsorBlockSkipPolicy.allowsSource(clientName:)`: **positive**
-  allowlist of the known SwiftyTube YouTubeClient identifiers
+  allowlist of the known ApolloTube YouTubeClient identifiers
   (WEB, WEB_REMIX, IOS, ANDROID, ANDROID_VR, TVHTML5,
   TVHTML5_SIMPLY_EMBEDDED_PLAYER, VISIONOS).
 - All external/unknown providers, including addon, Qobuz, JioSaavn,

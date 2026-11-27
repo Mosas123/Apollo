@@ -5,7 +5,7 @@
 //  Created by 686udjie on 06/07/2026.
 //
 
-@preconcurrency import SwiftyTube
+@preconcurrency import ApolloTube
 import SwiftUI
 
 /// One policy for episode row art, queued playback, menus and downloads.

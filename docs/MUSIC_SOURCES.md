@@ -1,6 +1,6 @@
 # Music sources (work in progress)
 
-Apollo currently searches and plays YouTube Music via `SwiftyTube` and stores queue
+Apollo currently searches and plays YouTube Music via `ApolloTube` and stores queue
 entries as `SongItem.videoId`. Those IDs and YouTube-specific features **must not**
 be reused for tracks from other providers.
 

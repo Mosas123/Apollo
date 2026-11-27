@@ -6,9 +6,9 @@ temp_dir="$(mktemp -d)"
 trap 'rm -rf "$temp_dir"' EXIT
 
 # Build only the logging code on the macOS runner; no signing or iOS
-# simulator required. A tiny stub supplies SwiftyTubeLog's public interface.
-cat > "$temp_dir/SwiftyTube.swift" <<'SWIFT'
-public enum SwiftyTubeLog {
+# simulator required. A tiny stub supplies ApolloTubeLog's public interface.
+cat > "$temp_dir/ApolloTube.swift" <<'SWIFT'
+public enum ApolloTubeLog {
     public enum Level { case debug, info, notice, error }
     public static var handler: (@Sendable (String, Level) -> Void)? {
         get { nil }
@@ -17,13 +17,13 @@ public enum SwiftyTubeLog {
 }
 SWIFT
 
-swiftc -swift-version 6 -emit-library -emit-module -module-name SwiftyTube \
-  "$temp_dir/SwiftyTube.swift" \
-  -emit-module-path "$temp_dir/SwiftyTube.swiftmodule" \
-  -o "$temp_dir/libSwiftyTube.dylib"
+swiftc -swift-version 6 -emit-library -emit-module -module-name ApolloTube \
+  "$temp_dir/ApolloTube.swift" \
+  -emit-module-path "$temp_dir/ApolloTube.swiftmodule" \
+  -o "$temp_dir/libApolloTube.dylib"
 
 swiftc -swift-version 6 -strict-concurrency=complete -parse-as-library \
-  -I "$temp_dir" -L "$temp_dir" -lSwiftyTube \
+  -I "$temp_dir" -L "$temp_dir" -lApolloTube \
   Apollo/Utilities/Log.swift tests/Logging/FileLogLaunchChecks.swift \
   -o "$temp_dir/file-log-launch-checks"
 

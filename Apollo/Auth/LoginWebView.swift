@@ -6,7 +6,7 @@
 //
 
 @preconcurrency import SwiftUI
-import SwiftyTube
+import ApolloTube
 import WebKit
 
 // Presented as a sheet — launches Google OAuth in a full-screen WKWebView

@@ -6,7 +6,7 @@
 //
 
 import OSLog
-@preconcurrency import SwiftyTube
+@preconcurrency import ApolloTube
 
 /// Appends log lines to Documents/log.txt (exposed as Apollo/log.txt in the
 /// Files app) so issues that only show up on-device can be diagnosed without
@@ -191,13 +191,13 @@ struct AppLogger {
 enum Log {
     private static let subsystem = Bundle.main.bundleIdentifier ?? "com.686udjie.Apollo"
 
-    static func wireSwiftyTube() {
-        guard SwiftyTubeLog.handler == nil else { return }
+    static func wireApolloTube() {
+        guard ApolloTubeLog.handler == nil else { return }
         let logger = Logger(
             subsystem: subsystem,
-            category: "SwiftyTube"
+            category: "ApolloTube"
         )
-        SwiftyTubeLog.handler = { message, level in
+        ApolloTubeLog.handler = { message, level in
             switch level {
             case .debug:
                 logger.debug("\(message, privacy: .private)")
@@ -205,10 +205,10 @@ enum Log {
                 logger.info("\(message, privacy: .private)")
             case .notice:
                 logger.notice("\(message, privacy: .public)")
-                FileLog.shared.append("SwiftyTube", "NOTICE", message)
+                FileLog.shared.append("ApolloTube", "NOTICE", message)
             case .error:
                 logger.error("\(message, privacy: .public)")
-                FileLog.shared.append("SwiftyTube", "ERROR", message)
+                FileLog.shared.append("ApolloTube", "ERROR", message)
             }
         }
     }

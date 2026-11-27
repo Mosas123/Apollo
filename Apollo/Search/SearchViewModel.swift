@@ -6,7 +6,7 @@
 //
 
 import Foundation
-@preconcurrency import SwiftyTube
+@preconcurrency import ApolloTube
 import SwiftUI
 
 /// Result ordering for the search screen.

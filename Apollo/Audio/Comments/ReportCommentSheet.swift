@@ -5,7 +5,7 @@
 //  Created by 686udjie on 14/11/2026.
 //
 
-@preconcurrency import SwiftyTube
+@preconcurrency import ApolloTube
 import SwiftUI
 
 /// YouTube's comment abuse-report flow: reason list → optional details,

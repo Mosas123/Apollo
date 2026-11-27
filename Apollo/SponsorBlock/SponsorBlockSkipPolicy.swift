@@ -7,7 +7,7 @@ enum SponsorBlockSkipPolicy {
     /// SponsorBlock timestamps describe the *original YouTube video*, not a
     /// rematched studio recording. Fail closed for unknown provider names:
     /// legacy videoId equality does NOT prove the current audio came from YT.
-    /// These identifiers come from SwiftyTube's YouTubeClient.clientName.
+    /// These identifiers come from ApolloTube's YouTubeClient.clientName.
     static func allowsSource(clientName: String) -> Bool {
         switch clientName.uppercased() {
         case "WEB", "WEB_REMIX", "IOS", "ANDROID", "ANDROID_VR",

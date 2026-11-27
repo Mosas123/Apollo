@@ -1,5 +1,5 @@
 import SwiftUI
-@preconcurrency import SwiftyTube
+@preconcurrency import ApolloTube
 
 /// Keeps artist lookup in the player's own navigation sheet when a song has
 /// performer names but no browse IDs (common for stored and video results).

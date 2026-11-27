@@ -34,7 +34,7 @@ struct ApolloApp: App {
             AsyncImageView.clearArtworkCache()
             URLCache.shared.removeAllCachedResponses()
         }
-        Log.wireSwiftyTube()
+        Log.wireApolloTube()
         PlayerController.registerRemoteControlSupport()
         observePlaybackSettings()
         Task { await InnerTubeClient.apolloShared.syncApolloLocale() }

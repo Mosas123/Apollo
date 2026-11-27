@@ -1,5 +1,5 @@
 import SwiftUI
-@preconcurrency import SwiftyTube
+@preconcurrency import ApolloTube
 
 /// Resolves missing album links on demand, without changing the song or queue.
 struct SongAlbumDestinationView: View {

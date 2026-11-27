@@ -32,31 +32,31 @@ enum ArtworkLoader {
     }
 }
 
-/// App-side artwork helpers. CDN size rewriting lives in SwiftyTube's
+/// App-side artwork helpers. CDN size rewriting lives in ApolloTube's
 /// `ArtworkURLs`; this is only what the app adds on top.
 enum ArtworkURLs {
     /// i.ytimg fallback artwork for a video id.
     static func fallback(for videoId: String) -> String {
-        SwiftyTube.ArtworkURLs.fallback(for: videoId)
+        ApolloTube.ArtworkURLs.fallback(for: videoId)
     }
 
     /// Rewrites a `w<N>-h<N>` thumbnail URL to the requested square size.
     static func sized(_ url: String?, width: Int, height: Int) -> String? {
-        SwiftyTube.ArtworkURLs.sized(url, width: width, height: height)
+        ApolloTube.ArtworkURLs.sized(url, width: width, height: height)
     }
 
     // MARK: - Size ladder
 
     /// Smallest ladder rung covering `pixels` (never below the row rung).
     static func rung(for pixels: CGFloat) -> Int {
-        SwiftyTube.ArtworkURLs.rung(for: pixels)
+        ApolloTube.ArtworkURLs.rung(for: pixels)
     }
 
     // MARK: - CDN upgrade
 
     /// Convenience: artwork at the player rung.
     static func highRes(_ url: String?) -> String? {
-        guard let upgraded = SwiftyTube.ArtworkURLs.highRes(url) else { return nil }
+        guard let upgraded = ApolloTube.ArtworkURLs.highRes(url) else { return nil }
         guard let parsed = URL(string: upgraded),
               let host = parsed.host,
               host == "mzstatic.com" || host.hasSuffix(".mzstatic.com") else { return upgraded }
@@ -72,11 +72,11 @@ enum ArtworkURLs {
 
     /// 1280px variant of a ytimg thumbnail URL.
     static func maxResVariant(_ url: String?) -> String? {
-        SwiftyTube.ArtworkURLs.maxResVariant(url)
+        ApolloTube.ArtworkURLs.maxResVariant(url)
     }
 
     /// 640px variant. Exists far more often than maxres, beats hqdefault.
     static func sdVariant(_ url: String?) -> String? {
-        SwiftyTube.ArtworkURLs.sdVariant(url)
+        ApolloTube.ArtworkURLs.sdVariant(url)
     }
 }
