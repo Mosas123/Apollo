@@ -93,7 +93,7 @@ actor RadioLearningStore {
         snapshots[key] = Snapshot(style: style, source: source, features: features.values, at: Date())
     }
 
-    func record(key: String, label: Double) {
+    func record(key: String, label: Double) async {
         guard let snapshot = snapshots[key] else { return }
         snapshots[key] = nil
 
