@@ -22,6 +22,8 @@ struct HomeScreenView: View {
     @State private var forYouSongs: [SongItem] = []
     @State private var discoverArtists: [ArtistItem] = []
     @State private var podcastSuggestions: [YTItem] = []
+    @State private var episodeCovers: [String: String] = [:]
+    @State private var fetchedShowIds: Set<String> = []
 
     private struct QuickTileModel: Identifiable {
         let item: YTItem
@@ -70,6 +72,7 @@ struct HomeScreenView: View {
                 compactBar
             }
             .frame(maxHeight: .infinity, alignment: .top)
+            .environment(\.podcastCovers, podcastCoverMap)
             .toolbar(.hidden, for: .navigationBar)
             .detailRouteDestinations()
             .onChange(of: pendingRoute) { _, route in
@@ -190,6 +193,9 @@ struct HomeScreenView: View {
                 await viewModel.loadCategoryFeed(.audiobook)
                 await preloadArtwork()
             }
+            .task(id: podcastShows.count) {
+                await loadPodcastEpisodeCovers()
+            }
             .onChange(of: settings.hideExplicit) { _, _ in
                 viewModel.syncSettings()
             }
@@ -291,16 +297,12 @@ struct HomeScreenView: View {
         let item: YTItem?
         switch selectedCategory {
         case .podcast:
-            item = firstItem(in: restSections) { item in
-                if case .episode = item { return true }
-                if case .podcast = item { return true }
-                return false
+            let covered = podcastEpisodes.first {
+                podcastCoverURL(for: $0, in: podcastCoverMap) != nil
             }
+            item = covered ?? podcastShows.first ?? podcastEpisodes.first
         case .audiobook:
-            item = firstItem(in: restSections) { item in
-                if case .album(let album) = item { return album.isAudiobook }
-                return false
-            }
+            item = audiobooks.first
         case .all, .music:
             if let current = currentFeedItem {
                 item = current
@@ -320,7 +322,11 @@ struct HomeScreenView: View {
         if isNowPlaying {
             label = "Now playing"
         } else if selectedCategory == .podcast {
-            label = "Up next"
+            if case .podcast = item {
+                label = "Featured show"
+            } else {
+                label = "Up next"
+            }
         } else if selectedCategory == .audiobook {
             label = "Continue the book"
         } else if continueItems.contains(where: { $0.id == item.id }) {
@@ -339,8 +345,11 @@ struct HomeScreenView: View {
 
     private var currentFeedItem: YTItem? {
         guard let currentId = NowPlaying.shared.videoId else { return nil }
-        let pool = continueItems + quickModels.map(\.item) + forYouSongs.map(YTItem.song)
-        return pool.first { $0.videoId == currentId }
+        let pool = allHomeItems + forYouSongs.map(YTItem.song) + quickModels.map(\.item)
+        return pool.first {
+            $0.videoId == currentId
+                && (selectedCategory == .all || mediaCategory(of: $0) == selectedCategory)
+        }
     }
 
     // MARK: - Continue
@@ -372,7 +381,7 @@ struct HomeScreenView: View {
     private var quickPicksSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .bottom, spacing: 12) {
-                HomeSectionHeader(kicker: "Curated", title: "Quick picks", accent: accent)
+                HomeSectionHeader(kicker: selectedCategory == .all ? "Curated" : selectedCategory.homeKicker, title: "Quick picks", accent: accent)
                 Spacer(minLength: 0)
                 if !quickQueue.isEmpty {
                     Button {
@@ -393,31 +402,34 @@ struct HomeScreenView: View {
             }
             .padding(.horizontal, 20)
 
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: 14),
-                    GridItem(.flexible(), spacing: 14)
-                ],
-                spacing: 20
-            ) {
-                ForEach(quickModels) { model in
-                    HomeQuickTile(
-                        item: model.item,
-                        isPinned: model.isPinned,
-                        accent: accent
-                    ) {
-                        tapQuick(model)
-                    }
-                    .contextMenu {
-                        if model.isPinned {
-                            unpinButton(model)
-                        } else {
-                            YTItemContextMenu(item: model.item)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: 14) {
+                    ForEach(quickModels) { model in
+                        HomeShelfCard(item: model.item, accent: accent) {
+                            tapQuick(model)
+                        }
+                        .overlay(alignment: .topTrailing) {
+                            if model.isPinned {
+                                Image(systemName: "pin.fill")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .padding(6)
+                                    .background(.black.opacity(0.36), in: Circle())
+                                    .padding(8)
+                            }
+                        }
+                        .contextMenu {
+                            if model.isPinned {
+                                unpinButton(model)
+                            } else {
+                                YTItemContextMenu(item: model.item)
+                            }
                         }
                     }
                 }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 2)
             }
-            .padding(.horizontal, 20)
         }
     }
 
@@ -481,32 +493,198 @@ struct HomeScreenView: View {
         }
     }
 
-    private var continueItems: [YTItem] {
-        Array((keepSection?.items ?? []).prefix(10))
+    private var genericKeepItems: [YTItem] {
+        Array((keepSection?.items ?? []).prefix(12))
     }
 
-    private var quickModels: [QuickTileModel] {
+    private var genericQuickItems: [YTItem] {
+        quickSection?.items ?? []
+    }
+
+    private var allHomeItems: [YTItem] {
+        var items = viewModel.homeSections.flatMap(\.items)
+        items += (viewModel.categoryFeeds[.podcast] ?? []).flatMap(\.items)
+        items += (viewModel.categoryFeeds[.audiobook] ?? []).flatMap(\.items)
+        items += podcastSuggestions
+        return items
+    }
+
+    private var podcastEpisodes: [YTItem] {
+        dedupeItems(allHomeItems.filter {
+            if case .episode = $0 { return true }
+            return false
+        })
+    }
+
+    private var podcastShows: [YTItem] {
+        dedupeItems(allHomeItems.filter {
+            if case .podcast = $0 { return true }
+            return false
+        })
+    }
+
+    private var audiobooks: [YTItem] {
+        dedupeItems(allHomeItems.filter { item in
+            if case .album(let album) = item { return album.isAudiobook }
+            return false
+        })
+    }
+
+    private var podcastContinueItems: [YTItem] {
+        let preferred = sectionItems(.podcast, keywords: ["keep", "continue", "pick up", "recent", "listening"])
+            .filter {
+                if case .episode = $0 { return true }
+                return false
+            }
+        let source = dedupeItems(preferred.isEmpty ? podcastEpisodes : preferred)
+        let covered = source.filter { podcastCoverURL(for: $0, in: podcastCoverMap) != nil }
+        let rest = source.filter { podcastCoverURL(for: $0, in: podcastCoverMap) == nil }
+        return Array((covered + rest).prefix(8))
+    }
+
+    private var podcastQuickItems: [YTItem] {
+        let keepIds = Set(podcastContinueItems.map(\.id))
+        let shows = podcastShows.filter { !keepIds.contains($0.id) }
+        if !shows.isEmpty { return Array(shows.prefix(10)) }
+        return Array(podcastEpisodes.filter { !keepIds.contains($0.id) }.prefix(10))
+    }
+
+    private var audiobookContinueItems: [YTItem] {
+        let preferred = sectionItems(.audiobook, keywords: ["keep", "continue", "pick up", "listening"])
+        let source = preferred.isEmpty ? audiobooks : dedupeItems(preferred)
+        return Array(source.prefix(6))
+    }
+
+    private var audiobookQuickItems: [YTItem] {
+        let keepIds = Set(audiobookContinueItems.map(\.id))
+        return Array(audiobooks.filter { !keepIds.contains($0.id) }.prefix(10))
+    }
+
+    private var continueItems: [YTItem] {
+        switch selectedCategory {
+        case .all:
+            return Array(dedupeItems(genericKeepItems + podcastContinueItems + audiobookContinueItems).prefix(12))
+        case .music:
+            return Array(dedupeItems(genericKeepItems.filter { mediaCategory(of: $0) == .music }).prefix(10))
+        case .podcast:
+            return podcastContinueItems
+        case .audiobook:
+            return audiobookContinueItems
+        }
+    }
+
+    private var musicQuickModels: [QuickTileModel] {
         let pinned = speedDialEntries.map {
             QuickTileModel(item: .song($0.toSongItem()), isPinned: true)
         }
         let pinnedIds = Set(pinned.compactMap { $0.item.videoId })
 
-        let others = (quickSection?.items ?? []).filter { item in
+        let others = genericQuickItems.filter { item in
+            guard mediaCategory(of: item) == .music else { return false }
             guard let videoId = item.videoId else { return true }
             return !pinnedIds.contains(videoId)
         }.map { QuickTileModel(item: $0, isPinned: false) }
 
-        return Array((pinned + others).prefix(8))
+        return Array((pinned + others).prefix(10))
     }
 
-    private var quickQueue: [SongItem] {
+    private var quickModels: [QuickTileModel] {
+        switch selectedCategory {
+        case .music:
+            return musicQuickModels
+        case .podcast:
+            return podcastQuickItems.map { QuickTileModel(item: $0, isPinned: false) }
+        case .audiobook:
+            return audiobookQuickItems.map { QuickTileModel(item: $0, isPinned: false) }
+        case .all:
+            let combined = musicQuickModels
+                + podcastQuickItems.map { QuickTileModel(item: $0, isPinned: false) }
+                + audiobookQuickItems.map { QuickTileModel(item: $0, isPinned: false) }
+            var seen = Set<String>()
+            return Array(combined.filter { seen.insert($0.id).inserted }.prefix(12))
+        }
+    }
+
+    private var musicQuickQueue: [SongItem] {
         let pinned = speedDialEntries.map { $0.toSongItem() }
         let pinnedIds = Set(pinned.map(\.videoId))
-        let songs = (quickSection?.items ?? []).compactMap { item -> SongItem? in
+        let songs = genericQuickItems.compactMap { item -> SongItem? in
             guard case .song(let song) = item, !pinnedIds.contains(song.videoId) else { return nil }
             return song
         }
         return pinned + songs
+    }
+
+    private var quickQueue: [SongItem] {
+        selectedCategory == .music ? musicQuickQueue : []
+    }
+
+    private var podcastCoverMap: [String: String] {
+        var map: [String: String] = [:]
+        for case .podcast(let show) in allHomeItems {
+            guard let url = show.thumbnailUrl else { continue }
+            let titleKey = podcastCoverKey(show.title)
+            if titleKey.count >= 4 { map[titleKey] = url }
+            if let author = show.author {
+                let authorKey = podcastCoverKey(author)
+                if authorKey.count >= 4 { map[authorKey] = url }
+            }
+        }
+        for (videoId, cover) in episodeCovers {
+            map["vid:\(videoId)"] = cover
+        }
+        return map
+    }
+
+    private func loadPodcastEpisodeCovers() async {
+        let shows = podcastShows.compactMap { item -> PodcastItem? in
+            if case .podcast(let show) = item { return show }
+            return nil
+        }
+        let pending = shows.filter { !fetchedShowIds.contains($0.browseId) }.prefix(8)
+        guard !pending.isEmpty else { return }
+
+        var covers = episodeCovers
+        var fetched = fetchedShowIds
+        for show in pending {
+            fetched.insert(show.browseId)
+            guard let json = try? await InnerTubeClient.apolloShared.browse(browseId: show.browseId).value else {
+                continue
+            }
+            let detail = PodcastDetailViewModel.parsePodcastDetail(from: json, browseId: show.browseId)
+            guard let cover = detail.thumbnailUrl else { continue }
+            for episode in detail.episodes {
+                covers[episode.videoId] = cover
+            }
+        }
+        fetchedShowIds = fetched
+        episodeCovers = covers
+    }
+
+    private func mediaCategory(of item: YTItem) -> ContentCategory {
+        switch item {
+        case .episode, .podcast:
+            return .podcast
+        case .album(let album) where album.isAudiobook:
+            return .audiobook
+        default:
+            return .music
+        }
+    }
+
+    private func dedupeItems(_ items: [YTItem]) -> [YTItem] {
+        var seen = Set<String>()
+        return items.filter { seen.insert($0.id).inserted }
+    }
+
+    private func sectionItems(_ category: ContentCategory, keywords: [String]) -> [YTItem] {
+        for section in (viewModel.categoryFeeds[category] ?? []) {
+            let title = section.title.lowercased()
+            guard keywords.contains(where: { title.contains($0) }) else { continue }
+            let items = section.items.filter { mediaCategory(of: $0) == category }
+            if !items.isEmpty { return dedupeItems(items) }
+        }
+        return []
     }
 
     private var restSections: [HomeSection] {
@@ -670,7 +848,8 @@ struct HomeScreenView: View {
 
     private func tapQuick(_ model: QuickTileModel) {
         if case .song(let song) = model.item {
-            handleSongTap(song, in: quickQueue)
+            let queue = musicQuickQueue.isEmpty ? [song] : musicQuickQueue
+            handleSongTap(song, in: queue)
         } else {
             handleItemTap(model.item)
         }

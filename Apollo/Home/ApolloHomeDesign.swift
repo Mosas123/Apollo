@@ -253,19 +253,75 @@ struct HomeSectionHeader: View {
 
 // MARK: - Artwork
 
+/// Normalized key so an episode can find its show cover by artist/show name.
+func podcastCoverKey(_ value: String) -> String {
+    value
+        .folding(options: .diacriticInsensitive, locale: .current)
+        .lowercased()
+        .replacingOccurrences(of: "podcast", with: "")
+        .unicodeScalars
+        .filter { CharacterSet.alphanumerics.contains($0) }
+        .map(String.init)
+        .joined()
+}
+
+private struct PodcastCoverEnvironmentKey: EnvironmentKey {
+    static let defaultValue: [String: String] = [:]
+}
+
+extension EnvironmentValues {
+    var podcastCovers: [String: String] {
+        get { self[PodcastCoverEnvironmentKey.self] }
+        set { self[PodcastCoverEnvironmentKey.self] = newValue }
+    }
+}
+
+func podcastCoverURL(for item: YTItem, in covers: [String: String]) -> String? {
+    if let videoId = item.videoId, let cover = covers["vid:\(videoId)"] {
+        return cover
+    }
+    guard case .episode(let episode) = item else { return nil }
+
+    var candidates = episode.artists.map(\.name)
+    if let published = episode.publishDate { candidates.append(published) }
+
+    for candidate in candidates {
+        let key = podcastCoverKey(candidate)
+        guard key.count >= 4 else { continue }
+        if let cover = covers[key] { return cover }
+        if let match = covers.first(where: {
+            !$0.key.hasPrefix("vid:") && ($0.key.contains(key) || key.contains($0.key))
+        }) {
+            return match.value
+        }
+    }
+    return nil
+}
+
 struct HomeArtwork: View {
     let item: YTItem
 
+    @Environment(\.podcastCovers) private var podcastCovers
+
+    private var resolvedURL: String? {
+        if case .episode = item {
+            return podcastCoverURL(for: item, in: podcastCovers) ?? item.thumbnailUrl
+        }
+        return item.thumbnailUrl
+    }
+
     var body: some View {
         GeometryReader { geometry in
-            if let videoId = item.videoId, let image = NowPlaying.shared.artwork(for: videoId) {
+            if case .episode = item, let resolvedURL {
+                AsyncImageView(url: resolvedURL)
+            } else if let videoId = item.videoId, let image = NowPlaying.shared.artwork(for: videoId) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .clipped()
             } else {
-                AsyncImageView(url: item.thumbnailUrl)
+                AsyncImageView(url: resolvedURL)
             }
         }
     }
