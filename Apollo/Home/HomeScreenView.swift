@@ -23,6 +23,8 @@ struct HomeScreenView: View {
     @State private var discoverArtists: [ArtistItem] = []
     @State private var podcastSuggestions: [YTItem] = []
     @State private var episodeCovers: [String: String] = [:]
+    @State private var cachedAllHomeItems: [YTItem] = []
+    @State private var cachedPodcastCovers: [String: String] = [:]
 
     private struct QuickTileModel: Identifiable {
         let item: YTItem
@@ -82,7 +84,7 @@ struct HomeScreenView: View {
                 )
             }
             .frame(maxHeight: .infinity, alignment: .top)
-            .environment(\.podcastCovers, podcastCoverMap)
+            .environment(\.podcastCovers, cachedPodcastCovers)
             .toolbar(.hidden, for: .navigationBar)
             .detailRouteDestinations()
             .onChange(of: pendingRoute) { _, route in
@@ -186,6 +188,9 @@ struct HomeScreenView: View {
             .task(id: selectedCategory) {
                 await viewModel.loadCategoryFeed(selectedCategory)
             }
+            .task(id: catalogCacheSignature) {
+                rebuildCatalogCache()
+            }
             .task(id: viewModel.homeSections.count) {
                 guard !viewModel.homeSections.isEmpty else { return }
                 // Give the first frames and the user's first scroll room.
@@ -256,7 +261,7 @@ struct HomeScreenView: View {
         switch selectedCategory {
         case .podcast:
             let covered = podcastEpisodes.first {
-                podcastCoverURL(for: $0, in: podcastCoverMap) != nil
+                podcastCoverURL(for: $0, in: cachedPodcastCovers) != nil
             }
             item = covered ?? podcastShows.first ?? podcastEpisodes.first
         case .audiobook:
@@ -506,11 +511,47 @@ struct HomeScreenView: View {
     }
 
     private var allHomeItems: [YTItem] {
+        cachedAllHomeItems
+    }
+
+    private var catalogCacheSignature: String {
+        "\(viewModel.homeSections.count)|\(viewModel.categoryFeeds[.podcast]?.count ?? 0)|\(viewModel.categoryFeeds[.audiobook]?.count ?? 0)|\(podcastSuggestions.count)"
+    }
+
+    private func rebuildCatalogCache() {
         var items = viewModel.homeSections.flatMap(\.items)
         items += (viewModel.categoryFeeds[.podcast] ?? []).flatMap(\.items)
         items += (viewModel.categoryFeeds[.audiobook] ?? []).flatMap(\.items)
         items += podcastSuggestions
-        return items
+        cachedAllHomeItems = items
+        cachedPodcastCovers = makePodcastCoverMap(from: items)
+    }
+
+    private func makePodcastCoverMap(from items: [YTItem]) -> [String: String] {
+        var map: [String: String] = [:]
+        for case .podcast(let show) in items {
+            guard let url = show.thumbnailUrl else { continue }
+            let titleKey = podcastCoverKey(show.title)
+            if titleKey.count >= 4 { map[titleKey] = url }
+            if let author = show.author {
+                let authorKey = podcastCoverKey(author)
+                if authorKey.count >= 4 { map[authorKey] = url }
+            }
+        }
+        for (videoId, cover) in episodeCovers {
+            map["vid:\(videoId)"] = cover
+        }
+        for case .episode(let episode) in items {
+            let videoId = episode.videoId
+            guard !videoId.isEmpty, map["vid:\(videoId)"] == nil else { continue }
+            for artist in episode.artists {
+                let key = podcastCoverKey(artist.name)
+                guard key.count >= 4, let showCover = map[key] else { continue }
+                map["vid:\(videoId)"] = showCover
+                break
+            }
+        }
+        return map
     }
 
     private var podcastEpisodes: [YTItem] {
@@ -541,8 +582,8 @@ struct HomeScreenView: View {
                 return false
             }
         let source = dedupeItems(preferred.isEmpty ? podcastEpisodes : preferred)
-        let covered = source.filter { podcastCoverURL(for: $0, in: podcastCoverMap) != nil }
-        let rest = source.filter { podcastCoverURL(for: $0, in: podcastCoverMap) == nil }
+        let covered = source.filter { podcastCoverURL(for: $0, in: cachedPodcastCovers) != nil }
+        let rest = source.filter { podcastCoverURL(for: $0, in: cachedPodcastCovers) == nil }
         return Array((covered + rest).prefix(8))
     }
 
@@ -622,38 +663,6 @@ struct HomeScreenView: View {
     private var quickQueue: [SongItem] {
         selectedCategory == .music ? musicQuickQueue : []
     }
-
-    private var podcastCoverMap: [String: String] {
-        var map: [String: String] = [:]
-        for case .podcast(let show) in allHomeItems {
-            guard let url = show.thumbnailUrl else { continue }
-            let titleKey = podcastCoverKey(show.title)
-            if titleKey.count >= 4 { map[titleKey] = url }
-            if let author = show.author {
-                let authorKey = podcastCoverKey(author)
-                if authorKey.count >= 4 { map[authorKey] = url }
-            }
-        }
-        for (videoId, cover) in episodeCovers {
-            map["vid:\(videoId)"] = cover
-        }
-
-        // Resolve each episode once into an O(1) videoId key instead of
-        // scanning all show keys from every card while scrolling.
-        for case .episode(let episode) in allHomeItems {
-            let videoId = episode.videoId
-            guard !videoId.isEmpty,
-                  map["vid:\(videoId)"] == nil else { continue }
-            for artist in episode.artists {
-                let key = podcastCoverKey(artist.name)
-                guard key.count >= 4, let showCover = map[key] else { continue }
-                map["vid:\(videoId)"] = showCover
-                break
-            }
-        }
-        return map
-    }
-
 
     private func mediaCategory(of item: YTItem) -> ContentCategory {
         switch item {

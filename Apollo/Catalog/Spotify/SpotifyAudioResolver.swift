@@ -31,6 +31,10 @@ final class SpotifyAudioResolver {
                 cache[song.videoId] = resolved
                 return resolved
             }
+            if let youtube = await PodcastYouTubeResolver.shared.resolve(for: song) {
+                cache[song.videoId] = youtube
+                return youtube
+            }
         }
 
         // Downloads and queue prefetch can ask for several tracks at once.

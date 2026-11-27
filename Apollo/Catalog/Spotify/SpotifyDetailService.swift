@@ -296,7 +296,7 @@ final class SpotifyDetailService {
                     EpisodeItem(
                         videoId: SpotifyCatalogID.episode(episodeID),
                         title: episodeTitle,
-                        artists: [YTArtist(name: author ?? title)],
+                        artists: [YTArtist(name: title)],
                         duration: duration,
                         thumbnailUrl: cover,
                         publishDate: (episode["releaseDate"] as? [String: Any])?["isoString"] as? String,
