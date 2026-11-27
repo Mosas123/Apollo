@@ -4,6 +4,10 @@ import SwiftUI
 @MainActor
 enum AlbumActions {
     static func songs(for album: AlbumItem) async -> [SongItem] {
+        if SpotifyCatalogID.isSpotify(album.browseId) {
+            let id = SpotifyCatalogID.rawID(album.browseId) ?? album.browseId
+            return (try? await SpotifyDetailService.shared.albumDetail(id: id).songs) ?? []
+        }
         guard let json = try? await InnerTubeClient.apolloShared.browse(browseId: album.browseId).value else {
             return []
         }
@@ -46,22 +50,32 @@ enum AlbumActions {
     static func toggleSave(_ album: AlbumItem) {
         Task {
             let entity = try? await DatabaseService.shared.fetchOne(AlbumEntity.self, key: album.browseId)
-            if entity?.bookmarkedAt != nil {
-                try? await SyncBridge.mutations.unsaveAlbum(browseId: album.browseId)
+            if let entity, entity.bookmarkedAt != nil {
+                try? await DatabaseService.shared.delete(entity)
             } else {
-                try? await SyncBridge.mutations.saveAlbum(
-                    browseId: album.browseId,
-                    title: album.title,
-                    thumbnailUrl: album.thumbnailUrl,
-                    playlistId: album.playlistId,
-                    songCount: 0,
-                    duration: 0
+                try? await DatabaseService.shared.save(
+                    AlbumEntity(
+                        id: album.browseId,
+                        title: album.title,
+                        playlistId: nil,
+                        thumbnailUrl: album.thumbnailUrl,
+                        songCount: 0,
+                        duration: 0,
+                        bookmarkedAt: Date()
+                    )
                 )
             }
+            NotificationCenter.default.post(
+                name: Notification.Name("apollo.libraryChanged"),
+                object: nil
+            )
         }
     }
 
     static func shareURL(for album: AlbumItem) -> URL? {
+        if let spotify = SpotifyCatalogID.shareURL(for: album.browseId) {
+            return spotify
+        }
         if let playlistId = album.playlistId, !playlistId.isEmpty {
             return URL(string: "https://music.youtube.com/playlist?list=\(playlistId)")
         }

@@ -96,14 +96,8 @@ struct HomeScreenView: View {
                 viewModel.handleSessionChange(loggedIn: loggedIn)
             }
             .task {
-                await viewModel.restoreSession()
-                await accountState.restoreSession()
-                await accountState.fetchAccountInfo()
                 viewModel.loadHomeData()
                 await reloadSpeedDial()
-                Task {
-                    await SyncBridge.checkAndSyncIfStale()
-                }
             }
         }
     }
@@ -184,7 +178,6 @@ struct HomeScreenView: View {
             .refreshable {
                 await viewModel.refresh()
                 await reloadSpeedDial()
-                await SyncBridge.checkAndSyncIfStale()
             }
             .onChange(of: selectedCategory) { _, _ in
                 withAnimation(.smooth(duration: 0.4)) {

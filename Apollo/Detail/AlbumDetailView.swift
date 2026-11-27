@@ -76,54 +76,33 @@ final class AlbumDetailViewModel {
         let currentlySaved = isSaved
         isSaved = !currentlySaved
 
-        if SpotifyCatalogID.isSpotify(browseId) {
-            do {
-                if currentlySaved {
-                    if let entity = try? await DatabaseService.shared.fetchOne(
-                        AlbumEntity.self,
-                        key: browseId
-                    ) {
-                        try await DatabaseService.shared.delete(entity)
-                    }
-                } else {
-                    try await DatabaseService.shared.save(
-                        AlbumEntity(
-                            id: browseId,
-                            title: album.title,
-                            playlistId: nil,
-                            thumbnailUrl: album.thumbnailUrl,
-                            songCount: album.songCount,
-                            duration: album.duration,
-                            bookmarkedAt: Date()
-                        )
-                    )
-                }
-                NotificationCenter.default.post(
-                    name: Notification.Name("apollo.libraryChanged"),
-                    object: nil
-                )
-            } catch {
-                Log.albumDetailViewModel.error("Spotify album save failed: \(error)")
-            }
-            await refreshSavedState()
-            return
-        }
-
         do {
             if currentlySaved {
-                try await SyncBridge.mutations.unsaveAlbum(browseId: browseId)
+                if let entity = try? await DatabaseService.shared.fetchOne(
+                    AlbumEntity.self,
+                    key: browseId
+                ) {
+                    try await DatabaseService.shared.delete(entity)
+                }
             } else {
-                try await SyncBridge.mutations.saveAlbum(
-                    browseId: browseId,
-                    title: album.title,
-                    thumbnailUrl: album.thumbnailUrl,
-                    playlistId: album.playlistId,
-                    songCount: album.songCount,
-                    duration: album.duration
+                try await DatabaseService.shared.save(
+                    AlbumEntity(
+                        id: browseId,
+                        title: album.title,
+                        playlistId: nil,
+                        thumbnailUrl: album.thumbnailUrl,
+                        songCount: album.songCount,
+                        duration: album.duration,
+                        bookmarkedAt: Date()
+                    )
                 )
             }
+            NotificationCenter.default.post(
+                name: Notification.Name("apollo.libraryChanged"),
+                object: nil
+            )
         } catch {
-            Log.albumDetailViewModel.error("Toggle save failed: \(error)")
+            Log.albumDetailViewModel.error("Album save failed: \(error)")
         }
         await refreshSavedState()
     }

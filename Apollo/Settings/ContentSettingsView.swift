@@ -175,17 +175,6 @@ struct ContentSettingsView: View {
                 Text("When off, searches and playback are not recorded locally.")
             }
 
-            Section {
-                SettingsToggleRow("Sync Artists", icon: "music.mic", isOn: $settings.syncArtists)
-                SettingsToggleRow("Sync Playlists", icon: "music.note.list", isOn: $settings.syncPlaylists)
-                SettingsToggleRow("Sync Albums", icon: "square.stack", isOn: $settings.syncAlbums)
-                SettingsToggleRow("Sync Podcasts", icon: "antenna.radiowaves.left.and.right", isOn: $settings.syncPodcasts)
-                SettingsToggleRow("Sync Liked Songs", icon: "heart.fill", isOn: $settings.syncSongs)
-            } header: {
-                Text("Library Sync")
-            } footer: {
-                Text("Choose which library sections sync from your YouTube Music account.")
-            }
         }
         .navigationTitle("Content")
         .navigationBarTitleDisplayMode(.inline)

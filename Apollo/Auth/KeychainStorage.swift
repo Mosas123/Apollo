@@ -10,16 +10,11 @@ import Foundation
 // Wraps iOS Security framework for encrypted Codable persistence
 actor KeychainStorage {
   static let serviceName = "com.cl0udly.apollo.app"
-  static let sessionKey = "sessionState"
 
   private let store: SecureStore
 
   init(serviceName: String = KeychainStorage.serviceName) {
     self.store = SecureStore(service: serviceName)
-  }
-
-  nonisolated func loadSessionState() async throws -> SessionState {
-    try loadDataDecoded(for: KeychainStorage.sessionKey)
   }
 
   // Saves a Codable value to Keychain, replacing any existing entry for the key
@@ -53,11 +48,6 @@ actor KeychainStorage {
     } catch {
       throw Self.map(error)
     }
-  }
-
-  // Removes all stored session data from Keychain
-  nonisolated func clear() throws {
-    try delete(for: KeychainStorage.sessionKey)
   }
 
   private static func map(_ error: Error) -> KeychainError {

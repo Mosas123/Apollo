@@ -459,7 +459,17 @@ struct AddSongToPlaylistSheet: View {
         isCreating = true
         defer { isCreating = false }
         do {
-            let playlistId = try await SyncBridge.mutations.createPlaylist(title: title)
+            let playlistId = UUID().uuidString
+            let entity = PlaylistEntity(
+                id: playlistId,
+                browseId: nil,
+                name: title,
+                thumbnailUrl: nil,
+                isEditable: true,
+                bookmarkedAt: Date(),
+                remoteSongCount: 0
+            )
+            try await DatabaseService.shared.insert(entity)
             try await SyncBridge.mutations.addToPlaylist(playlistId: playlistId, songId: song.videoId)
             await loadPlaylists()
             addedTo.insert(playlistId)

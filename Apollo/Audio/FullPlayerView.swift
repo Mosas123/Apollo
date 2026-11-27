@@ -31,11 +31,10 @@ struct FullPlayerView: View {
     @State private var liveSaveStatus: String?
     @State private var artworkEntryOffset: CGFloat = 0
     @State private var currentLyrics: [LyricLine] = []
-    @State private var canvasDominantColors: [Color]?
     @State private var showGoToMenu = false
 
     private var playerBackgroundColors: [Color] {
-        let seed = (canvasDominantColors ?? np.dominantColors).first ?? .gray
+        let seed = (np.dominantColors).first ?? .gray
         let palette = PlayerArtworkPalette(seed: seed, isDark: usesDarkArtwork)
         return [palette.top, palette.bottom]
     }
@@ -240,7 +239,6 @@ struct FullPlayerView: View {
                 np.isVideoMode = false
                 showLyrics = false
                 showQueue = false
-                canvasDominantColors = nil
                 preloadLyrics()
             }
             .onChange(of: np.queueSongs.count) { _, _ in
@@ -652,23 +650,13 @@ struct FullPlayerView: View {
                 .aspectRatio(16 / 9, contentMode: .fit)
                 .animation(.easeOut(duration: 0.2), value: np.isVideoReady)
             } else {
-                ZStack {
-                    artworkImage
-                    CanvasVideoView(
-                        videoId: np.videoId,
-                        title: np.displayTitle,
-                        artist: np.displayArtist,
-                        album: np.displayAlbumTitle.isEmpty ? nil : np.displayAlbumTitle,
-                        isPlaying: np.isPlaying,
-                        enabled: settings.canvasEnabled && !settings.apoloBetaEnabled,
-                        onDominantColorsChange: { canvasDominantColors = $0 }
-                    )
-                }
-                .onTapGesture {
-                    guard np.hasVideo, !settings.apoloBetaEnabled else { return }
-                    showQueue = true
-                    player.setVideoMode()
-                }
+                artworkImage
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        guard np.hasVideo, !settings.apoloBetaEnabled else { return }
+                        showQueue = true
+                        player.setVideoMode()
+                    }
             }
         }
         .offset(x: artworkEntryOffset)

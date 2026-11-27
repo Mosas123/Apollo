@@ -42,13 +42,11 @@ class LikeStore: ObservableObject {
 
         do {
             if MusicPlaybackIdentity.isYouTube(videoId) {
-                // Guests and offline sessions keep their likes on this device; only
-                // mirror to YouTube Music when there is a real session.
-                let syncRemote = await CookieStore().isLoggedIn()
+                // Library likes are local-only now; no YouTube account is used.
                 if target {
-                    try await SyncBridge.mutations.likeSong(videoId: videoId, syncRemote: syncRemote)
+                    try await SyncBridge.mutations.likeSong(videoId: videoId, syncRemote: false)
                 } else {
-                    try await SyncBridge.mutations.unlikeSong(videoId: videoId, syncRemote: syncRemote)
+                    try await SyncBridge.mutations.unlikeSong(videoId: videoId, syncRemote: false)
                 }
                 if target, SettingsStore.shared.autoDownloadOnLike {
                     await DownloadManager.shared.download(song: song)

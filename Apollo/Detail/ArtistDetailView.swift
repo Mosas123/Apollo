@@ -53,10 +53,8 @@ final class ArtistDetailViewModel {
         do {
             let json = try await innerTube.browse(browseId: browseId).value
             var parsed = Self.parseArtistDetail(from: json, browseId: browseId)
-            if !(await CookieStore().isLoggedIn()) {
-                let saved = try? await DatabaseService.shared.fetchOne(ArtistEntity.self, key: browseId)
-                parsed.isSubscribed = saved?.bookmarkedAt != nil
-            }
+            let saved = try? await DatabaseService.shared.fetchOne(ArtistEntity.self, key: browseId)
+            parsed.isSubscribed = saved?.bookmarkedAt != nil
             Self.preloadHeroArtwork(for: parsed.thumbnailUrl)
             artist = parsed
             isLoading = false
@@ -1096,16 +1094,6 @@ struct ArtistDetailView: View {
                 do {
                     try await DatabaseService.shared.save(entity)
                     NotificationCenter.default.post(name: Notification.Name("apollo.libraryChanged"), object: nil)
-                    // Guest favorites belong to this device, not a Google account.
-                    if !SpotifyCatalogID.isSpotify(artist.browseId), await CookieStore().isLoggedIn() {
-                        failureStage = "YouTube Music sync"
-                        await AuthService.shared.loadPersistedSession()
-                        if desiredState {
-                            try await SyncBridge.mutations.subscribeArtist(channelId: channelId, artistId: artist.browseId)
-                        } else {
-                            try await SyncBridge.mutations.unsubscribeArtist(channelId: channelId, artistId: artist.browseId)
-                        }
-                    }
                 } catch {
                     if let previous {
                         try? await DatabaseService.shared.save(previous)

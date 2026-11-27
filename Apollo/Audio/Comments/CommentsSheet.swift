@@ -113,8 +113,6 @@ struct CommentsSheet: View {
         VStack(alignment: .leading, spacing: 6) {
             if accountState.isLoggedIn {
                 commentInput
-            } else {
-                signInBar
             }
             if let postError {
                 Text(postError)
@@ -187,34 +185,6 @@ struct CommentsSheet: View {
         }
         .padding(.horizontal, DesignTokens.screenHPadding)
         .padding(.vertical, 10)
-    }
-
-    /// Logged-out fallback: the same bar, but tapping opens the login sheet.
-    private var signInBar: some View {
-        Button {
-            accountState.isLoginSheetPresented = true
-        } label: {
-            HStack(spacing: 12) {
-                CachedAvatarView(
-                    url: accountState.accountImageUrl.flatMap(URL.init(string:)),
-                    size: 28
-                )
-                Text("Add a comment…")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color(.secondarySystemBackground))
-            )
-            .padding(.horizontal, DesignTokens.screenHPadding)
-            .padding(.vertical, 10)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Add a comment")
     }
 
     /// Quick-react row docked to the keyboard while composing; taps append
@@ -390,7 +360,6 @@ struct CommentsSheet: View {
 
     private func vote(_ comment: CommentItem, _ direction: CommentsViewModel.VoteDirection) {
         guard CommentsViewModel.voteToken(for: comment, direction) != nil else {
-            accountState.isLoginSheetPresented = true
             return
         }
         Task { await model.vote(comment, direction) }

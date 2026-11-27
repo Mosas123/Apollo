@@ -20,7 +20,6 @@ struct LibraryView: View {
     @State private var headerHeight: CGFloat = 60
     @State private var selectedFilter: LibraryFilter?
     @State private var showCreateDialog = false
-    @State private var hasSynced = false
     @State private var playlistToDelete: PlaylistEntity?
     @State private var playlistSongCounts: [String: Int] = [:]
 
@@ -91,14 +90,6 @@ struct LibraryView: View {
             .animation(.spring(response: 0.4, dampingFraction: 0.8), value: showCreateDialog)
             .task {
                 await loadContent()
-                await accountState.restoreSession()
-                await accountState.fetchAccountInfo()
-                // Full sync once per screen lifetime; re-running it on every
-                // appearance doubled the DB work each time the tab opened.
-                guard !hasSynced else { return }
-                hasSynced = true
-                await SyncBridge.forceFullSync()
-                await loadContent()
             }
             .task(id: isLoading) {
                 guard !isLoading else { return }
@@ -108,7 +99,6 @@ struct LibraryView: View {
                 await ImagePreloader.shared.preload(urls)
             }
             .refreshable {
-                await SyncBridge.forceFullSync()
                 await loadContent()
             }
             .destructiveConfirm(
@@ -534,7 +524,6 @@ struct CreatePlaylistDialog: View {
     let onCreated: () async -> Void
 
     @State private var name = ""
-    @State private var syncWithYouTube = false
     @State private var isCreating = false
     @State private var error: Error?
     @FocusState private var isFocused: Bool
@@ -563,28 +552,6 @@ struct CreatePlaylistDialog: View {
                 .autocorrectionDisabled()
                 .padding(.horizontal, 24)
                 .padding(.bottom, 20)
-
-            // Sync toggle
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Sync playlist")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    Text("Syncs with your YouTube Music account. This cannot be changed later.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .lineLimit(2)
-                }
-
-                Spacer(minLength: 12)
-
-                Toggle("", isOn: $syncWithYouTube)
-                    .labelsHidden()
-                    .tint(settings.accentColor)
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 20)
 
             if let error {
                 HStack(spacing: 8) {
@@ -666,21 +633,17 @@ struct CreatePlaylistDialog: View {
 
     private func createPlaylist() async throws {
         let title = name.trimmingCharacters(in: .whitespaces)
-        if syncWithYouTube {
-            _ = try await SyncBridge.mutations.createPlaylist(title: title)
-        } else {
-            let id = UUID().uuidString
-            let entity = PlaylistEntity(
-                id: id,
-                browseId: nil,
-                name: title,
-                thumbnailUrl: nil,
-                isEditable: true,
-                bookmarkedAt: Date(),
-                remoteSongCount: 0
-            )
-            try await DatabaseService.shared.insert(entity)
-        }
+        let id = UUID().uuidString
+        let entity = PlaylistEntity(
+            id: id,
+            browseId: nil,
+            name: title,
+            thumbnailUrl: nil,
+            isEditable: true,
+            bookmarkedAt: Date(),
+            remoteSongCount: 0
+        )
+        try await DatabaseService.shared.insert(entity)
     }
 }
 

@@ -599,9 +599,6 @@ final class NowPlaying {
         startTimer()
         loadThumbnail(videoId: videoId, thumbnailUrl: thumbnailUrl)
         preloadNextTrack()
-        if MusicPlaybackIdentity.isYouTube(videoId) {
-            CanvasPrefetch.request(videoId: videoId, title: title, artist: self.artist, album: album)
-        }
     }
 
     /// Clears the previous song's published payload before a new selection is

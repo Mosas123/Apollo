@@ -18,9 +18,6 @@ struct IntegrationsSettingsView: View {
                 SettingsNavigationRow("Last.fm", icon: "music.note") {
                     LastFMSettingsView()
                 }
-                SettingsNavigationRow("Canvas", icon: "film") {
-                    CanvasSettingsView()
-                }
                 SettingsNavigationRow("SponsorBlock", icon: "forward.end") {
                     SponsorBlockSettingsView()
                 }

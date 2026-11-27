@@ -44,7 +44,7 @@ struct HistoryScreenView: View {
     var body: some View {
         VStack(spacing: 0) {
             Picker("Source", selection: $viewModel.source) {
-                ForEach(HistorySource.allCases, id: \.self) { source in
+                ForEach([HistorySource.local], id: \.self) { source in
                     Text(source.rawValue).tag(source)
                 }
             }
@@ -239,7 +239,7 @@ struct HistoryScreenView: View {
                 ContentUnavailableView(
                     "No History",
                     systemImage: "clock.arrow.circlepath",
-                    description: Text("Sign in to see your YouTube Music history.")
+                    description: Text("No local history yet.")
                 )
             } else {
                 remoteList

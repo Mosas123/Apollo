@@ -29,7 +29,6 @@ final class HomeViewModel {
     private var isLoadingMore = false
     private var loadGeneration = 0
     private var previousHomePage: HomePage?
-    private let cookieStore = CookieStore()
     private let personalization = PersonalizationService.shared
 
     private var cachedLocalSections: [HomeSection] = []
@@ -115,23 +114,13 @@ final class HomeViewModel {
     }
 
     func restoreSession() async {
-        let loggedIn = await cookieStore.isLoggedIn()
-        isLoggedIn = loggedIn
-        guard loggedIn else { return }
-        await InnerTubeClient.apolloShared.loadState(from: cookieStore)
+        isLoggedIn = false
     }
 
     func handleSessionChange(loggedIn: Bool) {
-        isLoggedIn = loggedIn
-        if loggedIn {
-            Task {
-                await InnerTubeClient.apolloShared.loadState(from: cookieStore)
-                await loadPhase2Sections()
-            }
-        } else {
-            cachedPhase2Sections = []
-            mergeSections()
-        }
+        isLoggedIn = false
+        cachedPhase2Sections = []
+        mergeSections()
     }
 
     // MARK: - Home Data Loading

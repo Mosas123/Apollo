@@ -5,7 +5,6 @@ import SwiftUI
 /// implementation is original, and the app executes no downloaded code.
 struct MusicAddonsSettingsView: View {
     @State private var addonStore = MusicAddonsStore.shared
-    @Bindable private var accountState = AccountSheetState.shared
 
     @State private var manifestURL = ""
     @State private var isChecking = false
@@ -38,10 +37,6 @@ struct MusicAddonsSettingsView: View {
         .navigationTitle("Music Addons")
         .navigationBarTitleDisplayMode(.inline)
         .miniPlayerTracksScroll()
-        .loginSheet(state: accountState)
-        .task {
-            await accountState.restoreSession()
-        }
         .sheet(item: $pendingInstall) { candidate in
             reviewSheet(for: candidate)
         }
@@ -143,17 +138,6 @@ struct MusicAddonsSettingsView: View {
                 Text("Primary catalog, recommendations and music library")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-            if accountState.isLoggedIn {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                    .accessibilityLabel("Connected")
-            } else {
-                Button("Sign In") {
-                    accountState.isLoginSheetPresented = true
-                }
-                .buttonStyle(.bordered)
             }
         }
         .addonCardSurface()
