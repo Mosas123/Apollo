@@ -335,7 +335,7 @@ final class SearchViewModel {
         async let localResults = try? SearchService.shared.localSearch(query: query)
         var primaryFailure: Error?
         do {
-            let catalog = try await SpotifyCatalogProvider().search(query: query, limit: 30)
+            let catalog = try await SpotifyCatalogProvider().search(query, limit: 30)
             guard !Task.isCancelled, query == submittedQuery else { return }
             let sections = SpotifyCatalogMapper.searchSections(from: catalog)
             resultCache[query] = sections

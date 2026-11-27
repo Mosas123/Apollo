@@ -199,7 +199,7 @@ final class SpotifyDetailService {
             }
 
         let bio = ((profile?["biography"] as? [String: Any])?["text"] as? String)
-            .map(stripHTML)
+            .map(Self.stripHTML)
             .flatMap { $0.isEmpty ? nil : $0 }
         let subtitle = monthly > 0
             ? "\(compactCount(monthly)) monthly listeners"
@@ -228,7 +228,7 @@ final class SpotifyDetailService {
 
     func podcastDetail(id: String) async throws -> PodcastDetailInfo {
         let showData = try await client.show(id: id)
-        guard let showRoot = try object(from: showData),
+        guard let showRoot = try Self.object(from: showData),
               let showPayload = showRoot["data"] as? [String: Any],
               let show = showPayload["podcastUnionV2"] as? [String: Any] else {
             throw CatalogError.notFound
@@ -237,26 +237,26 @@ final class SpotifyDetailService {
         let title = (show["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown Podcast"
         let author = ((show["publisher"] as? [String: Any])?["name"] as? String)
         let description = (show["htmlDescriptionPlain"] as? String)
-            ?? (show["description"] as? String).map(stripHTML)
-        let cover = coverURLString(show["coverArt"])
-            ?? coverURLString((show["visualIdentity"] as? [String: Any])?["squareCoverImage"])
+            ?? (show["description"] as? String).map(Self.stripHTML)
+        let cover = Self.coverURLString(show["coverArt"])
+            ?? Self.coverURLString((show["visualIdentity"] as? [String: Any])?["squareCoverImage"])
 
         var episodes: [EpisodeItem] = []
         var offset = 0
         let pageSize = 100
         while offset < 2000 {
             let data = try await client.podcastEpisodes(id: id, offset: offset, limit: pageSize)
-            guard let root = try object(from: data),
+            guard let root = try Self.object(from: data),
                   let payload = root["data"] as? [String: Any],
                   let podcast = payload["podcastUnionV2"] as? [String: Any] else { break }
-            let page = items(of: podcast["episodesV2"])
+            let page = Self.items(of: podcast["episodesV2"])
             if page.isEmpty { break }
             for wrapper in page {
                 guard let entity = wrapper["entity"] as? [String: Any],
                       let episode = entity["data"] as? [String: Any],
-                      let episodeID = identifier(episode) else { continue }
+                      let episodeID = Self.identifier(episode) else { continue }
                 let episodeTitle = (episode["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Episode"
-                let duration = intValue((episode["duration"] as? [String: Any])?["totalMilliseconds"]) / 1000
+                let duration = Self.intValue((episode["duration"] as? [String: Any])?["totalMilliseconds"]) / 1000
                 episodes.append(
                     EpisodeItem(
                         videoId: SpotifyCatalogID.episode(episodeID),
@@ -289,37 +289,37 @@ final class SpotifyDetailService {
 
     func audiobookDetail(id: String) async throws -> AlbumDetailInfo {
         let showData = try await client.show(id: id)
-        guard let showRoot = try object(from: showData),
+        guard let showRoot = try Self.object(from: showData),
               let showPayload = showRoot["data"] as? [String: Any],
               let show = showPayload["podcastUnionV2"] as? [String: Any] else {
             throw CatalogError.notFound
         }
 
         let title = (show["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Unknown Audiobook"
-        let authors = authors(from: show["authorsV2"])
+        let authors = Self.authors(from: show["authorsV2"])
         let artistList = authors.isEmpty
             ? [YTArtist(name: ((show["publisher"] as? [String: Any])?["name"] as? String) ?? "Unknown Author")]
             : authors.map { YTArtist(name: $0.name, id: SpotifyCatalogID.artist($0.id)) }
-        let cover = coverURLString(show["coverArt"])
-            ?? coverURLString((show["visualIdentity"] as? [String: Any])?["squareCoverImage"])
-        let year = year(from: show["publishDate"])
+        let cover = Self.coverURLString(show["coverArt"])
+            ?? Self.coverURLString((show["visualIdentity"] as? [String: Any])?["squareCoverImage"])
+        let year = Self.year(from: show["publishDate"])
 
         var songs: [SongItem] = []
         var offset = 0
         let pageSize = 100
         while offset < 2000 {
             let data = try await client.bookChapters(id: id, offset: offset, limit: pageSize)
-            guard let root = try object(from: data),
+            guard let root = try Self.object(from: data),
                   let payload = root["data"] as? [String: Any],
                   let book = payload["podcastUnionV2"] as? [String: Any] else { break }
-            let page = items(of: book["chaptersV2"])
+            let page = Self.items(of: book["chaptersV2"])
             if page.isEmpty { break }
             for wrapper in page {
                 guard let entity = wrapper["entity"] as? [String: Any],
                       let chapter = entity["data"] as? [String: Any],
-                      let chapterID = identifier(chapter) else { continue }
+                      let chapterID = Self.identifier(chapter) else { continue }
                 let chapterTitle = (chapter["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Chapter"
-                let duration = intValue((chapter["duration"] as? [String: Any])?["totalMilliseconds"]) / 1000
+                let duration = Self.intValue((chapter["duration"] as? [String: Any])?["totalMilliseconds"]) / 1000
                 songs.append(
                     SongItem(
                         videoId: SpotifyCatalogID.chapter(chapterID),
@@ -328,7 +328,7 @@ final class SpotifyDetailService {
                         album: title,
                         albumId: SpotifyCatalogID.audiobook(id),
                         duration: duration,
-                        thumbnailUrl: coverURLString(chapter["coverArt"]) ?? cover,
+                        thumbnailUrl: Self.coverURLString(chapter["coverArt"]) ?? cover,
                         isExplicit: false,
                         playlistId: nil,
                         viewCount: nil,
@@ -355,7 +355,7 @@ final class SpotifyDetailService {
             browseId: SpotifyCatalogID.audiobook(id),
             songs: songs,
             descriptionText: (show["htmlDescriptionPlain"] as? String)
-                ?? (show["description"] as? String).map(stripHTML),
+                ?? (show["description"] as? String).map(Self.stripHTML),
             relatedAlbums: [],
             videos: [],
             featuredPlaylists: []
