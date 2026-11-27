@@ -86,7 +86,6 @@ extension YTItem {
 struct HomeSkyBackground: View {
     let accent: Color
     @Environment(\.colorScheme) private var colorScheme
-    @State private var drift = false
 
     private var isDark: Bool { colorScheme == .dark }
 
@@ -105,26 +104,24 @@ struct HomeSkyBackground: View {
                 startPoint: .top,
                 endPoint: .center
             )
-
         }
         .overlay {
-            Circle()
-                .fill(accent.opacity(isDark ? 0.34 : 0.16))
-                .frame(width: 440, height: 440)
-                .blur(radius: 130)
-                .offset(x: drift ? 150 : -120, y: drift ? -230 : -140)
+            RadialGradient(
+                colors: [accent.opacity(isDark ? 0.34 : 0.16), .clear],
+                center: UnitPoint(x: 0.82, y: 0.08),
+                startRadius: 0,
+                endRadius: 460
+            )
         }
         .overlay {
-            Circle()
-                .fill(Color(red: 0.42, green: 0.18, blue: 0.92).opacity(isDark ? 0.22 : 0.10))
-                .frame(width: 520, height: 520)
-                .blur(radius: 150)
-                .offset(x: drift ? -190 : 160, y: drift ? 80 : 20)
+            RadialGradient(
+                colors: [Color(red: 0.42, green: 0.18, blue: 0.92).opacity(isDark ? 0.22 : 0.10), .clear],
+                center: UnitPoint(x: 0.16, y: 0.78),
+                startRadius: 0,
+                endRadius: 560
+            )
         }
-        .clipped()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(.easeInOut(duration: 16).repeatForever(autoreverses: true), value: drift)
-        .onAppear { drift = true }
         .allowsHitTesting(false)
     }
 }
@@ -360,7 +357,7 @@ struct HomeHeroCard: View {
     let display: HomeHeroDisplay
     let label: String
     let accent: Color
-    let progress: Double?
+    var showsLiveProgress: Bool = false
     let onTap: () -> Void
 
     @ViewBuilder
@@ -433,17 +430,9 @@ struct HomeHeroCard: View {
                     .foregroundStyle(.white.opacity(0.76))
                     .lineLimit(1)
 
-                if let progress {
-                    GeometryReader { geometry in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(.white.opacity(0.24))
-                            Capsule()
-                                .fill(.white)
-                                .frame(width: geometry.size.width * min(max(progress, 0), 1))
-                        }
-                    }
-                    .frame(height: 3)
-                    .padding(.top, 3)
+                if showsLiveProgress {
+                    HeroLiveProgressBar()
+                        .padding(.top, 3)
                 }
 
                 HStack(spacing: 12) {
@@ -476,6 +465,23 @@ struct HomeHeroCard: View {
 }
 
 // MARK: - Continue card
+
+private struct HeroLiveProgressBar: View {
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule().fill(.white.opacity(0.24))
+                Capsule()
+                    .fill(.white)
+                    .frame(
+                        width: geometry.size.width
+                            * min(max(Double(NowPlaying.shared.progress), 0), 1)
+                    )
+            }
+        }
+        .frame(height: 3)
+    }
+}
 
 struct HomeContinueCard: View {
     let item: YTItem

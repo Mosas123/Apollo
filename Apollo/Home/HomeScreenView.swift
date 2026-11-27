@@ -16,7 +16,7 @@ struct HomeScreenView: View {
     private let accountState = AccountSheetState.shared
 
     @State private var pendingRoute: DetailRoute?
-    @State private var headerOffset: CGFloat = 0
+    @State private var scrollState = HomeScrollState()
     @State private var speedDialEntries: [SpeedDialEntry] = []
     @State private var selectedCategory: ContentCategory = .all
     @State private var forYouSongs: [SongItem] = []
@@ -34,7 +34,7 @@ struct HomeScreenView: View {
     private struct HeroModel {
         let display: HomeHeroDisplay
         let label: String
-        let progress: Double?
+        let showsLiveProgress: Bool
         let isNowPlaying: Bool
         let item: YTItem?
     }
@@ -43,13 +43,16 @@ struct HomeScreenView: View {
         selectedCategory == .all ? settings.accentColor : selectedCategory.homeAccent
     }
 
-    /// Coalesces scroll-offset writes into ~8pt steps so the whole feed isn't
-    /// re-evaluated on every scroll frame.
-    private var quantizedHeaderOffset: Binding<CGFloat> {
+    /// Coalesces scroll-offset writes into ~8pt steps. The offset lives in a
+    /// separate observable type so only the compact bar updates while scrolling,
+    /// never the whole feed.
+    private var miniPlayerHeaderOffset: Binding<CGFloat> {
         Binding(
-            get: { headerOffset },
+            get: { scrollState.offset },
             set: { newValue in
-                if abs(newValue - headerOffset) >= 8 { headerOffset = newValue }
+                if abs(newValue - scrollState.offset) >= 8 {
+                    scrollState.offset = newValue
+                }
             }
         )
     }
@@ -70,7 +73,14 @@ struct HomeScreenView: View {
                     }
                 }
 
-                compactBar
+                HomeCompactBar(
+                    scrollState: scrollState,
+                    accent: accent,
+                    isLoggedIn: accountState.isLoggedIn,
+                    accountImageUrl: accountState.accountImageUrl,
+                    accountInitial: accountState.accountName.first.map(String.init),
+                    onAccount: { router.homePath.append(DetailRoute.settings) }
+                )
             }
             .frame(maxHeight: .infinity, alignment: .top)
             .environment(\.podcastCovers, podcastCoverMap)
@@ -122,7 +132,7 @@ struct HomeScreenView: View {
                             display: hero.display,
                             label: hero.label,
                             accent: accent,
-                            progress: hero.progress
+                            showsLiveProgress: hero.showsLiveProgress
                         ) {
                             if hero.isNowPlaying {
                                 openPlayer()
@@ -132,11 +142,6 @@ struct HomeScreenView: View {
                         }
                         .padding(.horizontal, 16)
                         .padding(.top, 14)
-                        .scrollTransition(.interactive, axis: .vertical) { content, phase in
-                            content
-                                .scaleEffect(phase.isIdentity ? 1 : 0.94, anchor: .top)
-                                .opacity(phase.isIdentity ? 1 : 0.55)
-                        }
                     }
 
                     HomeOrbitSelector(selection: $selectedCategory, accent: accent)
@@ -168,7 +173,7 @@ struct HomeScreenView: View {
                 }
             }
             .scrollIndicators(.hidden)
-            .miniPlayerTracksScroll(headerOffset: quantizedHeaderOffset)
+            .miniPlayerTracksScroll(headerOffset: miniPlayerHeaderOffset)
             .scrollEdgeEffectHidden(true, for: .bottom)
             .refreshable {
                 await viewModel.refresh()
@@ -199,6 +204,9 @@ struct HomeScreenView: View {
                 await preloadArtwork()
             }
             .task(id: podcastShows.count) {
+                // Let the first frame and the scroll settle before fetching
+                // show pages for episode covers.
+                try? await Task.sleep(for: .seconds(1))
                 await loadPodcastEpisodeCovers()
             }
             .onChange(of: settings.hideExplicit) { _, _ in
@@ -253,49 +261,6 @@ struct HomeScreenView: View {
         .padding(.top, 80)
     }
 
-    private var compactBar: some View {
-        let opacity = min(max((headerOffset - 36) / 70, 0), 1)
-        return VStack(spacing: 0) {
-            HStack(spacing: 9) {
-                Text("A")
-                    .font(.system(size: 11, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .frame(width: 24, height: 24)
-                    .background(accent, in: Circle())
-
-                Text("Apollo")
-                    .font(.headline.weight(.bold))
-
-                Spacer(minLength: 12)
-
-                AccountButtonView(
-                    isLoggedIn: accountState.isLoggedIn,
-                    accountImageUrl: accountState.accountImageUrl,
-                    size: 30,
-                    initial: accountState.accountName.first.map(String.init),
-                    onTap: { router.homePath.append(DetailRoute.settings) }
-                )
-                .accessibilityLabel("Account")
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.ultraThinMaterial, in: Capsule())
-            .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 0.5))
-            .padding(.horizontal, 16)
-            .padding(.top, 5)
-            .padding(.bottom, 5)
-        }
-        .frame(maxWidth: .infinity)
-        .background {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .ignoresSafeArea(edges: .top)
-        }
-        .opacity(opacity)
-        .allowsHitTesting(opacity > 0.2)
-        .animation(.easeInOut(duration: 0.18), value: opacity)
-    }
-
     // MARK: - Hero
 
     private var hero: HeroModel? {
@@ -340,7 +305,7 @@ struct HomeScreenView: View {
         return HeroModel(
             display: item.homeHeroDisplay,
             label: label,
-            progress: nil,
+            showsLiveProgress: false,
             isNowPlaying: false,
             item: item
         )
@@ -399,7 +364,7 @@ struct HomeScreenView: View {
         return HeroModel(
             display: display,
             label: "Now playing",
-            progress: Double(player.progress),
+            showsLiveProgress: true,
             isNowPlaying: true,
             item: nil
         )
@@ -962,6 +927,67 @@ struct HomeScreenView: View {
             }
         }
     }
+}
+
+private struct HomeCompactBar: View {
+    let scrollState: HomeScrollState
+    let accent: Color
+    let isLoggedIn: Bool
+    let accountImageUrl: String?
+    let accountInitial: String?
+    let onAccount: () -> Void
+
+    private var opacity: CGFloat {
+        min(max((scrollState.offset - 36) / 70, 0), 1)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 9) {
+                Text("A")
+                    .font(.system(size: 11, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(width: 24, height: 24)
+                    .background(accent, in: Circle())
+
+                Text("Apollo")
+                    .font(.headline.weight(.bold))
+
+                Spacer(minLength: 12)
+
+                AccountButtonView(
+                    isLoggedIn: isLoggedIn,
+                    accountImageUrl: accountImageUrl,
+                    size: 30,
+                    initial: accountInitial,
+                    onTap: onAccount
+                )
+                .accessibilityLabel("Account")
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 0.5))
+            .padding(.horizontal, 16)
+            .padding(.top, 5)
+            .padding(.bottom, 5)
+        }
+        .frame(maxWidth: .infinity)
+        .background {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea(edges: .top)
+        }
+        .opacity(opacity)
+        .allowsHitTesting(opacity > 0.2)
+        .animation(.easeInOut(duration: 0.18), value: opacity)
+    }
+}
+
+@MainActor
+@Observable
+private final class HomeScrollState {
+    var offset: CGFloat = 0
 }
 
 #Preview {
