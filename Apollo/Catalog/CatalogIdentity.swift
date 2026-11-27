@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 
 /// Identity used to collapse the same recording across providers. ISRC is the
 /// strongest key; MBID is next; the fallback is deliberately conservative.
