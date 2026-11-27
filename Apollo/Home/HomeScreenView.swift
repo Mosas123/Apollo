@@ -2,9 +2,11 @@
 //  HomeScreenView.swift
 //  Apollo
 //
-//  Created by 686udjie on 01/07/2026.
+//  The Apollo Home: a living sky, one editorial hero, and a simple orbit
+//  between music, podcasts and audiobooks.
 //
 
+import Foundation
 import SwiftUI
 
 struct HomeScreenView: View {
@@ -15,10 +17,31 @@ struct HomeScreenView: View {
 
     @State private var pendingRoute: DetailRoute?
     @State private var headerOffset: CGFloat = 0
+    @State private var speedDialEntries: [SpeedDialEntry] = []
+    @State private var selectedCategory: ContentCategory = .all
+    @State private var forYouSongs: [SongItem] = []
+    @State private var discoverArtists: [ArtistItem] = []
+    @State private var podcastSuggestions: [YTItem] = []
+
+    private struct QuickTileModel: Identifiable {
+        let item: YTItem
+        let isPinned: Bool
+        var id: String { item.id }
+    }
+
+    private struct HeroModel {
+        let item: YTItem
+        let label: String
+        let subtitle: String
+        let progress: Double?
+    }
+
+    private var accent: Color {
+        selectedCategory == .all ? settings.accentColor : selectedCategory.homeAccent
+    }
 
     /// Coalesces scroll-offset writes into ~8pt steps so the whole feed isn't
-    /// re-evaluated on every scroll frame (0→1→2…). The header/mini-player
-    /// animation resolves the small steps.
+    /// re-evaluated on every scroll frame.
     private var quantizedHeaderOffset: Binding<CGFloat> {
         Binding(
             get: { headerOffset },
@@ -27,33 +50,24 @@ struct HomeScreenView: View {
             }
         )
     }
-    @State private var headerHeight: CGFloat = 60
-    @State private var speedDialEntries: [SpeedDialEntry] = []
-    @State private var selectedCategory: ContentCategory = .all
-    @State private var forYouSongs: [SongItem] = []
-    @State private var discoverArtists: [ArtistItem] = []
-    @State private var podcastSuggestions: [YTItem] = []
 
     var body: some View {
         NavigationStack(path: $router.homePath) {
             ZStack(alignment: .top) {
+                HomeSkyBackground(accent: accent)
+                    .ignoresSafeArea()
+
                 Group {
                     if viewModel.isLoading {
-                        ShimmerLoadingView()
+                        loadingContent
                     } else if let error = viewModel.error {
                         errorView(error)
                     } else {
                         homescreenContent
                     }
                 }
-                TabHeaderView(
-                    title: "Home",
-                    accountIsLoggedIn: accountState.isLoggedIn,
-                    accountImageUrl: accountState.accountImageUrl,
-                    onAccount: { router.homePath.append(DetailRoute.settings) },
-                    accountInitial: accountState.accountName.first.map(String.init)
-                )
-                .floatingTabHeader(scrollOffset: headerOffset, height: $headerHeight)
+
+                compactBar
             }
             .frame(maxHeight: .infinity, alignment: .top)
             .toolbar(.hidden, for: .navigationBar)
@@ -73,321 +87,478 @@ struct HomeScreenView: View {
                 await accountState.fetchAccountInfo()
                 viewModel.loadHomeData()
                 await reloadSpeedDial()
-                // Trigger library sync in background
                 Task {
                     await SyncBridge.checkAndSyncIfStale()
                 }
             }
-            .task(id: viewModel.homeSections.count) {
-                let urls = viewModel.homeSections
-                    .flatMap(\.items)
-                    .compactMap(\.thumbnailUrl)
-                    .compactMap(URL.init)
-                await ImagePreloader.shared.preload(urls)
-            }
         }
     }
+
+    // MARK: - Content
 
     private var homescreenContent: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                Color.clear.frame(height: headerHeight)
-                categoryChips
-                surpriseCard
-
-                ForEach(visibleSections) { section in
-                    sectionView(for: section)
-                }
-
-                if visibleSections.isEmpty && !viewModel.isLoading {
-                    ContentUnavailableView(
-                        LocalizedStringKey(emptyCategoryTitle),
-                        systemImage: emptyCategorySymbol,
-                        description: Text("Pull to refresh or try another category.")
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    HomeGreetingHeader(
+                        greeting: greeting,
+                        dateLine: dateLine,
+                        accent: accent,
+                        accountIsLoggedIn: accountState.isLoggedIn,
+                        accountImageUrl: accountState.accountImageUrl,
+                        accountInitial: accountState.accountName.first.map(String.init),
+                        onAccount: { router.homePath.append(DetailRoute.settings) }
                     )
-                    .padding(.top, 50)
-                }
-
-                GeometryReader { _ in
-                    Color.clear
-                        .onAppear {
-                            let total = viewModel.homeSections.count
-                            if total > 0 {
-                                viewModel.loadMoreIfNeeded(
-                                    currentIndex: total - 1,
-                                    total: total
-                                )
-                            }
-                        }
-                }
-                .frame(height: 1)
-            }
-        }
-        .scrollIndicators(.automatic)
-        .miniPlayerTracksScroll(headerOffset: quantizedHeaderOffset).scrollEdgeEffectHidden(true, for: .bottom)
-        .task(id: selectedCategory) {
-            await viewModel.loadCategoryFeed(selectedCategory)
-        }
-        .task {
-            async let songsTask = DiscoveryService.songs()
-            async let artistsTask = DiscoveryService.artists()
-            async let podcastsTask = DiscoveryService.podcasts()
-            forYouSongs = await songsTask
-            discoverArtists = await artistsTask
-            podcastSuggestions = await podcastsTask
-        }
-        .refreshable {
-            await viewModel.refresh()
-            await reloadSpeedDial()
-            await SyncBridge.checkAndSyncIfStale()
-        }
-        .onChange(of: settings.hideExplicit) { _, _ in
-            viewModel.syncSettings()
-        }
-        .onChange(of: settings.showQuickPicks) { _, _ in
-            viewModel.syncSettings()
-            Task { await viewModel.refresh() }
-        }
-        .onChange(of: settings.topListsLength) { _, _ in
-            Task { await viewModel.refresh() }
-        }
-        .onChange(of: settings.contentCountry) { _, _ in
-            Task { await viewModel.refresh() }
-        }
-    }
-
-    @ViewBuilder
-    private func sectionView(for section: HomeSection) -> some View {
-        switch section {
-        case .quickPicks:
-            songRowsSection(section, includesPinned: true)
-        case .keepListening:
-            mixedSection(section)
-        case .forgottenFavorites:
-            songsSection(section)
-        case .homePageSection(let sectionData, _):
-            if sectionData.isSongsOnly {
-                songsSection(section)
-            } else {
-                mixedSection(section)
-            }
-        default:
-            mixedSection(section)
-        }
-    }
-
-    @ViewBuilder
-    private func songRowsSection(_ section: HomeSection, includesPinned: Bool = false) -> some View {
-        let pinnedEntries = includesPinned ? speedDialEntries : []
-        let pinnedSongs = pinnedEntries.map { $0.toSongItem() }
-        let pinnedIds = Set(pinnedEntries.map(\.videoId))
-        let visibleItems = section.items.filter { item in
-            if case .song(let s) = item { return !pinnedIds.contains(s.videoId) }
-            return true
-        }
-        let quickSongs = visibleItems.compactMap { if case .song(let s) = $0 { return s } else { return nil } }
-        let combinedQueue = pinnedSongs + quickSongs
-
-        return Group {
-            if combinedQueue.isEmpty {
-                EmptyView()
-            } else {
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        Text(LocalizedStringKey(section.displayTitle))
-                            .font(.title2.bold())
-                        Spacer()
-                        Button {
-                            PlaybackQueue.play(combinedQueue, log: Log.homeScreenView, context: "Quick picks play all")
-                        } label: {
-                            Text("Play all")
-                                .font(.subheadline.weight(.semibold))
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 6)
-                                .background(Capsule().fill(.quaternary))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, 20)
                     .padding(.top, 8)
+                    .id("homeTop")
 
-                    GeometryReader { geometry in
-                        let columnWidth = max(1, geometry.size.width - 48)
-                        ScrollView(.horizontal) {
-                            LazyHGrid(
-                                rows: Array(repeating: GridItem(.fixed(56), spacing: 16), count: 4),
-                                spacing: 16
-                            ) {
-                                ForEach(pinnedEntries, id: \.videoId) { entry in
-                                    let song = entry.toSongItem()
-                                    quickPickCell(song, queue: combinedQueue)
-                                        .frame(width: columnWidth)
-                                        .overlay(alignment: .topTrailing) {
-                                            Image(systemName: "pin.fill")
-                                                .font(.system(size: 9, weight: .bold))
-                                                .foregroundStyle(settings.accentColor)
-                                                .padding(4)
-                                        }
-                                        .contextMenu {
-                                            Button(role: .destructive) {
-                                                Task {
-                                                    try? await DatabaseService.shared.removeFromSpeedDial(videoId: entry.videoId)
-                                                    await reloadSpeedDial()
-                                                }
-                                            } label: {
-                                                Label("Unpin", systemImage: "pin.slash")
-                                            }
-                                        }
-                                }
-
-                                ForEach(visibleItems, id: \.id) { item in
-                                    if case .song(let s) = item {
-                                        quickPickCell(s, queue: combinedQueue)
-                                            .frame(width: columnWidth)
-                                    } else {
-                                        YouTubeListItemView(
-                                            item: item,
-                                            onTap: { handleItemTap(item) },
-                                            onNavigate: { pendingRoute = $0 }
-                                        )
-                                        .frame(width: columnWidth, height: 56)
-                                    }
-                                }
-                            }
-                            .scrollTargetLayout()
+                    if let hero {
+                        HomeHeroCard(
+                            item: hero.item,
+                            label: hero.label,
+                            subtitle: hero.subtitle,
+                            accent: accent,
+                            progress: hero.progress,
+                            onTap: { handleItemTap(hero.item) }
+                        )
+                        .padding(.horizontal, 16)
+                        .padding(.top, 18)
+                        .scrollTransition(.interactive, axis: .vertical) { content, phase in
+                            content
+                                .scaleEffect(phase.isIdentity ? 1 : 0.94, anchor: .top)
+                                .opacity(phase.isIdentity ? 1 : 0.55)
                         }
-                        .contentMargins(.horizontal, 16, for: .scrollContent)
-                        .scrollTargetBehavior(.viewAligned)
-                        .scrollIndicators(.hidden)
                     }
-                    .frame(height: 4 * 56 + 3 * 16)
-                }
-            }
-        }
-    }
 
-    private func quickPickSubtitle(_ song: SongItem) -> String {
-        var parts: [String] = []
-        let artist = song.artistNamesDisplay
-        if !artist.isEmpty { parts.append(artist) }
-        if let views = song.viewCount, views > 0 {
-            parts.append("\(compactCount(views)) plays")
-        } else if song.duration > 0 {
-            parts.append(song.duration.formattedDuration)
-        }
-        return parts.joined(separator: " · ")
-    }
+                    HomeOrbitSelector(selection: $selectedCategory, accent: accent)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 18)
 
-    private func compactCount(_ value: Int64) -> String {
-        let v = Double(value)
-        func trim(_ s: String) -> String { s.replacingOccurrences(of: ".0", with: "") }
-        if v >= 1_000_000_000 { return trim(String(format: "%.1fB", v / 1_000_000_000)) }
-        if v >= 1_000_000 { return trim(String(format: "%.1fM", v / 1_000_000)) }
-        if v >= 1_000 { return trim(String(format: "%.1fK", v / 1_000)) }
-        return "\(value)"
-    }
-
-    private func quickPickCell(_ song: SongItem, queue: [SongItem]) -> some View {
-        let metadata = NowPlaying.shared.metadataSnapshot(for: song.videoId)
-        return HStack(spacing: 16) {
-            SongArtworkView(song: song)
-                .frame(width: 56, height: 56)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(metadata?.title ?? song.title)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                Text(metadata?.artist ?? quickPickSubtitle(song))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .clipped()
-
-            Spacer(minLength: 0)
-
-            Menu {
-                SongContextMenuButtons(song: song)
-            } label: {
-                Text("⋮")
-                    .font(.body.weight(.black))
-                    .foregroundStyle(.primary)
-                    .frame(width: 44, height: 56)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityLabel("More")
-        }
-        .contentShape(Rectangle())
-        .onTapGesture { handleSongTap(song, in: queue) }
-        .contextMenu { SongContextMenuButtons(song: song) }
-    }
-
-    private func songsSection(_ section: HomeSection) -> some View {
-        songRowsSection(section)
-    }
-
-    private func mixedSection(_ section: HomeSection) -> some View {
-        let queue = section.items.compactMap { if case .song(let s) = $0 { return s } else { return nil } }
-        return HorizontalSection(title: section.displayTitle, vSpacing: 8, contentVerticalPadding: 0) {
-            // Lazy so off-screen cards (and their image loads) build on approach.
-            LazyHStack(spacing: 12) {
-                ForEach(section.items, id: \.id) { item in
-                    if case .song(let s) = item, !queue.isEmpty {
-                        YouTubeGridItemView(item: item, onTap: { handleSongTap(s, in: queue) })
+                    if isEmptyFeed {
+                        emptyState
+                            .padding(.top, 44)
                     } else {
-                        YouTubeGridItemView(item: item, onTap: { handleItemTap(item) })
+                        if !continueItems.isEmpty {
+                            continueSection.padding(.top, 30)
+                        }
+
+                        if !quickModels.isEmpty {
+                            quickPicksSection.padding(.top, 30)
+                        }
+
+                        ForEach(restSections) { section in
+                            shelfSection(section).padding(.top, 30)
+                        }
+
+                        surpriseBanner
+                            .padding(.horizontal, 20)
+                            .padding(.top, 34)
                     }
+
+                    Color.clear.frame(height: 40)
                 }
             }
-        }.padding(.top, 8)
-    }
-
-    // MARK: - Quick Picks (pinned)
-
-    private func reloadSpeedDial() async {
-        speedDialEntries = (try? await DatabaseService.shared.fetchSpeedDial()) ?? []
-    }
-
-    private func handleSongTap(_ song: SongItem, in queue: [SongItem]) {
-        Log.homeScreenView.debug("Tapped song in queue: \(song.title) queueCount=\(queue.count)")
-        PlaybackQueue.play(song, in: queue, log: Log.homeScreenView, context: "Tapped song")
-    }
-
-    /// Sections for the active Home filter. "All" mixes everything but is
-    /// capped so the feed doesn't feel overloaded.
-    private var visibleSections: [HomeSection] {
-        switch selectedCategory {
-        case .all:
-            // Decluttered: only Quick Picks and Keep Listening; everything else
-            // is AI discovery (songs, new artists, podcasts) right after Quick Picks.
-            let quick = viewModel.homeSections.filter { if case .quickPicks = $0 { return true }; return false }
-            let keep = viewModel.homeSections.filter { if case .keepListening = $0 { return true }; return false }
-            var sections = quick + keep
-            sections.insert(contentsOf: aiSections(music: true, podcasts: true), at: min(1, sections.count))
-            return sections
-        case .music:
-            var sections = viewModel.homeSections.filter { $0.category == .music }
-            sections.insert(contentsOf: aiSections(music: true, podcasts: false), at: 0)
-            return sections
-        case .podcast, .audiobook:
-            // Each of these is its own feed; fall back to matching home sections.
-            var sections = (viewModel.categoryFeeds[selectedCategory] ?? [])
-                .enumerated()
-                .map { HomeSection.homePageSection($0.element, index: $0.offset) }
-            if sections.isEmpty {
-                sections = viewModel.homeSections.filter { $0.category == selectedCategory }
+            .scrollIndicators(.hidden)
+            .miniPlayerTracksScroll(headerOffset: quantizedHeaderOffset)
+            .scrollEdgeEffectHidden(true, for: .bottom)
+            .refreshable {
+                await viewModel.refresh()
+                await reloadSpeedDial()
+                await SyncBridge.checkAndSyncIfStale()
             }
-            if selectedCategory == .podcast {
-                sections.insert(contentsOf: aiSections(music: false, podcasts: true), at: 0)
+            .onChange(of: selectedCategory) { _, _ in
+                withAnimation(.smooth(duration: 0.4)) {
+                    proxy.scrollTo("homeTop", anchor: .top)
+                }
             }
-            return sections
+            .task(id: selectedCategory) {
+                await viewModel.loadCategoryFeed(selectedCategory)
+            }
+            .task {
+                async let songsTask = DiscoveryService.songs()
+                async let artistsTask = DiscoveryService.artists()
+                async let podcastsTask = DiscoveryService.podcasts()
+                forYouSongs = await songsTask
+                discoverArtists = await artistsTask
+                podcastSuggestions = await podcastsTask
+            }
+            .task(id: viewModel.homeSections.count) {
+                guard !viewModel.homeSections.isEmpty else { return }
+                // Podcast and audiobook feeds make the unified orbit complete.
+                await viewModel.loadCategoryFeed(.podcast)
+                await viewModel.loadCategoryFeed(.audiobook)
+                await preloadArtwork()
+            }
+            .onChange(of: settings.hideExplicit) { _, _ in
+                viewModel.syncSettings()
+            }
+            .onChange(of: settings.showQuickPicks) { _, _ in
+                viewModel.syncSettings()
+                Task { await viewModel.refresh() }
+            }
+            .onChange(of: settings.topListsLength) { _, _ in
+                Task { await viewModel.refresh() }
+            }
+            .onChange(of: settings.contentCountry) { _, _ in
+                Task { await viewModel.refresh() }
+            }
         }
     }
 
-    /// AI discovery shelves: songs, new artists and podcasts.
+    private var loadingContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 10) {
+                    ShimmerFill(radius: 4).frame(width: 66, height: 11)
+                    ShimmerFill(radius: 9).frame(width: 236, height: 36)
+                    ShimmerFill(radius: 4).frame(width: 152, height: 13)
+                }
+
+                ShimmerFill(radius: 30).frame(height: 380)
+
+                ShimmerFill(radius: 22).frame(height: 64)
+
+                HStack(spacing: 12) {
+                    ShimmerFill(radius: 22).frame(width: 300, height: 92)
+                    ShimmerFill(radius: 22).frame(width: 300, height: 92)
+                }
+
+                ShimmerFill(radius: 22).frame(height: 178)
+                ShimmerFill(radius: 22).frame(height: 178)
+            }
+            .padding(20)
+        }
+        .scrollDisabled(true)
+        .scrollIndicators(.hidden)
+    }
+
+    private func errorView(_ error: Error) -> some View {
+        ContentUnavailableView(
+            "The sky is quiet",
+            systemImage: "cloud.slash",
+            description: Text(error.localizedDescription)
+        )
+        .padding(.top, 80)
+    }
+
+    private var compactBar: some View {
+        let opacity = min(max((headerOffset - 36) / 70, 0), 1)
+        return HStack(spacing: 9) {
+            Text("A")
+                .font(.system(size: 11, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+                .frame(width: 24, height: 24)
+                .background(accent, in: Circle())
+
+            Text("Apollo")
+                .font(.headline.weight(.bold))
+
+            Spacer(minLength: 12)
+
+            AccountButtonView(
+                isLoggedIn: accountState.isLoggedIn,
+                accountImageUrl: accountState.accountImageUrl,
+                size: 30,
+                initial: accountState.accountName.first.map(String.init),
+                onTap: { router.homePath.append(DetailRoute.settings) }
+            )
+            .accessibilityLabel("Account")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 0.5))
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
+        .opacity(opacity)
+        .allowsHitTesting(opacity > 0.2)
+        .animation(.easeInOut(duration: 0.18), value: opacity)
+    }
+
+    // MARK: - Hero
+
+    private var hero: HeroModel? {
+        let item: YTItem?
+        switch selectedCategory {
+        case .podcast:
+            item = firstItem(in: restSections) { item in
+                if case .episode = item { return true }
+                if case .podcast = item { return true }
+                return false
+            }
+        case .audiobook:
+            item = firstItem(in: restSections) { item in
+                if case .album(let album) = item { return album.isAudiobook }
+                return false
+            }
+        case .all, .music:
+            if let current = currentFeedItem {
+                item = current
+            } else if let keep = continueItems.first {
+                item = keep
+            } else if let song = forYouSongs.first {
+                item = .song(song)
+            } else {
+                item = quickModels.first?.item
+            }
+        }
+
+        guard let item else { return nil }
+
+        let isNowPlaying = item.videoId != nil && item.videoId == NowPlaying.shared.videoId
+        let label: String
+        if isNowPlaying {
+            label = "Now playing"
+        } else if selectedCategory == .podcast {
+            label = "Up next"
+        } else if selectedCategory == .audiobook {
+            label = "Continue the book"
+        } else if continueItems.contains(where: { $0.id == item.id }) {
+            label = "Pick up"
+        } else {
+            label = "Made for you"
+        }
+
+        return HeroModel(
+            item: item,
+            label: label,
+            subtitle: item.homeSubtitle,
+            progress: isNowPlaying ? Double(NowPlaying.shared.progress) : nil
+        )
+    }
+
+    private var currentFeedItem: YTItem? {
+        guard let currentId = NowPlaying.shared.videoId else { return nil }
+        let pool = continueItems + quickModels.map(\.item) + forYouSongs.map(YTItem.song)
+        return pool.first { $0.videoId == currentId }
+    }
+
+    // MARK: - Continue
+
+    private var continueSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HomeSectionHeader(
+                kicker: selectedCategory.homeKicker,
+                title: "Pick up where you left off",
+                accent: accent
+            )
+            .padding(.horizontal, 20)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 12) {
+                    ForEach(continueItems, id: \.id) { item in
+                        HomeContinueCard(item: item, accent: accent) {
+                            handleItemTap(item)
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+        }
+    }
+
+    // MARK: - Quick picks
+
+    private var quickPicksSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .bottom, spacing: 12) {
+                HomeSectionHeader(kicker: "Curated", title: "Quick picks", accent: accent)
+                Spacer(minLength: 0)
+                if !quickQueue.isEmpty {
+                    Button {
+                        PlaybackQueue.play(
+                            quickQueue,
+                            log: Log.homeScreenView,
+                            context: "Quick picks play all"
+                        )
+                    } label: {
+                        Text("Play all")
+                            .font(.caption.weight(.bold))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(.ultraThinMaterial, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 20)
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 14),
+                    GridItem(.flexible(), spacing: 14)
+                ],
+                spacing: 20
+            ) {
+                ForEach(quickModels) { model in
+                    HomeQuickTile(
+                        item: model.item,
+                        isPinned: model.isPinned,
+                        accent: accent
+                    ) {
+                        tapQuick(model)
+                    }
+                    .contextMenu {
+                        if model.isPinned {
+                            unpinButton(model)
+                        } else {
+                            YTItemContextMenu(item: model.item)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+    }
+
+    // MARK: - Shelves
+
+    private func shelfSection(_ section: HomeSection) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HomeSectionHeader(
+                kicker: sectionKicker(for: section),
+                title: section.displayTitle,
+                accent: sectionAccent(for: section)
+            )
+            .padding(.horizontal, 20)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: 14) {
+                    ForEach(section.items.prefix(12), id: \.id) { item in
+                        HomeShelfCard(item: item, accent: sectionAccent(for: section)) {
+                            handleItemTap(item)
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 2)
+            }
+        }
+    }
+
+    private var surpriseBanner: some View {
+        HomeSurpriseBanner(
+            accent: accent,
+            title: surpriseTitle,
+            subtitle: surpriseSubtitle
+        ) {
+            handleSurprise()
+        }
+    }
+
+    private var emptyState: some View {
+        ContentUnavailableView(
+            emptyCategoryTitle,
+            systemImage: selectedCategory.homeSymbol,
+            description: Text("Pull to refresh or try another orbit.")
+        )
+        .padding(.horizontal, 20)
+    }
+
+    // MARK: - Feed data
+
+    private var keepSection: HomeSection? {
+        viewModel.homeSections.first { section in
+            if case .keepListening = section { return true }
+            return false
+        }
+    }
+
+    private var quickSection: HomeSection? {
+        viewModel.homeSections.first { section in
+            if case .quickPicks = section { return true }
+            return false
+        }
+    }
+
+    private var continueItems: [YTItem] {
+        Array((keepSection?.items ?? []).prefix(10))
+    }
+
+    private var quickModels: [QuickTileModel] {
+        let pinned = speedDialEntries.map {
+            QuickTileModel(item: .song($0.toSongItem()), isPinned: true)
+        }
+        let pinnedIds = Set(pinned.compactMap { $0.item.videoId })
+
+        let others = (quickSection?.items ?? []).filter { item in
+            guard let videoId = item.videoId else { return true }
+            return !pinnedIds.contains(videoId)
+        }.map { QuickTileModel(item: $0, isPinned: false) }
+
+        return Array((pinned + others).prefix(8))
+    }
+
+    private var quickQueue: [SongItem] {
+        let pinned = speedDialEntries.map { $0.toSongItem() }
+        let pinnedIds = Set(pinned.map(\.videoId))
+        let songs = (quickSection?.items ?? []).compactMap { item -> SongItem? in
+            guard case .song(let song) = item, !pinnedIds.contains(song.videoId) else { return nil }
+            return song
+        }
+        return pinned + songs
+    }
+
+    private var restSections: [HomeSection] {
+        let base = viewModel.homeSections.filter { section in
+            switch section {
+            case .quickPicks, .keepListening:
+                return false
+            default:
+                return !section.items.isEmpty
+            }
+        }
+
+        var result: [HomeSection] = []
+        switch selectedCategory {
+        case .music:
+            result += aiSections(music: true, podcasts: false)
+            result += base.filter { $0.category == .music }
+        case .podcast:
+            result += aiSections(music: false, podcasts: true)
+            result += categorySections(.podcast, offset: 100)
+            result += base.filter { $0.category == .podcast }
+        case .audiobook:
+            result += categorySections(.audiobook, offset: 200)
+            result += base.filter { $0.category == .audiobook }
+        case .all:
+            result += aiSections(music: true, podcasts: true)
+            result += Array(base.filter { $0.category == .music }.prefix(4))
+            result += Array(base.filter { $0.category == .podcast }.prefix(2))
+            result += Array(base.filter { $0.category == .audiobook }.prefix(2))
+            result += Array(categorySections(.podcast, offset: 100).prefix(1))
+            result += Array(categorySections(.audiobook, offset: 200).prefix(1))
+        }
+
+        var seen = Set<String>()
+        return Array(result.filter { seen.insert($0.id).inserted }.prefix(12))
+    }
+
+    private var isEmptyFeed: Bool {
+        hero == nil
+            && continueItems.isEmpty
+            && quickModels.isEmpty
+            && restSections.isEmpty
+    }
+
+    private func categorySections(_ category: ContentCategory, offset: Int) -> [HomeSection] {
+        (viewModel.categoryFeeds[category] ?? [])
+            .enumerated()
+            .map { HomeSection.homePageSection($0.element, index: $0.offset + offset) }
+            .filter { !$0.items.isEmpty }
+    }
+
+    private func firstItem(
+        in sections: [HomeSection],
+        where predicate: (YTItem) -> Bool
+    ) -> YTItem? {
+        for section in sections {
+            if let item = section.items.first(where: predicate) { return item }
+        }
+        return nil
+    }
+
     private func aiSections(music: Bool, podcasts: Bool) -> [HomeSection] {
         var result: [HomeSection] = []
         if music, !forYouSongs.isEmpty {
@@ -402,117 +573,120 @@ struct HomeScreenView: View {
         return result
     }
 
-    private var surpriseCard: some View {
-        Button {
-            handleSurprise()
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "shuffle")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(Circle().fill(settings.accentColor))
+    // MARK: - Copy & accents
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Surprise Me")
-                        .font(.headline)
-                    Text(LocalizedStringKey(surpriseSubtitle))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-
-                Spacer(minLength: 4)
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(14)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    private var greeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<12: return "Good morning"
+        case 12..<18: return "Good afternoon"
+        case 18..<23: return "Good evening"
+        default: return "Late night"
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+    }
+
+    private var dateLine: String {
+        Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day())
+    }
+
+    private var surpriseTitle: String {
+        switch selectedCategory {
+        case .all, .music: return "Let the sky decide"
+        case .podcast: return "Find your next listen"
+        case .audiobook: return "Open a new world"
+        }
     }
 
     private var surpriseSubtitle: String {
         switch selectedCategory {
-        case .all, .music: return "Not sure what to play? Discover a song."
-        case .podcast: return "Not sure what to play? Discover a podcast."
-        case .audiobook: return "Not sure what to play? Discover an audiobook."
-        }
-    }
-
-    private func handleSurprise() {
-        switch selectedCategory {
-        case .all, .music:
-            // "All" surprises with music only, as requested. Starts a longer
-            // AI-assisted queue; the AI keeps refilling it as it plays.
-            Task {
-                let items = await SurpriseMeService.musicQueue(seedVideoId: NowPlaying.shared.videoId)
-                guard !items.isEmpty, let start = items.indices.randomElement() else { return }
-                PlaybackQueue.play(items, startIndex: start, log: Log.homeScreenView, context: "Surprise music")
-                NowPlaying.shared.isSurpriseSession = true
-            }
-        case .podcast:
-            let episodes = SurpriseMeService.episodes(from: visibleSections)
-            if let start = episodes.indices.randomElement() {
-                PlaybackQueue.play(episodes, startIndex: start, log: Log.homeScreenView, context: "Surprise podcast")
-            }
-        case .audiobook:
-            if let book = SurpriseMeService.audiobook(from: visibleSections) {
-                router.homePath.append(DetailRoute.album(browseId: book.browseId))
-            }
-        }
-    }
-
-    private var categoryChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                ForEach(ContentCategory.allCases) { category in
-                    let isOn = selectedCategory == category
-                    Button {
-                        selectedCategory = category
-                    } label: {
-                        Text(LocalizedStringKey(category.title))
-                            .font(.system(size: 15, weight: .semibold))
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 10)
-                            .background(
-                                isOn ? settings.accentColor : Color(uiColor: .secondarySystemBackground),
-                                in: Capsule()
-                            )
-                            .foregroundStyle(isOn ? settings.accentColor.readableForeground : .primary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+        case .all, .music: return "A fresh song, chosen for right now."
+        case .podcast: return "A new episode from somewhere unexpected."
+        case .audiobook: return "A book you haven't met yet."
         }
     }
 
     private var emptyCategoryTitle: String {
         switch selectedCategory {
-        case .all: return "Nothing here yet"
-        case .music: return "No music"
-        case .podcast: return "No podcasts"
-        case .audiobook: return "No audiobooks"
+        case .all: return "Nothing in your orbit yet"
+        case .music: return "No music yet"
+        case .podcast: return "No podcasts yet"
+        case .audiobook: return "No audiobooks yet"
         }
     }
 
-    private var emptyCategorySymbol: String {
-        switch selectedCategory {
-        case .podcast: return "mic"
-        case .audiobook: return "book.closed"
-        default: return "music.note"
+    private func sectionKicker(for section: HomeSection) -> String {
+        if case .similarRecommendation(_, let title) = section {
+            switch title {
+            case "For You": return "Made for you"
+            case "Artists for you": return "Artists"
+            case "Podcasts for you": return "Podcasts"
+            default: return "For you"
+            }
         }
+        return section.category.homeKicker
+    }
+
+    private func sectionAccent(for section: HomeSection) -> Color {
+        section.category == .all ? accent : section.category.homeAccent
+    }
+
+    private var surpriseSections: [HomeSection] {
+        var sections = viewModel.homeSections + restSections
+        if let quickSection { sections.append(quickSection) }
+        if let keepSection { sections.append(keepSection) }
+        return sections
+    }
+
+    // MARK: - Actions
+
+    private func reloadSpeedDial() async {
+        speedDialEntries = (try? await DatabaseService.shared.fetchSpeedDial()) ?? []
+    }
+
+    private func preloadArtwork() async {
+        var urls = viewModel.homeSections
+            .flatMap(\.items)
+            .compactMap(\.thumbnailUrl)
+            .compactMap(URL.init)
+
+        for category in [ContentCategory.podcast, .audiobook] {
+            urls += (viewModel.categoryFeeds[category] ?? [])
+                .flatMap(\.items)
+                .compactMap(\.thumbnailUrl)
+                .compactMap(URL.init)
+        }
+
+        await ImagePreloader.shared.preload(urls)
+    }
+
+    private func tapQuick(_ model: QuickTileModel) {
+        if case .song(let song) = model.item {
+            handleSongTap(song, in: quickQueue)
+        } else {
+            handleItemTap(model.item)
+        }
+    }
+
+    @ViewBuilder
+    private func unpinButton(_ model: QuickTileModel) -> some View {
+        Button(role: .destructive) {
+            guard let videoId = model.item.videoId else { return }
+            Task {
+                try? await DatabaseService.shared.removeFromSpeedDial(videoId: videoId)
+                await reloadSpeedDial()
+            }
+        } label: {
+            Label("Unpin", systemImage: "pin.slash")
+        }
+    }
+
+    private func handleSongTap(_ song: SongItem, in queue: [SongItem]) {
+        Log.homeScreenView.debug("Tapped song in queue: \(song.title) queueCount=\(queue.count)")
+        PlaybackQueue.play(song, in: queue, log: Log.homeScreenView, context: "Tapped song")
     }
 
     private func handleItemTap(_ item: YTItem) {
-        Log.homeScreenView.debug("Tapped item: \(item.title) type=\(typeName(item))")
+        Log.homeScreenView.debug("Tapped item: \(item.title) kind=\(item.homeKindLabel)")
         YTItemRouter.route(
             item,
             playSong: { PlaybackQueue.playSingleWithRadio($0, log: Log.homeScreenView) },
@@ -520,23 +694,25 @@ struct HomeScreenView: View {
         )
     }
 
-    private func typeName(_ item: YTItem) -> String {
-        switch item {
-        case .song: return "song"
-        case .album: return "album"
-        case .artist: return "artist"
-        case .playlist: return "playlist"
-        case .podcast: return "podcast"
-        case .episode: return "episode"
+    private func handleSurprise() {
+        switch selectedCategory {
+        case .all, .music:
+            Task {
+                let items = await SurpriseMeService.musicQueue(seedVideoId: NowPlaying.shared.videoId)
+                guard !items.isEmpty, let start = items.indices.randomElement() else { return }
+                PlaybackQueue.play(items, startIndex: start, log: Log.homeScreenView, context: "Surprise music")
+                NowPlaying.shared.isSurpriseSession = true
+            }
+        case .podcast:
+            let episodes = SurpriseMeService.episodes(from: surpriseSections)
+            if let start = episodes.indices.randomElement() {
+                PlaybackQueue.play(episodes, startIndex: start, log: Log.homeScreenView, context: "Surprise podcast")
+            }
+        case .audiobook:
+            if let book = SurpriseMeService.audiobook(from: surpriseSections) {
+                router.homePath.append(DetailRoute.album(browseId: book.browseId))
+            }
         }
-    }
-
-    private func errorView(_ error: Error) -> some View {
-        ContentUnavailableView(
-            "Couldn't load your homescreen",
-            systemImage: "wifi.slash",
-            description: Text(error.localizedDescription)
-        )
     }
 }
 

@@ -42,7 +42,7 @@ struct AccountButtonView: View {
             )
             .frame(width: size, height: size)
             .overlay(
-                Text(initial ?? "T")
+                Text(initial ?? "A")
                     .font(.system(size: size * 0.42, weight: .semibold))
                     .foregroundColor(.white)
             )
