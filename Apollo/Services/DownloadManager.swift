@@ -407,19 +407,21 @@ extension DownloadManager {
     }
 
     func download(
-        song: SongItem,
+        song inputSong: SongItem,
         allowLosslessSource: Bool = true,
         confirmedLarge: Bool = false,
         preResolved: DownloadSource? = nil,
         retried: Bool = false
     ) async {
-        var song = song
-        if SpotifyCatalogID.isSpotify(song.videoId) {
-            guard let resolved = await SpotifyAudioResolver.shared.resolve(song) else {
-                Log.downloadManager.error("No audio match for Spotify track \(song.videoId)")
+        let song: SongItem
+        if SpotifyCatalogID.isSpotify(inputSong.videoId) {
+            guard let resolved = await SpotifyAudioResolver.shared.resolve(inputSong) else {
+                Log.downloadManager.error("No audio match for Spotify track \(inputSong.videoId)")
                 return
             }
             song = resolved
+        } else {
+            song = inputSong
         }
         let videoId = song.videoId
         if case .downloading = downloads[videoId] {
