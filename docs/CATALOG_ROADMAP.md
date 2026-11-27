@@ -81,7 +81,7 @@ depender de YouTube Music para metadatos y con YouTube únicamente como audio.
 - [ ] Afinidades locales con decaimiento.
 - [x] `StationService` v1: seed track/artist, top tracks + álbum + related.
 - [x] Ranker ponderado (gusto local, popularidad, novedad) + límites por artista/álbum.
-- [ ] Last.fm similar y tags/géneros.
+- [x] Last.fm similar; tags/géneros pendientes.
 - [ ] Filtro de disponibilidad/calidad y explicaciones en UI.
 - [ ] Evaluación offline (diversidad, skip, cobertura) y golden tests.
 - [ ] IA posterior: embeddings, learning-to-rank, bandits.

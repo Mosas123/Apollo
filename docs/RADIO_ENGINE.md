@@ -135,9 +135,9 @@ con el pipeline actual.
 ## 10. Fases
 
 ### R0 — Datos y feedback
-- [ ] Event store granular (play/skip/complete/save con timestamp).
-- [ ] Afinidades por artista/género/tema con decaimiento.
-- [ ] “No repetir” con ventanas configurables.
+- [x] Señales play/skip/complete/like vía `TasteProfileStore` (persistidas, con decaimiento).
+- [x] Afinidades por artista/género y penalización por skips en el ranker.
+- [ ] Ventanas de “no repetir” configurables por el usuario.
 
 ### R1 — StationService v1 (sin IA)
 - [x] Seed track/artist.
@@ -147,8 +147,8 @@ con el pipeline actual.
 - [x] Start Radio, Similar y autoplay sin radio de YouTube.
 
 ### R2 — Más recall
-- [ ] Last.fm similar (track/artist).
-- [ ] Tags/géneros y estaciones por mood.
+- [x] Last.fm `track.getSimilar` (solo API key, cache 24 h).
+- [ ] `artist.getSimilar` y estaciones por mood/tags.
 - [ ] Co-ocurrencia/editorial.
 - [ ] Local taste y “para ti”.
 

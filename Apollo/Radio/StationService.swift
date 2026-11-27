@@ -37,6 +37,7 @@ actor StationService {
 
     private let source = SpotifyStationSource()
     private let taste = RadioTasteStore.shared
+    private let lastFM = LastFMDiscoveryClient()
     private var cache: [String: (songs: [SongItem], at: Date)] = [:]
     private let ttl: TimeInterval = 10 * 60
 
@@ -155,6 +156,26 @@ actor StationService {
             }
         }
 
+        let similarTracks = await lastFM.similarTracks(
+            title: seedSong.title,
+            artist: seedSong.artists.first?.name ?? "",
+            limit: 10
+        )
+        for (index, match) in similarTracks.prefix(5).enumerated() {
+            let query = "\(match.title) \(match.artist)"
+            guard let results = try? await SpotifyCatalogProvider().search(query, limit: 2) else { continue }
+            let normalizedTitle = TextMatch.normalizeTitle(match.title)
+            guard let track = results.tracks.first(where: {
+                TextMatch.normalizeTitle($0.title) == normalizedTitle
+            }) ?? results.tracks.first else { continue }
+            candidates.append(Candidate(
+                song: SpotifyCatalogMapper.song(from: track),
+                base: 0.72 - Double(index) * 0.03,
+                popularity: min(max(match.match / 100, 0), 1),
+                group: .related
+            ))
+        }
+
         return candidates.filter { !isSeed($0.song, seedSong: seedSong, seedTrackID: seed.trackID) }
     }
 
@@ -213,9 +234,16 @@ actor StationService {
 
             let affinity = await taste.affinity(for: candidate.song.artists)
             let recent = await taste.isRecent(title: candidate.song.title, artists: candidate.song.artists)
+            let artistNames = candidate.song.artists.map(\.name)
+            let profile = await MainActor.run {
+                TasteProfileStore.shared.signals(for: artistNames)
+            }
+            guard profile.skips < 5 else { continue }
 
             var score = candidate.base
             score += 0.30 * affinity
+            score += 0.20 * min(max(profile.weight / 12, 0), 1)
+            score -= Double(min(profile.skips, 5)) * 0.04
             score += 0.12 * candidate.popularity
             score += recent ? -0.18 : 0.04
 

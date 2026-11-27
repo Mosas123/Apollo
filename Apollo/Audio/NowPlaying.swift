@@ -814,7 +814,6 @@ final class NowPlaying {
         } else if isSurpriseSession {
             continueSurprise()
         } else if SettingsStore.shared.autoplaySimilar,
-                  MusicPlaybackIdentity.isYouTube(videoId),
                   let endedVideoId = videoId {
             autoplaySimilar(from: endedVideoId)
         } else {

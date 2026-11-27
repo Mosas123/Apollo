@@ -84,6 +84,33 @@ final class TasteProfileStore {
 
     var isEmpty: Bool { snapshot.artistWeights.isEmpty }
 
+    func weight(for artist: String) -> Double {
+        guard let artist = clean(artist) else { return 0 }
+        decayIfNeeded()
+        return snapshot.artistWeights[artist] ?? 0
+    }
+
+    func skipCount(for artist: String) -> Int {
+        guard let artist = clean(artist) else { return 0 }
+        return snapshot.skipCounts[artist] ?? 0
+    }
+
+    func signals(for artists: [String]) -> (weight: Double, skips: Int) {
+        decayIfNeeded()
+        let names = artists.compactMap(clean)
+        guard !names.isEmpty else { return (0, 0) }
+        let weight = names.map { snapshot.artistWeights[$0] ?? 0 }.max() ?? 0
+        let skips = names.map { snapshot.skipCounts[$0] ?? 0 }.max() ?? 0
+        return (weight, skips)
+    }
+
+    func genreWeight(for genre: String) -> Double {
+        let key = genre.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return 0 }
+        decayIfNeeded()
+        return snapshot.genreWeights[key] ?? 0
+    }
+
     // MARK: - Genre learning
 
     private func learnGenre(_ artist: String) async {

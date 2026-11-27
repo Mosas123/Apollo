@@ -27,15 +27,13 @@ enum SurpriseMeService {
             }
         }
 
-        // 2) YouTube Music recommendations until ~30 songs.
+        // 2) Apollo stations until ~30 songs.
         if items.count < 30 {
-            for seed in await radioSeeds(preferred: seedVideoId, excluding: excluding) {
-                guard MusicPlaybackIdentity.isYouTube(seed),
-                      let radio = try? await PersonalizationService.shared.fetchRadio(videoId: seed) else { continue }
-                for song in radio.songs {
+            for seed in await stationSeeds(preferred: seedVideoId, excluding: excluding) {
+                let station = await StationService.shared.radio(for: seed, options: .default)
+                for song in station {
                     guard song.videoId != excluding,
-                          song.videoId != seed,
-                          MusicPlaybackIdentity.isYouTube(song.videoId),
+                          song.videoId != seed.videoId,
                           seen.insert(song.videoId).inserted else { continue }
                     items.append(song)
                     if items.count >= 30 { break }
@@ -49,13 +47,8 @@ enum SurpriseMeService {
             let queries = TasteProfileStore.shared.topArtists(limit: 4)
                 + TasteProfileStore.shared.topGenres(limit: 2)
             for query in queries {
-                guard let raw = try? await SearchService.shared.search(query: query) else { continue }
-                let songs = SearchParser.parseSearchResults(from: raw)
-                    .flatMap(\.items)
-                    .compactMap { item -> SongItem? in
-                        if case .song(let song) = item { return song }
-                        return nil
-                    }
+                guard let results = try? await SpotifyCatalogProvider().search(query, limit: 10) else { continue }
+                let songs = results.tracks.map { SpotifyCatalogMapper.song(from: $0) }
                 for song in songs where song.videoId != excluding && song.videoId != seedVideoId {
                     guard seen.insert(song.videoId).inserted else { continue }
                     items.append(song)
@@ -68,26 +61,39 @@ enum SurpriseMeService {
         return items
     }
 
-    /// Top-played and liked songs act as radio seeds (not as the queue itself).
-    private static func radioSeeds(preferred: String?, excluding: String?) async -> [String] {
-        var seeds: [String] = []
-        if let preferred, preferred != excluding, MusicPlaybackIdentity.isYouTube(preferred) {
-            seeds.append(preferred)
+    /// Top-played and liked songs act as station seeds (not as the queue itself).
+    private static func stationSeeds(preferred: String?, excluding: String?) async -> [SongItem] {
+        var seeds: [SongItem] = []
+        var seen = Set<String>()
+
+        if let preferred {
+            let current = NowPlaying.shared.queueSongs.first {
+                $0.videoId == preferred || $0.catalogID == preferred
+            }
+            if let current, seen.insert(current.videoId).inserted {
+                seeds.append(current)
+            } else if let entity = try? await DatabaseService.shared.fetchOne(SongEntity.self, key: preferred),
+                      seen.insert(entity.id).inserted {
+                seeds.append(SongItem(entity: entity))
+            }
         }
+
         if seeds.count < 2 {
             let top = (try? await DatabaseService.shared.fetchTopSongs(limit: 10)) ?? []
-            for song in top.shuffled() where MusicPlaybackIdentity.isYouTube(song.id) {
-                if !seeds.contains(song.id) { seeds.append(song.id) }
+            for entity in top.shuffled() where entity.id != excluding && seen.insert(entity.id).inserted {
+                seeds.append(SongItem(entity: entity))
                 if seeds.count >= 2 { break }
             }
         }
+
         if seeds.count < 2 {
             let liked = (try? await DatabaseService.shared.fetchAllLikedSongs()) ?? []
-            for entity in liked.shuffled() where MusicPlaybackIdentity.isYouTube(entity.id) {
-                if !seeds.contains(entity.id) { seeds.append(entity.id) }
+            for entity in liked.shuffled() where entity.id != excluding && seen.insert(entity.id).inserted {
+                seeds.append(SongItem(entity: entity))
                 if seeds.count >= 2 { break }
             }
         }
+
         return Array(seeds.prefix(2))
     }
 
