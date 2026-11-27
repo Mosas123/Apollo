@@ -48,23 +48,42 @@ extension CatalogAlbum {
 /// it never touches artists, playback or the primary identifiers.
 struct CatalogEnricher: Sendable {
     private let apple = AppleCatalogClient()
+    private let musicBrainz = MusicBrainzClient()
 
     func enrich(_ track: CatalogTrack) async -> CatalogEnrichment {
-        guard track.artworkURL == nil else { return CatalogEnrichment() }
-
+        var enrichment = CatalogEnrichment()
         let artist = track.artists.first?.name ?? ""
-        let term = [track.title, artist].filter { !$0.isEmpty }.joined(separator: " ")
-        let matches = (try? await apple.search(term: term, entity: .song, limit: 5)) ?? []
-        guard let match = bestTrackMatch(track, in: matches) else { return CatalogEnrichment() }
 
-        return CatalogEnrichment(
-            artworkURL: track.artworkURL == nil ? match.artworkURL : nil,
-            artworkSource: track.artworkURL == nil ? .apple : nil,
-            genre: match.genre,
-            genreSource: match.genre == nil ? nil : .apple,
-            releaseDate: match.releaseDate,
-            releaseDateSource: match.releaseDate == nil ? nil : .apple
-        )
+        if track.artworkURL == nil {
+            let term = [track.title, artist].filter { !$0.isEmpty }.joined(separator: " ")
+            let matches = (try? await apple.search(term: term, entity: .song, limit: 5)) ?? []
+            if let match = bestTrackMatch(track, in: matches) {
+                enrichment.artworkURL = match.artworkURL
+                enrichment.artworkSource = match.artworkURL == nil ? nil : .apple
+                enrichment.genre = match.genre
+                enrichment.genreSource = match.genre == nil ? nil : .apple
+                enrichment.releaseDate = match.releaseDate
+                enrichment.releaseDateSource = match.releaseDate == nil ? nil : .apple
+            }
+        }
+
+        if track.isrc == nil {
+            let recording = try? await musicBrainz.lookup(
+                title: track.title,
+                artist: artist,
+                durationMS: track.durationMS
+            )
+            if let recording {
+                enrichment.isrc = recording.isrcs.first
+                enrichment.mbid = recording.id
+                if enrichment.releaseDate == nil, let date = recording.releaseDate {
+                    enrichment.releaseDate = date
+                    enrichment.releaseDateSource = .musicBrainz
+                }
+            }
+        }
+
+        return enrichment
     }
 
     func enrich(_ album: CatalogAlbum) async -> CatalogEnrichment {
