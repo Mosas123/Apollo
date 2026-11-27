@@ -58,7 +58,7 @@ depender de YouTube Music para metadatos y con YouTube únicamente como audio.
 
 ### Fase 2 — Identidad y deduplicación
 - [x] MusicBrainz ISRC/MBID (rate limit 1 req/s, caché 24 h).
-- [ ] Conectar ISRC/MBID al catálogo y persistir la identidad.
+- [x] Persistir identidad/enriquecimiento en DB (`catalog_identity`, migración v10).
 - [x] Clave canónica: ISRC → MBID → fallback título/artista/duración (en memoria).
 - [ ] Huella secundaria: título normalizado + artistas + duración ±2 s +
       álbum/año.

@@ -282,4 +282,30 @@ enum DatabaseMigrations {
             try db.execute(sql: sql)
         }
     }
+
+    static let v10: @Sendable (Database) throws -> Void = logged("v10") { db in
+        // Canonical catalogue identity shared across providers.
+        if try !db.tableExists("catalog_identity") {
+            try db.create(table: "catalog_identity") { t in
+                t.column("id", .text).primaryKey()
+                t.column("source", .text).notNull()
+                t.column("title", .text).notNull()
+                t.column("artist_names", .text)
+                t.column("album_title", .text)
+                t.column("duration_ms", .integer).notNull().defaults(to: 0)
+                t.column("isrc", .text)
+                t.column("mbid", .text)
+                t.column("artwork_url", .text)
+                t.column("genre", .text)
+                t.column("release_date", .text)
+                t.column("spotify_id", .text)
+                t.column("youtube_id", .text)
+                t.column("updated_at", .text).notNull()
+            }
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_catalog_identity_isrc ON catalog_identity(isrc)")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_catalog_identity_mbid ON catalog_identity(mbid)")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_catalog_identity_spotify ON catalog_identity(spotify_id)")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_catalog_identity_youtube ON catalog_identity(youtube_id)")
+        }
+    }
 }

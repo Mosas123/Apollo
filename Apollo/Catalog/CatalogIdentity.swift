@@ -40,26 +40,61 @@ actor CatalogMerger {
     private var records: [String: CanonicalTrack] = [:]
     private let maxEntries = 2048
 
-    func merge(_ track: CatalogTrack, enrichment: CatalogEnrichment = CatalogEnrichment()) -> CanonicalTrack {
+    func merge(_ track: CatalogTrack, enrichment: CatalogEnrichment = CatalogEnrichment()) async -> CanonicalTrack {
         let identity = CatalogIdentity.resolve(track: track, enrichment: enrichment)
 
-        if var existing = records[identity.key] {
-            existing.sources.insert(track.source)
-            existing.enrichment = existing.enrichment.merged(with: enrichment)
-            existing.track = existing.track.applying(existing.enrichment)
-            records[identity.key] = existing
-            return existing
+        var effectiveEnrichment = enrichment
+        var storedSources: Set<CatalogSource> = []
+        if let stored = try? await DatabaseService.shared.fetchOne(
+            CatalogIdentityEntity.self,
+            key: identity.key
+        ) {
+            effectiveEnrichment = stored.enrichment.merged(with: enrichment)
+            if let source = CatalogSource(rawValue: stored.source) {
+                storedSources.insert(source)
+            }
         }
 
-        if records.count >= maxEntries { records.removeAll(keepingCapacity: true) }
-        let record = CanonicalTrack(
-            id: identity.key,
-            track: track.applying(enrichment),
-            enrichment: enrichment,
-            sources: [track.source]
-        )
-        records[identity.key] = record
+        let record: CanonicalTrack
+        if var existing = records[identity.key] {
+            existing.sources.formUnion(storedSources)
+            existing.sources.insert(track.source)
+            existing.enrichment = existing.enrichment.merged(with: effectiveEnrichment)
+            existing.track = existing.track.applying(existing.enrichment)
+            record = existing
+            records[identity.key] = existing
+        } else {
+            if records.count >= maxEntries { records.removeAll(keepingCapacity: true) }
+            record = CanonicalTrack(
+                id: identity.key,
+                track: track.applying(effectiveEnrichment),
+                enrichment: effectiveEnrichment,
+                sources: storedSources.union([track.source])
+            )
+            records[identity.key] = record
+        }
+
+        try? await DatabaseService.shared.save(entity(from: record))
         return record
+    }
+
+    private func entity(from record: CanonicalTrack) -> CatalogIdentityEntity {
+        CatalogIdentityEntity(
+            id: record.id,
+            source: record.track.source.rawValue,
+            title: record.track.title,
+            artistNames: record.track.artists.map(\.name).joined(separator: "\n"),
+            albumTitle: record.track.album?.title,
+            durationMS: record.track.durationMS,
+            isrc: record.track.isrc,
+            mbid: record.enrichment.mbid,
+            artworkURL: record.track.artworkURL?.absoluteString,
+            genre: record.enrichment.genre,
+            releaseDate: record.enrichment.releaseDate,
+            spotifyID: record.track.source == .spotify ? record.track.id : nil,
+            youtubeID: record.track.source == .youtube ? record.track.id : nil,
+            updatedAt: Date()
+        )
     }
 
     func record(for identity: CatalogIdentity) -> CanonicalTrack? {
