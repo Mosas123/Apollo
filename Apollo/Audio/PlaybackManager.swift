@@ -1153,6 +1153,20 @@ actor PlaybackManager {
         // video/audio rematching, even when the music beta is enabled.
         if let episode = await queueSong(for: videoId),
            episode.contentKind == .episode || episode.contentKind == .podcast {
+            // RSS podcasts are already direct audio URLs; only true YouTube
+            // episode carriers go through the YouTube stream resolver here.
+            if MusicPlaybackIdentity.isPodcast(videoId) {
+                let result = try await resolvePodcast(videoId: videoId, song: episode)
+                guard await isCurrentIntent(intentGeneration) else {
+                    throw CancellationError()
+                }
+                return try await playNetworkResult(
+                    result, videoId: videoId, intentGeneration: intentGeneration
+                )
+            }
+            guard MusicPlaybackIdentity.isYouTube(videoId) else {
+                throw MusicCatalogError.unavailableTrack
+            }
             var request = StreamResolveRequest.playback(videoId: videoId)
             request.options.audioQuality = SettingsStore.shared.effectiveAudioQuality
             let result = try await StreamFallback.resolveFirstValid(

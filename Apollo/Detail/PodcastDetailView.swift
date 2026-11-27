@@ -595,6 +595,18 @@ struct PodcastDetailView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(LocalizedStringKey(viewModel.isSubscribed ? "Unsubscribe from podcast" : "Subscribe to podcast"))
 
+                if let latest = podcast.episodes.first {
+                    Button(action: { playEpisode(latest, in: podcast) }, label: {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 48, height: 48)
+                            .background(Circle().fill(Color.accentColor))
+                    })
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Play latest episode")
+                }
+
                 Button(action: { showMoreSheet = true }, label: {
                     Text("⋮")
                         .font(.title3)

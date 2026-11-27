@@ -35,6 +35,8 @@ final class SpotifyAudioResolver {
                 cache[song.videoId] = youtube
                 return youtube
             }
+            Log.searchView.error("No podcast audio match for \(song.videoId)")
+            return nil
         }
 
         // Downloads and queue prefetch can ask for several tracks at once.
