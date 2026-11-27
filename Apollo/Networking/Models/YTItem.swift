@@ -315,6 +315,10 @@ struct SongItem: Codable, Hashable {
     /// the library.
     var stationReason: String?
 
+    /// Visible provenance for provider-delivered audio (for example podcast
+    /// RSS), shown in the queue.
+    var sourceAttribution: String?
+
     /// The watch endpoint's music type is authoritative even when the
     /// localized subtitle omits the word "Video".
     var isMusicVideo: Bool {

@@ -377,6 +377,13 @@ struct QueueSongRow: View {
                         .lineLimit(1)
                 }
 
+                if let attribution = song.sourceAttribution, !attribution.isEmpty {
+                    Text(attribution)
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(isPlayed ? 0.25 : 0.45))
+                        .lineLimit(1)
+                }
+
                 if let reason = song.stationReason, !reason.isEmpty {
                     Text(reason)
                         .font(.caption2)

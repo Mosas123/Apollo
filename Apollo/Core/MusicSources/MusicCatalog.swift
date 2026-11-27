@@ -10,6 +10,7 @@ enum MusicCatalogSource: String, Codable, Hashable, Sendable {
     case pencari
     case jiosaavn
     case addon
+    case podcast
 }
 
 struct MusicCatalogID: Codable, Hashable, Sendable {
@@ -87,6 +88,10 @@ enum MusicPlaybackIdentity {
         playbackID?.hasPrefix("addon:") == true
     }
 
+    static func isPodcast(_ playbackID: String?) -> Bool {
+        playbackID?.hasPrefix("podcast:") == true
+    }
+
     /// Human-readable origin of the current stream (not the YouTube transport
     /// client). Shown in the player menu.
     static func sourceLabel(_ playbackID: String?) -> String {
@@ -94,6 +99,7 @@ enum MusicPlaybackIdentity {
         if isLegacyPencari(playbackID) { return "PencariMusic (legacy)" }
         if isJioSaavn(playbackID) { return "JioSaavn" }
         if isAddon(playbackID) { return "Music Add-on" }
+        if isPodcast(playbackID) { return "Podcast RSS" }
         if isAudius(playbackID) { return "Audius" }
         return "YouTube"
     }
@@ -101,6 +107,7 @@ enum MusicPlaybackIdentity {
     static func isExternal(_ playbackID: String?) -> Bool {
         isAudius(playbackID) || isQobuz(playbackID)
             || isJioSaavn(playbackID) || isAddon(playbackID)
+            || isPodcast(playbackID)
     }
 
     static func isYouTube(_ playbackID: String?) -> Bool {

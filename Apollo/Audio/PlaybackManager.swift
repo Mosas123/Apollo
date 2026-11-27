@@ -154,6 +154,44 @@ actor PlaybackManager {
         )
     }
 
+    /// Podcast RSS enclosures are already direct, public audio URLs.
+    private func resolvePodcast(videoId: String, song fallbackSong: SongItem? = nil) async throws -> PlaybackResult {
+        guard let identifier = MusicCatalogID(storageKey: videoId),
+              identifier.source == .podcast,
+              let url = URL(string: identifier.rawValue) else {
+            throw MusicCatalogError.unavailableTrack
+        }
+        guard let song = await songForResolve(videoId, fallback: fallbackSong) else {
+            throw MusicCatalogError.unavailableTrack
+        }
+
+        let mime: String
+        switch url.pathExtension.lowercased() {
+        case "m4a", "mp4": mime = "audio/mp4"
+        case "aac": mime = "audio/aac"
+        case "ogg", "opus": mime = "audio/ogg"
+        default: mime = "audio/mpeg"
+        }
+
+        return PlaybackResult(
+            streamUrl: url.absoluteString,
+            itag: 0,
+            mimeType: mime,
+            bitrate: 0,
+            audioQuality: "podcast-rss",
+            videoId: videoId,
+            title: song.title,
+            author: song.artistNamesDisplay,
+            duration: song.duration,
+            expiresInSeconds: 0,
+            clientName: "podcast",
+            musicVideoType: nil,
+            hasVideoContent: false,
+            muxedStreamUrl: nil,
+            loudnessDb: nil
+        )
+    }
+
     /// JioSaavn resolves to a decrypted (usually 320 kbps AAC) URL.
     private func resolveJioSaavn(videoId: String, song fallbackSong: SongItem? = nil) async throws -> PlaybackResult {
         guard let identifier = MusicCatalogID(storageKey: videoId),
@@ -1143,6 +1181,8 @@ actor PlaybackManager {
                 result = try await resolveJioSaavn(videoId: videoId)
             } else if MusicPlaybackIdentity.isAddon(videoId) {
                 result = try await resolveAddon(videoId: videoId)
+            } else if MusicPlaybackIdentity.isPodcast(videoId) {
+                result = try await resolvePodcast(videoId: videoId)
             } else {
                 result = try await resolveAudius(videoId: videoId)
             }

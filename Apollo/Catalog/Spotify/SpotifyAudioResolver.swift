@@ -11,11 +11,27 @@ final class SpotifyAudioResolver {
     private var tail: Task<Void, Never>?
 
     func resolve(_ song: SongItem) async -> SongItem? {
-        if let stub = CatalogTrack.spotifyStub(from: song) {
+        if song.contentKind != .episode,
+           let stub = CatalogTrack.spotifyStub(from: song) {
             Task { await CatalogEnrichmentWorker.shared.enqueue([stub]) }
         }
 
         if let cached = cache[song.videoId] { return cached }
+
+        // Podcasts come from Spotify as metadata only. Prefer the publisher's
+        // public RSS enclosure before falling back to a YouTube carrier.
+        if song.contentKind == .episode || song.videoId.hasPrefix("spotify:episode:") {
+            if let match = await PodcastAudioResolver.shared.resolve(for: song) {
+                var resolved = song
+                resolved.videoId = MusicCatalogID(
+                    source: .podcast,
+                    rawValue: match.audioURL.absoluteString
+                ).storageKey
+                resolved.sourceAttribution = "Podcast RSS · \(match.feedTitle)"
+                cache[song.videoId] = resolved
+                return resolved
+            }
+        }
 
         // Downloads and queue prefetch can ask for several tracks at once.
         // SearchService cancels its previous query, so resolutions are
@@ -104,6 +120,9 @@ final class SpotifyAudioResolver {
         resolved.catalogID = song.catalogID
         resolved.isrc = match.isrc ?? isrc
         resolved.stationReason = song.stationReason
+        if song.contentKind == .episode {
+            resolved.sourceAttribution = "Podcast audio · \(match.source)"
+        }
         return resolved
     }
 
