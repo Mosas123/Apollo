@@ -123,7 +123,7 @@ struct HomeScreenView: View {
                             onTap: { handleItemTap(hero.item) }
                         )
                         .padding(.horizontal, 16)
-                        .padding(.top, 18)
+                        .padding(.top, 14)
                         .scrollTransition(.interactive, axis: .vertical) { content, phase in
                             content
                                 .scaleEffect(phase.isIdentity ? 1 : 0.94, anchor: .top)
@@ -133,27 +133,27 @@ struct HomeScreenView: View {
 
                     HomeOrbitSelector(selection: $selectedCategory, accent: accent)
                         .padding(.horizontal, 16)
-                        .padding(.top, 18)
+                        .padding(.top, 14)
 
                     if isEmptyFeed {
                         emptyState
                             .padding(.top, 44)
                     } else {
                         if !continueItems.isEmpty {
-                            continueSection.padding(.top, 30)
+                            continueSection.padding(.top, 24)
                         }
 
                         if !quickModels.isEmpty {
-                            quickPicksSection.padding(.top, 30)
+                            quickPicksSection.padding(.top, 24)
                         }
 
                         ForEach(restSections) { section in
-                            shelfSection(section).padding(.top, 30)
+                            shelfSection(section).padding(.top, 24)
                         }
 
                         surpriseBanner
                             .padding(.horizontal, 20)
-                            .padding(.top, 34)
+                            .padding(.top, 28)
                     }
 
                     Color.clear.frame(height: 40)
@@ -215,7 +215,7 @@ struct HomeScreenView: View {
                     ShimmerFill(radius: 4).frame(width: 152, height: 13)
                 }
 
-                ShimmerFill(radius: 30).frame(height: 380)
+                ShimmerFill(radius: 30).frame(height: 300)
 
                 ShimmerFill(radius: 22).frame(height: 64)
 
@@ -244,33 +244,42 @@ struct HomeScreenView: View {
 
     private var compactBar: some View {
         let opacity = min(max((headerOffset - 36) / 70, 0), 1)
-        return HStack(spacing: 9) {
-            Text("A")
-                .font(.system(size: 11, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
-                .frame(width: 24, height: 24)
-                .background(accent, in: Circle())
+        return VStack(spacing: 0) {
+            HStack(spacing: 9) {
+                Text("A")
+                    .font(.system(size: 11, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(width: 24, height: 24)
+                    .background(accent, in: Circle())
 
-            Text("Apollo")
-                .font(.headline.weight(.bold))
+                Text("Apollo")
+                    .font(.headline.weight(.bold))
 
-            Spacer(minLength: 12)
+                Spacer(minLength: 12)
 
-            AccountButtonView(
-                isLoggedIn: accountState.isLoggedIn,
-                accountImageUrl: accountState.accountImageUrl,
-                size: 30,
-                initial: accountState.accountName.first.map(String.init),
-                onTap: { router.homePath.append(DetailRoute.settings) }
-            )
-            .accessibilityLabel("Account")
+                AccountButtonView(
+                    isLoggedIn: accountState.isLoggedIn,
+                    accountImageUrl: accountState.accountImageUrl,
+                    size: 30,
+                    initial: accountState.accountName.first.map(String.init),
+                    onTap: { router.homePath.append(DetailRoute.settings) }
+                )
+                .accessibilityLabel("Account")
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 0.5))
+            .padding(.horizontal, 16)
+            .padding(.top, 5)
+            .padding(.bottom, 5)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 0.5))
-        .padding(.horizontal, 16)
-        .padding(.top, 4)
+        .frame(maxWidth: .infinity)
+        .background {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea(edges: .top)
+        }
         .opacity(opacity)
         .allowsHitTesting(opacity > 0.2)
         .animation(.easeInOut(duration: 0.18), value: opacity)

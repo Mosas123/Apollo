@@ -105,18 +105,22 @@ struct HomeSkyBackground: View {
                 endPoint: .center
             )
 
+        }
+        .overlay {
             Circle()
                 .fill(accent.opacity(isDark ? 0.34 : 0.16))
                 .frame(width: 440, height: 440)
                 .blur(radius: 130)
                 .offset(x: drift ? 150 : -120, y: drift ? -230 : -140)
-
+        }
+        .overlay {
             Circle()
                 .fill(Color(red: 0.42, green: 0.18, blue: 0.92).opacity(isDark ? 0.22 : 0.10))
                 .frame(width: 520, height: 520)
                 .blur(radius: 150)
                 .offset(x: drift ? -190 : 160, y: drift ? 80 : 20)
         }
+        .clipped()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.easeInOut(duration: 16).repeatForever(autoreverses: true), value: drift)
         .onAppear { drift = true }
@@ -151,7 +155,7 @@ struct HomeGreetingHeader: View {
                 }
 
                 Text(greeting)
-                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
 
@@ -285,7 +289,7 @@ struct HomeHeroCard: View {
         ZStack(alignment: .bottomLeading) {
             HomeArtwork(item: item)
                 .frame(maxWidth: .infinity)
-                .frame(height: 400)
+                .frame(height: 320)
                 .clipped()
 
             LinearGradient(
@@ -326,7 +330,7 @@ struct HomeHeroCard: View {
                 Spacer(minLength: 0)
 
                 Text(item.title)
-                    .font(.system(size: 29, weight: .bold, design: .rounded))
+                    .font(.system(size: 26, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                     .lineLimit(2)
                     .minimumScaleFactor(0.8)
@@ -353,7 +357,7 @@ struct HomeHeroCard: View {
                     Image(systemName: actionSymbol)
                         .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(.black)
-                        .frame(width: 50, height: 50)
+                        .frame(width: 46, height: 46)
                         .background(.white, in: Circle())
 
                     Text(item.homeKindLabel)
@@ -364,9 +368,9 @@ struct HomeHeroCard: View {
                 }
                 .padding(.top, 4)
             }
-            .padding(20)
+            .padding(18)
         }
-        .frame(height: 400)
+        .frame(height: 320)
         .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 30, style: .continuous)
