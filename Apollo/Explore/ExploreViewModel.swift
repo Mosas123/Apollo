@@ -60,6 +60,9 @@ final class ExploreViewModel {
                     )
                 )
             }
+            let appleSections = await CombinedDiscoveryService.appleChartSections()
+            mapped.append(contentsOf: appleSections)
+
             sections = mapped
             phase = sections.isEmpty ? .empty : .loaded
             hasLoaded = phase == .loaded

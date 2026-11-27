@@ -72,8 +72,8 @@ depender de YouTube Music para metadatos y con YouTube únicamente como audio.
 - [ ] Reintentos y circuit breaker por proveedor.
 
 ### Fase 4 — Descubrimiento combinado
-- [ ] Home/Explore con secciones de Spotify y huecos rellenados por Apple.
-- [ ] Charts/recomendaciones multi-proveedor.
+- [x] Explore combina Spotify + charts públicos de Apple, resueltos a objetos Spotify.
+- [ ] Home con huecos rellenados por Apple.
 - [ ] Podcasts/audiolibros con providers propios además de Spotify.
 
 ### Fase 4.5 — Radio propia (ver RADIO_ENGINE.md)
