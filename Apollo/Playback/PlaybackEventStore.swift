@@ -45,6 +45,58 @@ actor PlaybackEventStore {
         }
     }
 
+    struct ArtistSignal: Sendable {
+        var completed = 0
+        var skipped = 0
+        var saved = 0
+        var lastPlayed: Date?
+    }
+
+    /// Aggregated artist outcomes for the local affinity model. Raw events stay
+    /// append-only; this is a read-only rollup with no network dependency.
+    func artistSignals(since: Date) async -> [String: ArtistSignal] {
+        await flush()
+        let rows = (try? await DatabaseService.shared.fetchAll(
+            ArtistSignalRow.self,
+            sql: """
+                SELECT artist, kind, COUNT(*) AS count, MAX(created_at) AS last_at
+                FROM playback_event
+                WHERE created_at >= ?
+                GROUP BY artist, kind
+                """,
+            arguments: [since]
+        )) ?? []
+
+        var result: [String: ArtistSignal] = [:]
+        for row in rows {
+            var signal = result[row.artist] ?? ArtistSignal()
+            switch PlaybackEventKind(rawValue: row.kind) {
+            case .complete: signal.completed += row.count
+            case .skip: signal.skipped += row.count
+            case .save: signal.saved += row.count
+            default: break
+            }
+            if let last = row.lastAt, signal.lastPlayed.map({ last > $0 }) ?? true {
+                signal.lastPlayed = last
+            }
+            result[row.artist] = signal
+        }
+        return result
+    }
+
+    private struct ArtistSignalRow: FetchableRecord, TableRecord, Decodable, Sendable {
+        static let databaseTableName = "playback_event"
+        let artist: String
+        let kind: String
+        let count: Int
+        let lastAt: Date?
+
+        enum CodingKeys: String, CodingKey {
+            case artist, kind, count
+            case lastAt = "last_at"
+        }
+    }
+
     func recent(limit: Int = 100) async -> [PlaybackEventEntity] {
         await flush()
         return (try? await DatabaseService.shared.fetchAll(

@@ -88,6 +88,19 @@ actor RadioTasteStore {
             recentArtists.formUnion(names)
         }
 
+        let eventSignals = await PlaybackEventStore.shared.artistSignals(since: recentCutoff)
+        for (artist, signal) in eventSignals {
+            let key = TextMatch.normalizeArtist(artist)
+            guard !key.isEmpty else { continue }
+            let delta = Double(signal.completed) * 0.8
+                + Double(signal.saved) * 1.5
+                - Double(signal.skipped) * 0.5
+            affinity[key, default: 0] += max(-2, min(4, delta))
+            if signal.lastPlayed.map({ $0 >= recentCutoff }) == true {
+                recentArtists.insert(key)
+            }
+        }
+
         let maxAffinity = affinity.values.max() ?? 0
         if maxAffinity > 0 {
             affinity = affinity.mapValues { $0 / maxAffinity }
