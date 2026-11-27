@@ -308,4 +308,30 @@ enum DatabaseMigrations {
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_catalog_identity_youtube ON catalog_identity(youtube_id)")
         }
     }
+
+    static let v11: @Sendable (Database) throws -> Void = logged("v11") { db in
+        // Append-only listening stream for radio affinity and bandit learning.
+        if try !db.tableExists("playback_event") {
+            try db.create(table: "playback_event") { t in
+                t.column("id", .text).primaryKey()
+                t.column("kind", .text).notNull()
+                t.column("selection_id", .text).notNull()
+                t.column("session_id", .text).notNull()
+                t.column("video_id", .text).notNull()
+                t.column("catalog_id", .text)
+                t.column("title", .text).notNull()
+                t.column("artist", .text).notNull()
+                t.column("album", .text)
+                t.column("source", .text)
+                t.column("candidate_source", .text)
+                t.column("position", .double).notNull().defaults(to: 0)
+                t.column("duration", .double).notNull().defaults(to: 0)
+                t.column("created_at", .datetime).notNull()
+            }
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_playback_event_created ON playback_event(created_at)")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_playback_event_session ON playback_event(session_id)")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_playback_event_selection ON playback_event(selection_id)")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_playback_event_kind ON playback_event(kind)")
+        }
+    }
 }

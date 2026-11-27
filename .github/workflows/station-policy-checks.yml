@@ -1,0 +1,26 @@
+name: Station Policy Checks
+
+on:
+  pull_request:
+    paths:
+      - "Apollo/Radio/StationDiversityPolicy.swift"
+      - "Apollo/Radio/StationService.swift"
+      - "Apollo/Catalog/MusicBrainz/MusicBrainzTagPolicy.swift"
+      - "Apollo/Catalog/MusicBrainz/MusicBrainzClient.swift"
+      - "Apollo/Playback/PlaybackEventPolicy.swift"
+      - "tests/Radio/StationPolicyChecks.swift"
+      - "tests/Radio/PlaybackEventPolicyChecks.swift"
+      - "scripts/test-station-policy.sh"
+      - "scripts/test-playback-events.sh"
+      - ".github/workflows/station-policy-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  station-policy:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run deterministic station/tag checks
+        run: bash scripts/test-station-policy.sh
+      - name: Compile and run playback event policy checks
+        run: bash scripts/test-playback-events.sh

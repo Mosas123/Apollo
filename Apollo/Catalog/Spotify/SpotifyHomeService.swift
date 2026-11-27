@@ -14,7 +14,20 @@ final class SpotifyHomeService {
 
     func sections() async throws -> [HomePage.Section] {
         let data = try await client.home(timeZone: TimeZone.current.identifier)
-        return try Self.parse(data)
+        let sections = try Self.parse(data)
+        var tracks: [CatalogTrack] = []
+        for section in sections {
+            for item in section.items {
+                if case .song(let song) = item,
+                   let track = CatalogTrack.spotifyStub(from: song) {
+                    tracks.append(track)
+                }
+            }
+        }
+        if !tracks.isEmpty {
+            Task { await CatalogEnrichmentWorker.shared.enqueue(Array(tracks.prefix(12))) }
+        }
+        return sections
     }
 
     private static func parse(_ data: Data) throws -> [HomePage.Section] {

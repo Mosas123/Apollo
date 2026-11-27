@@ -711,6 +711,7 @@ struct AlbumDetailView: View {
     private func metaStrings(for album: AlbumDetailInfo) -> [String] {
         var parts: [String] = []
         if let year = album.year { parts.append("\(year)") }
+        if let genre = album.genre, !genre.isEmpty { parts.append(genre) }
         if album.songCount > 0 { parts.append("\(album.songCount) song\(album.songCount != 1 ? "s" : "")") }
         if album.duration > 0 { parts.append(album.duration.formattedDuration) }
         return parts

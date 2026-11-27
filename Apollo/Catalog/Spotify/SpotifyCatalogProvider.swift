@@ -14,7 +14,12 @@ struct SpotifyCatalogProvider: CatalogSearching {
 
     func search(_ query: String, limit: Int = 20) async throws -> CatalogSearchResults {
         let data = try await client.search(query: query, limit: limit)
-        return try Self.parseSearch(data, limit: limit)
+        let results = try Self.parseSearch(data, limit: limit)
+        let tracks = Array(results.tracks.prefix(6))
+        if !tracks.isEmpty {
+            Task { await CatalogEnrichmentWorker.shared.enqueue(tracks) }
+        }
+        return results
     }
 
     // MARK: - Parsing

@@ -50,6 +50,9 @@ final class SpotifyDetailService {
             if detail.year == nil, let date = enrichment.releaseDate, let year = Int(date.prefix(4)) {
                 detail.year = year
             }
+            if let genre = enrichment.genre, !genre.isEmpty {
+                detail.genre = genre
+            }
         }
 
         return detail

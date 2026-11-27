@@ -203,7 +203,15 @@ actor StationService {
         // Genre continuity: MusicBrainz tags of the seed artist are searched in
         // Spotify so a salsa station keeps serving salsa, not just one artist.
         let seedArtistName = seedSong.artists.first?.name ?? snapshot.artist.name
-        let tags = await musicBrainz.artistTags(name: seedArtistName, limit: 6)
+        var tags = await musicBrainz.artistTags(name: seedArtistName, limit: 6)
+        if tags.isEmpty,
+           let catalogID = seedSong.catalogID,
+           SpotifyCatalogID.isSpotify(catalogID),
+           let rawID = SpotifyCatalogID.rawID(catalogID),
+           let localGenre = await CatalogIdentityStore.genre(forSpotifyTrackID: rawID),
+           !localGenre.isEmpty {
+            tags = [localGenre]
+        }
         for tag in tags.prefix(2) {
             let searchTerm = tag
             guard let results = try? await SpotifyCatalogProvider().search(searchTerm, limit: 12) else {
@@ -351,19 +359,20 @@ actor StationService {
 
         scored.sort { $0.1 > $1.1 }
 
-        let defaultArtistCap = options.style == .variety ? 1 : (options.style == .deepCuts ? 2 : 3)
-        let defaultAlbumCap = options.style == .variety ? 1 : 2
-        let maxPerArtist = options.maxPerArtist > 0 ? options.maxPerArtist : defaultArtistCap
-        let maxPerAlbum = options.maxPerAlbum > 0 ? options.maxPerAlbum : defaultAlbumCap
-
-        var artistCounts: [String: Int] = [:]
-        var albumCounts: [String: Int] = [:]
+        let caps = StationDiversityPolicy.caps(
+            style: options.style.rawValue,
+            maxPerArtist: options.maxPerArtist,
+            maxPerAlbum: options.maxPerAlbum
+        )
+        var diversity = StationDiversityPolicy(
+            maxPerArtist: caps.artist,
+            maxPerAlbum: caps.album
+        )
         var result: [SongItem] = []
 
         for (song, _, artistKey, albumKey, reason, features, source) in scored {
             guard result.count < options.limit else { break }
-            if !artistKey.isEmpty, (artistCounts[artistKey] ?? 0) >= maxPerArtist { continue }
-            if !albumKey.isEmpty, (albumCounts[albumKey] ?? 0) >= maxPerAlbum { continue }
+            guard diversity.select(artistKey: artistKey, albumKey: albumKey) else { continue }
 
             var stamped = song
             stamped.stationReason = reason
@@ -375,8 +384,6 @@ actor StationService {
                 source: source,
                 features: features
             )
-            if !artistKey.isEmpty { artistCounts[artistKey, default: 0] += 1 }
-            if !albumKey.isEmpty { albumCounts[albumKey, default: 0] += 1 }
         }
 
         return result

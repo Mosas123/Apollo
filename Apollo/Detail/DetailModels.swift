@@ -22,6 +22,7 @@ struct AlbumDetailInfo {
     var relatedAlbums: [AlbumItem] = []
     var videos: [SongItem] = []
     var featuredPlaylists: [PlaylistItem] = []
+    var genre: String? = nil
 }
 
 /// Parsed detail data for an artist page.

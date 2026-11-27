@@ -149,7 +149,7 @@ struct MusicBrainzClient: @unchecked Sendable {
         guard !trimmed.isEmpty else { return [] }
         let key = trimmed.lowercased()
         if let cached = await MusicBrainzTagCache.shared.tags(for: key) {
-            return cached
+            return Array(cached.prefix(limit))
         }
 
         guard let artistID = await artistID(for: trimmed) else {
@@ -177,24 +177,63 @@ struct MusicBrainzClient: @unchecked Sendable {
             return []
         }
 
-        var weighted: [(String, Int)] = []
-        for genre in decoded.genres ?? [] { weighted.append((genre.name, 10)) }
-        for tag in decoded.tags ?? [] { weighted.append((tag.name, tag.count ?? 0)) }
+        var candidates = MusicBrainzTagPolicy.candidates(
+            genres: (decoded.genres ?? []).map(\.name),
+            tags: (decoded.tags ?? []).map { (name: $0.name, count: $0.count) }
+        )
+        var result = MusicBrainzTagPolicy.select(candidates, limit: 20)
+            .filter { $0.lowercased() != trimmed.lowercased() }
 
-        let ignored = ["seen live", "favorite", "favourites", "spotify", "owned", "albums i own", "under 2000 listeners"]
-        var seen = Set<String>()
-        let tags = weighted
-            .filter { !ignored.contains($0.0.lowercased()) && $0.0.lowercased() != trimmed.lowercased() }
-            .sorted { $0.1 > $1.1 }
-            .compactMap { item -> String? in
-                let lower = item.0.lowercased()
-                guard seen.insert(lower).inserted else { return nil }
-                return item.0
-            }
+        // Many artists have no tags on the artist entity but do have them on
+        // their releases. One extra gated request keeps genre stations alive
+        // without falling back to Last.fm or a different API key.
+        if result.isEmpty {
+            candidates = await releaseGroupTagCandidates(artistID: artistID)
+            result = MusicBrainzTagPolicy.select(candidates, limit: 20)
+                .filter { $0.lowercased() != trimmed.lowercased() }
+        }
 
-        let result = Array(tags.prefix(max(1, limit)))
         await MusicBrainzTagCache.shared.store(result, for: key)
-        return result
+        return Array(result.prefix(limit))
+    }
+
+    private func releaseGroupTagCandidates(artistID: String) async -> [MusicBrainzTagCandidate] {
+        await MusicBrainzGate.shared.wait()
+        var components = URLComponents(string: "https://musicbrainz.org/ws/2/release-group")
+        components?.queryItems = [
+            URLQueryItem(name: "artist", value: artistID),
+            URLQueryItem(name: "inc", value: "tags+genres"),
+            URLQueryItem(name: "fmt", value: "json"),
+            URLQueryItem(name: "limit", value: "25")
+        ]
+        guard let url = components?.url else { return [] }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+
+        guard let (data, response) = try? await session.data(for: request),
+              let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode),
+              let decoded = try? JSONDecoder().decode(ReleaseGroupBrowseResponse.self, from: data) else {
+            return []
+        }
+
+        var weights: [String: (name: String, weight: Int)] = [:]
+        func add(_ name: String, _ weight: Int) {
+            let key = name.lowercased()
+            if let existing = weights[key] {
+                weights[key] = (existing.name, existing.weight + weight)
+            } else {
+                weights[key] = (name, weight)
+            }
+        }
+        for group in decoded.groups {
+            for genre in group.genres ?? [] { add(genre.name, 10) }
+            for tag in group.tags ?? [] { add(tag.name, tag.count ?? 0) }
+        }
+        return weights.values.map { MusicBrainzTagCandidate(name: $0.name, weight: $0.weight) }
     }
 
     private func artistID(for name: String) async -> String? {
@@ -260,6 +299,19 @@ struct MusicBrainzClient: @unchecked Sendable {
             )
         }
         return nil
+    }
+
+    private struct ReleaseGroupBrowseResponse: Decodable {
+        let groups: [ReleaseGroup]
+
+        enum CodingKeys: String, CodingKey {
+            case groups = "release-groups"
+        }
+
+        struct ReleaseGroup: Decodable {
+            let genres: [ArtistDetailResponse.Genre]?
+            let tags: [ArtistDetailResponse.Tag]?
+        }
     }
 
     private struct ArtistSearchResponse: Decodable {

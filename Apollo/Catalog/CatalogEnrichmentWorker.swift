@@ -1,8 +1,8 @@
 import Foundation
 
-/// Background enrichment with a small, serial queue. It only runs when a
-/// Spotify track is actually used (playback), so searches never fan out into
-/// dozens of Apple/MusicBrainz requests.
+/// Background enrichment with a small, serial queue. Search, home and playback
+/// enqueue only a bounded prefix, so catalogue use never fans out into dozens
+/// of Apple/MusicBrainz requests or blocks the UI.
 actor CatalogEnrichmentWorker {
     static let shared = CatalogEnrichmentWorker()
 
@@ -40,6 +40,7 @@ actor CatalogEnrichmentWorker {
             let enrichment = await CatalogEnricher().enrich(track)
             _ = await CatalogMerger.shared.merge(track, enrichment: enrichment)
             queued.remove(key)
+            NotificationCenter.default.post(name: .catalogEnrichmentUpdated, object: nil)
         }
         processing = false
         startIfNeeded()

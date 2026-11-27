@@ -130,4 +130,15 @@ enum CatalogIdentityStore {
         )
         return rows?.first?.isrc
     }
+
+    /// Enriched genre for a Spotify track, used by radio only when MusicBrainz
+    /// has no artist tags. Never triggers a new network request.
+    static func genre(forSpotifyTrackID id: String) async -> String? {
+        let rows = try? await DatabaseService.shared.fetchAll(
+            CatalogIdentityEntity.self,
+            sql: "SELECT * FROM catalog_identity WHERE spotify_id = ? AND genre IS NOT NULL LIMIT 1",
+            arguments: [id]
+        )
+        return rows?.first?.genre
+    }
 }

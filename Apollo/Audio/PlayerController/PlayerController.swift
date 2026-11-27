@@ -772,6 +772,12 @@ extension PlayerController {
             NowPlaying.shared.radioPlaybackStatus = paused
                 ? .paused : (apoloIsActive ? .connecting : .live)
         }
+        if !systemRecovery {
+            PlaybackEventRecorder.shared.recordPause(
+                paused,
+                position: NowPlaying.shared.currentTime
+            )
+        }
         updateNowPlayingProgress()
     }
 
@@ -2098,6 +2104,7 @@ extension PlayerController {
                 self.setNowPlayingMetadata(activateSession: false)
                 self.updateNowPlayingProgress()
                 NowPlaying.shared.refreshRadioMetadataForCurrentStation()
+                Task { await PlaybackEventStore.shared.flush() }
             }
             for delaySeconds in [0.6, 3] as [Double] {
                 Task { @MainActor [weak self] in

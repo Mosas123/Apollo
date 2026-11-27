@@ -63,6 +63,7 @@ class LikeStore: ObservableObject {
                 TasteProfileStore.shared.recordUnlike(artist: primaryArtist)
             }
             let key = song.catalogID ?? song.videoId
+            PlaybackEventRecorder.shared.recordSave(song, saved: target)
             Task {
                 await RadioLearningStore.shared.record(key: key, label: target ? 1 : 0)
             }

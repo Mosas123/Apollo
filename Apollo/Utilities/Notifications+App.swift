@@ -11,4 +11,5 @@ extension Notification.Name {
     // durationDidUpdate comes from ApolloTube's DurationCache.
     static let personalizationDataUpdated = Notification.Name("personalizationDataUpdated")
     static let nowPlayingDidChange = Notification.Name("nowPlayingDidChange")
+    static let catalogEnrichmentUpdated = Notification.Name("catalogEnrichmentUpdated")
 }

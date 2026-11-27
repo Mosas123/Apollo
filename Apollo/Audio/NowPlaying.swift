@@ -326,6 +326,7 @@ final class NowPlaying {
         queueIndex = min(max(startIndex, 0), max(songs.count - 1, 0))
         originalQueue = nil
         isShuffleOn = false
+        PlaybackEventRecorder.shared.startSession()
         persistQueueState()
         queueDidChange()
     }
@@ -427,6 +428,7 @@ final class NowPlaying {
         ) else { return }
         if !automatic {
             lastManualSkipTime = Date()
+            PlaybackEventRecorder.shared.skipCurrent(position: currentTime)
             let progress = duration > 0 ? currentTime / duration : 0
             if progress < 0.5 {
                 TasteProfileStore.shared.recordSkip(artist: artist)
@@ -677,6 +679,7 @@ final class NowPlaying {
             thumbnailUrl: song.thumbnailUrl
         )
         TasteProfileStore.shared.recordPlay(artist: song.artists.first?.name ?? song.artistNamesDisplay)
+        PlaybackEventRecorder.shared.begin(song)
     }
 
     /// Records video availability: the watchable-video verdict comes from
@@ -794,6 +797,7 @@ final class NowPlaying {
         }
         currentTime = duration
         TasteProfileStore.shared.recordCompletion(artist: artist)
+        PlaybackEventRecorder.shared.completeCurrent(duration: duration)
         if queueSongs.indices.contains(queueIndex) {
             let finished = queueSongs[queueIndex]
             let key = finished.catalogID ?? finished.videoId

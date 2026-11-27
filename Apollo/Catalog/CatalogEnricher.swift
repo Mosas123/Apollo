@@ -69,17 +69,22 @@ struct CatalogEnricher: Sendable {
         var enrichment = CatalogEnrichment()
         let artist = track.artists.first?.name ?? ""
 
-        if track.artworkURL == nil {
-            let term = [track.title, artist].filter { !$0.isEmpty }.joined(separator: " ")
-            let matches = (try? await apple.search(term: term, entity: .song, limit: 5)) ?? []
-            if let match = bestTrackMatch(track, in: matches) {
-                enrichment.artworkURL = match.artworkURL
-                enrichment.artworkSource = match.artworkURL == nil ? nil : .apple
-                enrichment.genre = match.genre
-                enrichment.genreSource = match.genre == nil ? nil : .apple
-                enrichment.releaseDate = match.releaseDate
-                enrichment.releaseDateSource = match.releaseDate == nil ? nil : .apple
-            }
+        let term = [track.title, artist].filter { !$0.isEmpty }.joined(separator: " ")
+        let matches = (try? await apple.search(term: term, entity: .song, limit: 5)) ?? []
+        if let match = bestTrackMatch(track, in: matches) {
+            enrichment.artworkURL = match.artworkURL
+            enrichment.artworkSource = match.artworkURL == nil ? nil : .apple
+            enrichment.genre = match.genre
+            enrichment.genreSource = match.genre == nil ? nil : .apple
+            enrichment.releaseDate = match.releaseDate
+            enrichment.releaseDateSource = match.releaseDate == nil ? nil : .apple
+        }
+
+        if enrichment.genre == nil, !artist.isEmpty {
+            // Apple sometimes omits the genre for a recording; retain the
+            // artist-level MusicBrainz tag as a cacheable fallback.
+            enrichment.genre = await musicBrainz.artistTags(name: artist, limit: 1).first
+            enrichment.genreSource = enrichment.genre == nil ? nil : .musicBrainz
         }
 
         if track.isrc == nil {
@@ -102,9 +107,6 @@ struct CatalogEnricher: Sendable {
     }
 
     func enrich(_ album: CatalogAlbum) async -> CatalogEnrichment {
-        let needsArtwork = ArtworkQuality.pixelWidth(of: album.artworkURL) < 1000
-        guard needsArtwork || album.releaseDate == nil else { return CatalogEnrichment() }
-
         let artist = album.artists.first?.name ?? ""
         let term = [album.title, artist].filter { !$0.isEmpty }.joined(separator: " ")
         let matches = (try? await apple.search(term: term, entity: .album, limit: 5)) ?? []
