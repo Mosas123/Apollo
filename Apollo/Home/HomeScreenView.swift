@@ -23,7 +23,6 @@ struct HomeScreenView: View {
     @State private var discoverArtists: [ArtistItem] = []
     @State private var podcastSuggestions: [YTItem] = []
     @State private var episodeCovers: [String: String] = [:]
-    @State private var fetchedShowIds: Set<String> = []
 
     private struct QuickTileModel: Identifiable {
         let item: YTItem
@@ -189,16 +188,12 @@ struct HomeScreenView: View {
             }
             .task(id: viewModel.homeSections.count) {
                 guard !viewModel.homeSections.isEmpty else { return }
+                // Give the first frames and the user's first scroll room.
+                try? await Task.sleep(for: .seconds(1))
                 // Podcast and audiobook feeds make the unified orbit complete.
                 await viewModel.loadCategoryFeed(.podcast)
                 await viewModel.loadCategoryFeed(.audiobook)
                 await preloadArtwork()
-            }
-            .task(id: podcastShows.count) {
-                // Let the first frame and the scroll settle before fetching
-                // show pages for episode covers.
-                try? await Task.sleep(for: .seconds(1))
-                await loadPodcastEpisodeCovers()
             }
             .onChange(of: settings.hideExplicit) { _, _ in
                 viewModel.syncSettings()
@@ -645,30 +640,6 @@ struct HomeScreenView: View {
         return map
     }
 
-    private func loadPodcastEpisodeCovers() async {
-        let shows = podcastShows.compactMap { item -> PodcastItem? in
-            if case .podcast(let show) = item { return show }
-            return nil
-        }
-        let pending = shows.filter { !fetchedShowIds.contains($0.browseId) }.prefix(8)
-        guard !pending.isEmpty else { return }
-
-        var covers = episodeCovers
-        var fetched = fetchedShowIds
-        for show in pending {
-            fetched.insert(show.browseId)
-            guard let json = try? await InnerTubeClient.apolloShared.browse(browseId: show.browseId).value else {
-                continue
-            }
-            let detail = PodcastDetailViewModel.parsePodcastDetail(from: json, browseId: show.browseId)
-            guard let cover = detail.thumbnailUrl else { continue }
-            for episode in detail.episodes {
-                covers[episode.videoId] = cover
-            }
-        }
-        fetchedShowIds = fetched
-        episodeCovers = covers
-    }
 
     private func mediaCategory(of item: YTItem) -> ContentCategory {
         switch item {
@@ -851,13 +822,6 @@ struct HomeScreenView: View {
             .flatMap(\.items)
             .compactMap(\.thumbnailUrl)
             .compactMap(URL.init)
-
-        for category in [ContentCategory.podcast, .audiobook] {
-            urls += (viewModel.categoryFeeds[category] ?? [])
-                .flatMap(\.items)
-                .compactMap(\.thumbnailUrl)
-                .compactMap(URL.init)
-        }
 
         await ImagePreloader.shared.preload(urls)
     }

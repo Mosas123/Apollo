@@ -257,6 +257,13 @@ struct SearchView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 suggestionRows
+                if viewModel.isFallbackMode {
+                    Text("Spotify is unavailable · showing fallback sources")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 8)
+                }
                 if !viewModel.availableFilters.isEmpty {
                     filterChips
                 }

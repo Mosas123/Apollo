@@ -66,6 +66,7 @@ final class SearchViewModel {
     private(set) var submittedQuery = ""
 
     private(set) var results: [SearchSection] = []
+    private(set) var isFallbackMode = false
     /// Source-specific results never enter YouTube's YTItem parser.
     private(set) var audiusTracks: [MusicCatalogTrack] = []
     private(set) var qobuzTracks: [MusicCatalogTrack] = []
@@ -363,6 +364,23 @@ final class SearchViewModel {
             localPlaylists = local.playlists
         }
         error = primaryFailure
+
+        // Only when Spotify cannot answer do we borrow the integrated audio
+        // catalogues as search fallbacks. They stay out of normal results.
+        if primaryFailure != nil {
+            isFallbackMode = true
+            async let audius = try? AudiusClient().searchTracks(query: query, limit: 25)
+            async let qobuz = QobuzCatalogService.shared.searchIfConfigured(query: query, limit: 25)
+            async let jiosaavn = try? JioSaavnClient().search(query: query, limit: 25)
+            let (remoteAudius, remoteQobuz, remoteJioSaavn) = await (audius, qobuz, jiosaavn)
+            guard !Task.isCancelled, query == submittedQuery else { return }
+            audiusTracks = remoteAudius ?? []
+            qobuzTracks = remoteQobuz
+            jiosaavnTracks = remoteJioSaavn ?? []
+        } else {
+            isFallbackMode = false
+        }
+
         updateResultPhase()
     }
 

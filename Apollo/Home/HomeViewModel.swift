@@ -250,14 +250,10 @@ final class HomeViewModel {
         let seeds: [(title: String, query: String)] = category == .podcast
             ? [
                 ("Podcasts for you", "podcasts"),
-                ("True crime", "true crime podcast"),
-                ("Comedy", "comedy podcast"),
-                ("News", "news podcast")
+                ("True crime", "true crime podcast")
             ]
             : [
-                ("Audiobooks", "audiobooks"),
-                ("Fiction", "fiction audiobook"),
-                ("Biographies", "biography audiobook")
+                ("Audiobooks", "audiobooks")
             ]
 
         var sections: [HomePage.Section] = []
