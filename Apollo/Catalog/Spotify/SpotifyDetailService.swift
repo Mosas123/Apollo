@@ -19,8 +19,11 @@ final class SpotifyDetailService {
         let data = try await client.album(id: id)
         var detail = try Self.parseAlbum(data, requestedID: id)
 
-        // Apple/iTunes only fills fields that Spotify did not provide.
-        if detail.thumbnailUrl == nil || detail.year == nil {
+        // Apple/iTunes fills missing fields and upgrades a low-resolution
+        // Spotify cover without changing artists or identifiers.
+        if detail.thumbnailUrl == nil
+            || detail.year == nil
+            || ArtworkQuality.pixelWidth(of: detail.thumbnailUrl.flatMap(URL.init(string:))) < 1000 {
             let artists = detail.artists.map {
                 CatalogArtist(
                     id: $0.id ?? $0.name,
@@ -38,8 +41,11 @@ final class SpotifyDetailService {
                 externalURL: URL(string: "https://open.spotify.com/album/\(id)")
             )
             let enrichment = await CatalogEnricher().enrich(album)
-            if detail.thumbnailUrl == nil, let artwork = enrichment.artworkURL {
-                detail.thumbnailUrl = artwork.absoluteString
+            if let artwork = enrichment.artworkURL {
+                let current = detail.thumbnailUrl.flatMap(URL.init(string:))
+                if let best = ArtworkQuality.better(current, than: artwork) {
+                    detail.thumbnailUrl = best.absoluteString
+                }
             }
             if detail.year == nil, let date = enrichment.releaseDate, let year = Int(date.prefix(4)) {
                 detail.year = year

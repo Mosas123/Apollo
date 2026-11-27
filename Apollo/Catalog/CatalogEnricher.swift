@@ -38,7 +38,7 @@ extension CatalogTrack {
             album: album,
             durationMS: durationMS,
             isrc: isrc ?? enrichment.isrc,
-            artworkURL: artworkURL ?? enrichment.artworkURL,
+            artworkURL: ArtworkQuality.better(artworkURL, than: enrichment.artworkURL),
             externalURL: externalURL,
             isExplicit: isExplicit
         )
@@ -53,7 +53,7 @@ extension CatalogAlbum {
             title: title,
             artists: artists,
             releaseDate: releaseDate ?? enrichment.releaseDate,
-            artworkURL: artworkURL ?? enrichment.artworkURL,
+            artworkURL: ArtworkQuality.better(artworkURL, than: enrichment.artworkURL),
             externalURL: externalURL
         )
     }
@@ -102,7 +102,8 @@ struct CatalogEnricher: Sendable {
     }
 
     func enrich(_ album: CatalogAlbum) async -> CatalogEnrichment {
-        guard album.artworkURL == nil || album.releaseDate == nil else { return CatalogEnrichment() }
+        let needsArtwork = ArtworkQuality.pixelWidth(of: album.artworkURL) < 1000
+        guard needsArtwork || album.releaseDate == nil else { return CatalogEnrichment() }
 
         let artist = album.artists.first?.name ?? ""
         let term = [album.title, artist].filter { !$0.isEmpty }.joined(separator: " ")
@@ -110,8 +111,8 @@ struct CatalogEnricher: Sendable {
         guard let match = bestAlbumMatch(album, in: matches) else { return CatalogEnrichment() }
 
         return CatalogEnrichment(
-            artworkURL: album.artworkURL == nil ? match.artworkURL : nil,
-            artworkSource: album.artworkURL == nil ? .apple : nil,
+            artworkURL: match.artworkURL,
+            artworkSource: match.artworkURL == nil ? nil : .apple,
             genre: match.genre,
             genreSource: match.genre == nil ? nil : .apple,
             releaseDate: album.releaseDate == nil ? match.releaseDate : nil,

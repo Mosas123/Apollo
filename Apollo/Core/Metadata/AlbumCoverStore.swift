@@ -77,8 +77,8 @@ actor AlbumCoverStore {
         }
         guard let artwork = candidates.first?.artworkUrl100 else { return nil }
         let sized = artwork
-            .replacingOccurrences(of: "100x100bb", with: "600x600bb")
-            .replacingOccurrences(of: "100x100", with: "600x600")
+            .replacingOccurrences(of: "100x100bb", with: "1200x1200bb")
+            .replacingOccurrences(of: "100x100", with: "1200x1200")
         return URL(string: sized)
     }
 

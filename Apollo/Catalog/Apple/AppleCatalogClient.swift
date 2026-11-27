@@ -127,8 +127,8 @@ struct AppleCatalogClient: @unchecked Sendable {
     private static func upscaledArtwork(_ value: String?) -> URL? {
         guard let value, !value.isEmpty else { return nil }
         let scaled = value
-            .replacingOccurrences(of: "100x100bb", with: "600x600bb")
-            .replacingOccurrences(of: "100x100", with: "600x600")
+            .replacingOccurrences(of: "100x100bb", with: "1200x1200bb")
+            .replacingOccurrences(of: "100x100", with: "1200x1200")
         return URL(string: scaled)
     }
 

@@ -526,7 +526,7 @@ struct AlbumDetailView: View {
     private func albumCard(_ album: AlbumItem) -> some View {
         NavigationLink(value: DetailRoute.album(browseId: album.browseId)) {
             VStack(alignment: .leading, spacing: 6) {
-                AsyncImageView(url: album.thumbnailUrl)
+                AsyncImageView(url: ArtworkURLs.highRes(album.thumbnailUrl))
                     .frame(width: 150, height: 150)
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 Text(album.title)
