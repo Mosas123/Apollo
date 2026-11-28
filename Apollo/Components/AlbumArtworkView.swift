@@ -29,19 +29,11 @@ struct SongArtworkView: View {
                 // Known release art is stable across the row and full player.
                 AsyncImageView(url: sourceCover)
             } else if resolvedKey == taskKey, let resolvedURL {
-                // Do not allow a still image already cached by NowPlaying to
-                // shadow the newly verified release artwork in this row.
                 AsyncImageView(url: resolvedURL)
-            } else if let image = NowPlaying.shared.artwork(for: song.videoId) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .clipped()
             } else {
-                // An unverified ytimg/video still is the LAST fallback.
-                AsyncImageView(url: NowPlaying.shared.metadataSnapshot(for: song.videoId)?.artworkURL
-                               ?? song.thumbnailUrl)
+                // Never borrow the player's global image: pressing a track must
+                // not rewrite another row's artwork. This row resolves its own.
+                AsyncImageView(url: song.thumbnailUrl)
             }
         }
             .task(id: taskKey) {
@@ -76,7 +68,15 @@ struct SongArtworkView: View {
                     }
                     return candidate
                 }
-                var coverURL = verified?.artworkURL
+                var coverURL: URL?
+                if let verified {
+                    let albumMatches = MusicArtworkSelectionPolicy.matchesRequestedRelease(
+                        requested: identity.album, candidate: verified.album
+                    )
+                    if identity.album?.isEmpty != false || albumMatches {
+                        coverURL = verified.artworkURL
+                    }
+                }
                 if coverURL == nil, let album = identity.album, !album.isEmpty {
                     coverURL = await MetadataResolver.albumArtwork(
                         title: album, artist: identity.artist

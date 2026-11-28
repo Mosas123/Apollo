@@ -187,8 +187,9 @@ enum MusicArtworkSelectionPolicy {
     ) -> Bool {
         guard let requested, !requested.isEmpty else { return true }
         guard let candidate, !candidate.isEmpty else { return false }
-        // A similarly titled single/compilation must not replace an album.
-        return TextMatch.normalize(requested) == TextMatch.normalize(candidate)
+        // Accept deluxe/edition variants but never a differently named
+        // single/compilation.
+        return TextMatch.albumsMatch(requested, candidate)
     }
 
     static func acceptableVideoImageSize(width: Int, height: Int) -> Bool {

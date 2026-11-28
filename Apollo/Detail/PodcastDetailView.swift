@@ -555,7 +555,6 @@ struct PodcastDetailView: View {
         VStack(spacing: 10) {
             HeroArtworkView(
                 url: podcast.thumbnailUrl,
-                subject: .podcast(show: podcast.title),
                 onImageLoaded: { artworkSeed = $0.extractDetailBackdropColor() }
             )
 

@@ -1126,12 +1126,14 @@ final class NowPlaying {
         if let resolved,
            TextMatch.recordingsMatch(resolved.title, title),
            TextMatch.artistsMatch(resolved.artist, artist) {
-            // Art belongs to the recording. Only rewrite text when the album
-            // is also the requested edition.
-            coverURL = resolved.artworkURL
-            if MusicArtworkSelectionPolicy.matchesRequestedRelease(
+            let albumMatches = MusicArtworkSelectionPolicy.matchesRequestedRelease(
                 requested: album, candidate: resolved.album
-            ) {
+            )
+            // Never replace a known album cover with a same-named single.
+            if album?.isEmpty != false || albumMatches {
+                coverURL = resolved.artworkURL
+            }
+            if albumMatches {
                 acceptResolvedMetadata(resolved, videoId: videoId, replaceExisting: true)
             }
         }

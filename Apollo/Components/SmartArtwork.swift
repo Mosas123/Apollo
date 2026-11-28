@@ -45,13 +45,9 @@ extension YTItem {
                 title: album.title,
                 artist: album.artists.map(\.name).joined(separator: ", ")
             )
-        case .artist(let artist):
-            return .artist(name: artist.name, spotifyID: artist.browseId)
-        case .podcast(let podcast):
-            return .podcast(show: podcast.title)
-        case .episode(let episode):
-            return .podcast(show: episode.artists.first?.name ?? episode.title)
-        case .playlist:
+        case .artist, .podcast, .episode, .playlist:
+            // Identity cannot be verified from a name alone. Keep the
+            // catalogue's own image instead of risking a namesake/wrong show.
             return nil
         }
     }

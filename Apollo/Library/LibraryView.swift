@@ -339,8 +339,7 @@ struct LibraryView: View {
                     itemCell(
                         url: podcast.thumbnailUrl,
                         title: podcast.name,
-                        subtitle: nil,
-                        subject: .podcast(show: podcast.name)
+                        subtitle: nil
                     )
                 }
                 .buttonStyle(.plain)

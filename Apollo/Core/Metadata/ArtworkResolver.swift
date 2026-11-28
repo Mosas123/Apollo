@@ -55,7 +55,10 @@ enum ArtworkResolver {
         case .track(let title, let artist, let album, let duration):
             url = await trackURL(title: title, artist: artist, album: album, duration: duration)
         case .album(let title, let artist):
-            url = await MetadataResolver.albumArtwork(title: title, artist: artist)
+            let artist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+            url = artist.isEmpty
+                ? nil
+                : await MetadataResolver.albumArtwork(title: title, artist: artist)
         case .artist(let name, let spotifyID):
             url = await artistURL(name: name, spotifyID: spotifyID)
         case .podcast(let show):
@@ -85,6 +88,10 @@ enum ArtworkResolver {
         var url = resolved.flatMap { candidate -> URL? in
             guard TextMatch.recordingsMatch(candidate.title, query.title),
                   TextMatch.artistsMatch(candidate.artist, query.artist) else { return nil }
+            let albumMatches = MusicArtworkSelectionPolicy.matchesRequestedRelease(
+                requested: album, candidate: candidate.album
+            )
+            guard album?.isEmpty != false || albumMatches else { return nil }
             return candidate.artworkURL
         }
         if url == nil, let album, !album.isEmpty {

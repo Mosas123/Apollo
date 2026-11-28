@@ -71,8 +71,7 @@ struct LibraryListScreen: View {
                             image: artist.thumbnailUrl,
                             title: artist.name,
                             subtitle: nil,
-                            circle: true,
-                            subject: .artist(name: artist.name, spotifyID: artist.id)
+                            circle: true
                         )
                     }
                 }
@@ -95,8 +94,7 @@ struct LibraryListScreen: View {
                         artworkRow(
                             image: podcast.thumbnailUrl,
                             title: podcast.name,
-                            subtitle: nil,
-                            subject: .podcast(show: podcast.name)
+                            subtitle: nil
                         )
                     }
                 }

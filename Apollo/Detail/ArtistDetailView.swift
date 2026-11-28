@@ -64,20 +64,12 @@ final class ArtistDetailViewModel {
             let referenceTracks = parsed.songs.filter { song in
                 song.artists.contains { $0.id == browseId }
             }.map(\.title)
-            let highRes = await ArtworkResolver.upgrade(
-                .artist(name: parsed.name, spotifyID: browseId)
+            let resolved = await ArtistImageResolver.preferredImageURL(
+                name: parsed.name,
+                youTubeURL: ytURL,
+                artistID: browseId,
+                referenceTracks: referenceTracks
             )
-            let resolved: URL?
-            if let highRes {
-                resolved = highRes
-            } else {
-                resolved = await ArtistImageResolver.preferredImageURL(
-                    name: parsed.name,
-                    youTubeURL: ytURL,
-                    artistID: browseId,
-                    referenceTracks: referenceTracks
-                )
-            }
             guard !Task.isCancelled else { return }
             if let resolved {
                 artist?.heroImageURL = resolved.absoluteString

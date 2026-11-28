@@ -305,17 +305,9 @@ struct HomeArtwork: View {
 
     var body: some View {
         GeometryReader { geometry in
-            if case .episode = item, let resolvedURL {
-                SmartArtwork(url: resolvedURL, subject: item.artworkSubject)
-            } else if let videoId = item.videoId, let image = NowPlaying.shared.artwork(for: videoId) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .clipped()
-            } else {
-                SmartArtwork(url: resolvedURL, subject: item.artworkSubject)
-            }
+            // Each card owns its artwork. Never substitute the player's
+            // global image, or tapping a song rewrites unrelated cards.
+            SmartArtwork(url: resolvedURL, subject: item.artworkSubject)
         }
     }
 }
