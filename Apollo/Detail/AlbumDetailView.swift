@@ -241,9 +241,12 @@ extension AlbumDetailViewModel {
 
         // --- Songs ---
         // Album track rows carry no per-row thumbnail; fall back to the album art (same as Metrolist).
+        let albumArtists = artists
+        let albumTitle = title
+        let albumID = browseId
+        let albumYear = year
         func parseSongsFromShelf(_ shelfDict: [String: Any], fallbackThumbnail: String?) -> [SongItem] {
             var result: [SongItem] = []
-            let albumArtists = artists
             let items: [[String: Any]]? =
                 (shelfDict["musicPlaylistShelfRenderer"] as? [String: Any])?["contents"] as? [[String: Any]]
                 ?? (shelfDict["musicShelfRenderer"] as? [String: Any])?["contents"] as? [[String: Any]]
@@ -257,9 +260,9 @@ extension AlbumDetailViewModel {
                     if song.artists.isEmpty || artistDisplayString(from: song.artists).isEmpty {
                         song.artists = albumArtists
                     }
-                    if song.album == nil { song.album = title }
-                    if song.albumId == nil { song.albumId = browseId }
-                    if song.year == nil { song.year = year }
+                    if song.album == nil { song.album = albumTitle }
+                    if song.albumId == nil { song.albumId = albumID }
+                    if song.year == nil { song.year = albumYear }
                     result.append(song)
                 }
             }
