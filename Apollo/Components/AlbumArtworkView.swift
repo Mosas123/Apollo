@@ -53,44 +53,17 @@ struct SongArtworkView: View {
                 }
                 guard needsVerifiedCover,
                       song.contentKind == nil || song.contentKind == .music else { return }
-                let identity = TrackIdentity.make(from: song)
-                let metadata = await MetadataResolver.enrich(
-                    title: identity.title,
-                    artist: identity.artist,
-                    album: identity.album,
-                    duration: identity.durationSeconds
+                // Same subject and cache as the player, so the row and the
+                // playing view eventually show the exact same image.
+                let subject = ArtworkSubject.track(
+                    title: song.title,
+                    artist: song.artists.map(\.name).joined(separator: ", "),
+                    album: song.album,
+                    duration: song.duration
                 )
+                let cover = await ArtworkResolver.upgrade(subject)
                 guard !Task.isCancelled else { return }
-                let verified = metadata.flatMap { candidate -> ResolvedMetadata? in
-                    guard TextMatch.recordingsMatch(candidate.title, identity.title),
-                          TextMatch.artistsMatch(candidate.artist, identity.artist) else {
-                        return nil
-                    }
-                    return candidate
-                }
-                var coverURL: URL?
-                if let verified {
-                    let albumMatches = MusicArtworkSelectionPolicy.matchesRequestedRelease(
-                        requested: identity.album, candidate: verified.album
-                    )
-                    if identity.album?.isEmpty != false || albumMatches {
-                        coverURL = verified.artworkURL
-                    }
-                }
-                if coverURL == nil, let album = identity.album, !album.isEmpty {
-                    coverURL = await MetadataResolver.albumArtwork(
-                        title: album, artist: identity.artist
-                    )
-                }
-                guard !Task.isCancelled else { return }
-                resolvedURL = ArtworkURLs.highRes(coverURL?.absoluteString)
-                if let verified,
-                   MusicArtworkSelectionPolicy.matchesRequestedRelease(
-                       requested: identity.album, candidate: verified.album
-                   ) {
-                    NowPlaying.shared.acceptResolvedMetadata(verified, videoId: song.videoId)
-                    onMetadataResolved?(verified)
-                }
+                resolvedURL = cover?.absoluteString
             }
     }
 }

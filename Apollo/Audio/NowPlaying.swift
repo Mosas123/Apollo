@@ -1111,49 +1111,19 @@ final class NowPlaying {
         }
     }
 
-    /// Resolves the canonical cover (Apple → Deezer → CAA) with a hard timeout
-    /// and publishes it if it clearly matches. Returns whether it published.
+    /// Uses the exact same shared artwork subject/cache as the rows. The
+    /// playing view can therefore never settle on a different cover.
     private func resolveCanonicalArtwork(videoId: String, minimumArtworkSide: CGFloat = 0) async -> Bool {
         let song = queueSongs.first { $0.videoId == videoId }
-        let fallbackQuery = TextMatch.recordingQuery(title: title, artist: artist)
-        let identity = song.map(TrackIdentity.make(from:)) ?? TrackIdentity(
-            videoId: videoId,
-            title: fallbackQuery.title,
-            artist: fallbackQuery.artist,
-            album: nil,
-            durationSeconds: nil
+        let query = TextMatch.recordingQuery(title: title, artist: artist)
+        let subject = ArtworkSubject.track(
+            title: song?.title ?? query.title,
+            artist: song?.artists.map(\.name).joined(separator: ", ") ?? query.artist,
+            album: song?.album,
+            duration: song?.duration
         )
-        let title = identity.title
-        let artist = identity.artist
-        let album = identity.album
-        let duration = identity.durationSeconds
-        guard !title.isEmpty else { return false }
-        let resolved = await Self.resolveMetadataWithTimeout(
-            title: title, artist: artist, album: album, duration: duration, seconds: 15
-        )
-        guard !Task.isCancelled, lastLoadedVideoId == videoId else { return false }
-        var coverURL: URL?
-        if let resolved,
-           TextMatch.recordingsMatch(resolved.title, title),
-           TextMatch.artistsMatch(resolved.artist, artist) {
-            // Cover art belongs to the recording even when the album name
-            // differs (single vs deluxe, regional edition, compilation).
-            // Only the text metadata is gated by an album match.
-            coverURL = resolved.artworkURL
-            if MusicArtworkSelectionPolicy.matchesRequestedRelease(
-                requested: album, candidate: resolved.album
-            ) {
-                acceptResolvedMetadata(resolved, videoId: videoId, replaceExisting: true)
-            }
-        }
-        // Do not accept a same-named single/compilation for an album track.
-        // A known release can still supply art without rewriting song text.
-        if coverURL == nil, let album, !album.isEmpty {
-            coverURL = await MetadataResolver.albumArtwork(title: album, artist: artist)
-        }
+        guard let artworkURL = await ArtworkResolver.upgrade(subject) else { return false }
         guard !Task.isCancelled, lastLoadedVideoId == videoId,
-              let artworkString = ArtworkURLs.highRes(coverURL?.absoluteString),
-              let artworkURL = URL(string: artworkString),
               let image = try? await ArtworkLoader.image(for: artworkURL) else { return false }
         guard !Task.isCancelled, lastLoadedVideoId == videoId,
               Self.artworkSide(image) >= max(480, minimumArtworkSide + 1) else {
