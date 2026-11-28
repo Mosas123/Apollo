@@ -40,7 +40,11 @@ enum LocalAudioFilePolicy {
             of: #"\[([A-Za-z0-9_:-]{6,})\]$"#,
             options: .regularExpression
         ) else { return nil }
-        return String(stem[range].dropFirst().dropLast())
+        let token = String(stem[range].dropFirst().dropLast())
+        if token.hasPrefix("b64_") {
+            return decodeToken(String(token.dropFirst(4)))
+        }
+        return token
     }
 
     static func storedFilename(
@@ -48,6 +52,36 @@ enum LocalAudioFilePolicy {
         videoId: String,
         fileExtension: String
     ) -> String {
-        "\(title) [\(videoId)].\(fileExtension.lowercased())"
+        let safeTitle = safeComponent(title.isEmpty ? "audio" : title)
+        let token = encodedToken(videoId)
+        return "\(safeTitle) [\(token)].\(fileExtension.lowercased())"
+    }
+
+    private static func encodedToken(_ value: String) -> String {
+        let data = Data(value.utf8).base64EncodedString()
+        let token = data
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        return "b64_\(token)"
+    }
+
+    private static func decodeToken(_ token: String) -> String? {
+        var value = token
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        while value.count % 4 != 0 { value.append("=") }
+        guard let data = Data(base64Encoded: value),
+              let decoded = String(data: data, encoding: .utf8) else { return nil }
+        return decoded
+    }
+
+    private static func safeComponent(_ value: String) -> String {
+        let invalid = CharacterSet(charactersIn: "/\\:?%*|\"<>")
+        let cleaned = value
+            .components(separatedBy: invalid)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(cleaned.prefix(120)).isEmpty ? "audio" : String(cleaned.prefix(120))
     }
 }

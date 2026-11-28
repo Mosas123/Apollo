@@ -47,7 +47,7 @@ fallback.
 
 ## Installation
 
-Requires iOS 26 or later. No account is required for the catalogue.
+Requires iOS 26.2 or later. No account is required for the catalogue.
 
 ### Feather / AltStore / SideStore
 

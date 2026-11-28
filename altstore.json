@@ -31,7 +31,7 @@
           "localizedDescription": "Apollo 0.14.0 (862)\n\n• Nuevo nombre, bundle e icono Apollo\n• Dolby Atmos Automatic / Always On / Off\n• Calidad por red: Cellular, 5G & Wi-Fi y Downloads (High Quality / Lossless / Hi-Res)\n• Hi-Res y Atmos solo cuando se activan\n• Menos resolves duplicados en TorBox",
           "downloadURL": "https://github.com/Mosas123/Apollo/releases/download/v0.14.0-apollo/Apollo.ipa",
           "size": 32160084,
-          "minOSVersion": "26.0"
+          "minOSVersion": "26.2"
         }
       ]
     }

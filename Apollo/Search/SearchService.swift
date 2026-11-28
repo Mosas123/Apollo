@@ -14,19 +14,13 @@ final class SearchService {
     static let shared = SearchService()
     private let innerTube = InnerTubeClient.apolloShared
     private let db = DatabaseService.shared
-    private var searchTask: Task<TubeJSON, Error>?
-    private var searchGeneration = 0
-
     func search(query: String, params: String? = nil, client: YouTubeClient = .webRemix) async throws -> [String: Any] {
-        searchTask?.cancel()
-        searchGeneration += 1
-        let generation = searchGeneration
+        // Each caller owns its request. A global "latest search" slot caused
+        // podcasts, radio and For You to cancel each other silently.
         let task = Task { () -> TubeJSON in
             try await innerTube.search(query: query, params: params, client: client)
         }
-        searchTask = task
         let result = try await task.value
-        guard generation == searchGeneration else { throw CancellationError() }
         return result.value
     }
 

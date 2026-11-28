@@ -143,8 +143,12 @@ final class DownloadManager: ObservableObject {
     ) async -> URL {
         ensureDirectories()
         let rawStem = title.isEmpty ? videoId : (artist.isEmpty ? title : "\(artist) - \(title)")
-        let stem = Self.sanitizeFileName(rawStem)
-        return downloadsDir.appendingPathComponent("\(stem) [\(videoId)].\(fileExtension)")
+        let fileName = LocalAudioFilePolicy.storedFilename(
+            title: rawStem,
+            videoId: videoId,
+            fileExtension: fileExtension
+        )
+        return downloadsDir.appendingPathComponent(fileName)
     }
 
     /// Imports an audio file from Files into this app's sandbox. Copying it
