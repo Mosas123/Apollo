@@ -15,10 +15,11 @@ struct MediaGridCell: View {
     var title: String
     var subtitle: String?
     var size: CGFloat?
+    var artworkSubject: ArtworkSubject? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: DesignTokens.cardInnerSpacing) {
-            AsyncImageView(url: thumbnailUrl)
+            SmartArtwork(url: thumbnailUrl, subject: artworkSubject)
                 .aspectRatio(1, contentMode: .fill)
                 .frame(width: size, height: size)
                 .clipShape(RoundedRectangle(cornerRadius: DesignTokens.cardRadius))
@@ -47,10 +48,11 @@ struct MediaGridCell: View {
 struct HeroArtworkView: View {
     var url: String?
     var size: CGFloat = DesignTokens.heroArtwork
+    var subject: ArtworkSubject? = nil
     var onImageLoaded: ((UIImage) -> Void)? = nil
 
     var body: some View {
-        AsyncImageView(url: url, onImageLoaded: onImageLoaded)
+        SmartArtwork(url: url, subject: subject, onImageLoaded: onImageLoaded)
             .frame(width: size, height: size)
             .clipShape(RoundedRectangle(cornerRadius: DesignTokens.tileRadius))
             .shadow(color: .black.opacity(0.2), radius: 12, y: 4)

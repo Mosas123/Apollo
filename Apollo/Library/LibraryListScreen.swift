@@ -67,7 +67,13 @@ struct LibraryListScreen: View {
             case .artists:
                 ForEach(artists, id: \.id) { artist in
                     NavigationLink(value: DetailRoute.artist(browseId: artist.id)) {
-                        artworkRow(image: artist.thumbnailUrl, title: artist.name, subtitle: nil, circle: true)
+                        artworkRow(
+                            image: artist.thumbnailUrl,
+                            title: artist.name,
+                            subtitle: nil,
+                            circle: true,
+                            subject: .artist(name: artist.name, spotifyID: artist.id)
+                        )
                     }
                 }
 
@@ -77,7 +83,8 @@ struct LibraryListScreen: View {
                         artworkRow(
                             image: album.thumbnailUrl,
                             title: album.title,
-                            subtitle: album.songCount > 0 ? AppStrings.songs(album.songCount) : nil
+                            subtitle: album.songCount > 0 ? AppStrings.songs(album.songCount) : nil,
+                            subject: .album(title: album.title, artist: "")
                         )
                     }
                 }
@@ -85,7 +92,12 @@ struct LibraryListScreen: View {
             case .podcasts:
                 ForEach(podcasts, id: \.id) { podcast in
                     NavigationLink(value: DetailRoute.podcast(browseId: podcast.id)) {
-                        artworkRow(image: podcast.thumbnailUrl, title: podcast.name, subtitle: nil)
+                        artworkRow(
+                            image: podcast.thumbnailUrl,
+                            title: podcast.name,
+                            subtitle: nil,
+                            subject: .podcast(show: podcast.name)
+                        )
                     }
                 }
             }
@@ -147,15 +159,21 @@ struct LibraryListScreen: View {
         }
     }
 
-    private func artworkRow(image: String?, title: String, subtitle: String?, circle: Bool = false) -> some View {
+    private func artworkRow(
+        image: String?,
+        title: String,
+        subtitle: String?,
+        circle: Bool = false,
+        subject: ArtworkSubject? = nil
+    ) -> some View {
         HStack(spacing: 12) {
             Group {
                 if circle {
-                    AsyncImageView(url: image)
+                    SmartArtwork(url: image, subject: subject)
                         .frame(width: 48, height: 48)
                         .clipShape(Circle())
                 } else {
-                    AsyncImageView(url: image)
+                    SmartArtwork(url: image, subject: subject)
                         .frame(width: 48, height: 48)
                         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }

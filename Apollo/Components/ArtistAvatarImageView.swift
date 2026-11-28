@@ -18,6 +18,13 @@ struct ArtistAvatarImageView: View {
                 resolvedURL = nil
                 resolvedIdentity = identityKey
                 guard !name.isEmpty else { return }
+                if let highRes = await ArtworkResolver.upgrade(
+                    .artist(name: name, spotifyID: artistID)
+                ) {
+                    guard !Task.isCancelled else { return }
+                    resolvedURL = highRes.absoluteString
+                    return
+                }
                 let youTubeURL = fallbackURL.flatMap { URL(string: $0) }
                 guard let resolved = await ArtistImageResolver.avatarImageURL(
                     name: name,

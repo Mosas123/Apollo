@@ -39,7 +39,7 @@ struct YouTubeGridItemView: View {
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 4) {
-                AsyncImageView(url: item.thumbnailUrl)
+                SmartArtwork(url: item.thumbnailUrl, subject: item.artworkSubject)
                     .aspectRatio(1, contentMode: .fill)
                     .frame(width: artworkSize, height: artworkSize)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -100,7 +100,7 @@ struct YouTubeListItemView: View {
             )
         } else {
             HStack(spacing: 12) {
-                AsyncImageView(url: item.thumbnailUrl)
+                SmartArtwork(url: item.thumbnailUrl, subject: item.artworkSubject)
                     .frame(width: 48, height: 48)
                     .clipShape(RoundedRectangle(cornerRadius: 4))
 

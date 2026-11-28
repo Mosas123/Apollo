@@ -243,6 +243,7 @@ extension AlbumDetailViewModel {
         // Album track rows carry no per-row thumbnail; fall back to the album art (same as Metrolist).
         func parseSongsFromShelf(_ shelfDict: [String: Any], fallbackThumbnail: String?) -> [SongItem] {
             var result: [SongItem] = []
+            let albumArtists = artists
             let items: [[String: Any]]? =
                 (shelfDict["musicPlaylistShelfRenderer"] as? [String: Any])?["contents"] as? [[String: Any]]
                 ?? (shelfDict["musicShelfRenderer"] as? [String: Any])?["contents"] as? [[String: Any]]
@@ -250,6 +251,15 @@ extension AlbumDetailViewModel {
                 if let renderer = itemDict["musicResponsiveListItemRenderer"] as? [String: Any],
                    var song = SongItem.from(renderer) {
                     if song.thumbnailUrl == nil { song.thumbnailUrl = fallbackThumbnail }
+                    // Album track rows often only show the track title. The
+                    // header owns the artist credit, so carry it into every
+                    // track instead of letting the player show a blank artist.
+                    if song.artists.isEmpty || artistDisplayString(from: song.artists).isEmpty {
+                        song.artists = albumArtists
+                    }
+                    if song.album == nil { song.album = title }
+                    if song.albumId == nil { song.albumId = browseId }
+                    if song.year == nil { song.year = year }
                     result.append(song)
                 }
             }
@@ -309,6 +319,15 @@ extension AlbumDetailViewModel {
                 songs += parseSongsFromShelf(section, fallbackThumbnail: thumbnailUrl)
                 classifyCarousel(section)
                 captureDescription(section)
+            }
+        }
+
+        // Some album headers omit the artist credit. Derive it from the first
+        // track that has one and propagate to the rest.
+        if artists.isEmpty, let fallback = songs.first(where: { !$0.artists.isEmpty })?.artists {
+            artists = fallback
+            for index in songs.indices where songs[index].artists.isEmpty {
+                songs[index].artists = fallback
             }
         }
 
@@ -526,7 +545,13 @@ struct AlbumDetailView: View {
     private func albumCard(_ album: AlbumItem) -> some View {
         NavigationLink(value: DetailRoute.album(browseId: album.browseId)) {
             VStack(alignment: .leading, spacing: 6) {
-                AsyncImageView(url: ArtworkURLs.highRes(album.thumbnailUrl))
+                SmartArtwork(
+                    url: ArtworkURLs.highRes(album.thumbnailUrl),
+                    subject: .album(
+                        title: album.title,
+                        artist: album.artists.map(\.name).joined(separator: ", ")
+                    )
+                )
                     .frame(width: 150, height: 150)
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 Text(album.title)
@@ -570,7 +595,15 @@ struct AlbumDetailView: View {
             PlaybackQueue.play([video], log: Log.albumDetail, context: "Music video")
         } label: {
             VStack(alignment: .leading, spacing: 6) {
-                AsyncImageView(url: video.thumbnailUrl)
+                SmartArtwork(
+                    url: video.thumbnailUrl,
+                    subject: .track(
+                        title: video.title,
+                        artist: video.artists.map(\.name).joined(separator: ", "),
+                        album: video.album,
+                        duration: video.duration
+                    )
+                )
                     .frame(width: 220, height: 124)
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 Text(video.title)
@@ -593,6 +626,10 @@ struct AlbumDetailView: View {
             // Album artwork
             HeroArtworkView(
                 url: album.thumbnailUrl,
+                subject: .album(
+                    title: album.title,
+                    artist: album.artists.map(\.name).joined(separator: ", ")
+                ),
                 onImageLoaded: { image in
                     withAnimation(.easeInOut(duration: 0.4)) {
                         backdropColors = [image.extractAlbumBackdropColor()]

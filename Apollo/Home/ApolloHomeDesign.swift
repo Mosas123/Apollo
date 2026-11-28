@@ -306,7 +306,7 @@ struct HomeArtwork: View {
     var body: some View {
         GeometryReader { geometry in
             if case .episode = item, let resolvedURL {
-                AsyncImageView(url: resolvedURL)
+                SmartArtwork(url: resolvedURL, subject: item.artworkSubject)
             } else if let videoId = item.videoId, let image = NowPlaying.shared.artwork(for: videoId) {
                 Image(uiImage: image)
                     .resizable()
@@ -314,7 +314,7 @@ struct HomeArtwork: View {
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .clipped()
             } else {
-                AsyncImageView(url: resolvedURL)
+                SmartArtwork(url: resolvedURL, subject: item.artworkSubject)
             }
         }
     }
@@ -362,7 +362,7 @@ struct HomeHeroCard: View {
                 .resizable()
                 .scaledToFill()
         } else if let url = display.artworkURL {
-            AsyncImageView(url: url)
+            SmartArtwork(url: url, subject: display.item?.artworkSubject)
         } else if let item = display.item {
             HomeArtwork(item: item)
         } else {

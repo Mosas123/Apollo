@@ -19,6 +19,18 @@ final class SpotifyDetailService {
         let data = try await client.album(id: id)
         var detail = try Self.parseAlbum(data, requestedID: id)
 
+        // Album rows can omit per-track credits. Never let the player show an
+        // empty artist: use the album artist for every track that lacks one.
+        if detail.artists.isEmpty,
+           let fallback = detail.songs.first(where: { !$0.artists.isEmpty })?.artists {
+            detail.artists = fallback
+        }
+        if !detail.artists.isEmpty {
+            for index in detail.songs.indices where detail.songs[index].artists.isEmpty {
+                detail.songs[index].artists = detail.artists
+            }
+        }
+
         // Apple/iTunes fills missing fields and upgrades a low-resolution
         // Spotify cover without changing artists or identifiers.
         if detail.thumbnailUrl == nil
@@ -487,8 +499,13 @@ final class SpotifyDetailService {
     }
 
     private static func artists(from node: Any?) -> [YTArtist] {
-        guard let dict = node as? [String: Any],
-              let entries = dict["items"] as? [[String: Any]] else { return [] }
+        let entries: [[String: Any]]
+        if let dict = node as? [String: Any] {
+            entries = dict["items"] as? [[String: Any]] ?? []
+        } else {
+            entries = node as? [[String: Any]] ?? []
+        }
+        guard !entries.isEmpty else { return [] }
         return entries.compactMap { entry in
             let profile = entry["profile"] as? [String: Any]
             guard let name = (profile?["name"] as? String) ?? (entry["name"] as? String),

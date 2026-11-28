@@ -553,7 +553,11 @@ struct PodcastDetailView: View {
         // stacked underneath, then a Subscribe pill + playlist-style ⋮
         // overflow button. No big play button — playback starts per-episode.
         VStack(spacing: 10) {
-            HeroArtworkView(url: podcast.thumbnailUrl, onImageLoaded: { artworkSeed = $0.extractDetailBackdropColor() })
+            HeroArtworkView(
+                url: podcast.thumbnailUrl,
+                subject: .podcast(show: podcast.title),
+                onImageLoaded: { artworkSeed = $0.extractDetailBackdropColor() }
+            )
 
             Text(podcast.title)
                 .font(.title2)

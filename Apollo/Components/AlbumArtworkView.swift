@@ -14,11 +14,12 @@ struct SongArtworkView: View {
     }
 
     private var needsVerifiedCover: Bool {
-        MusicArtworkSelectionPolicy.shouldResolveVerifiedCover(
-            thumbnailURL: song.thumbnailUrl,
-            isVideo: song.isVideo,
-            musicVideoType: song.musicVideoType
-        )
+        MusicPlaybackIdentity.isExternal(song.videoId)
+            || MusicArtworkSelectionPolicy.shouldResolveVerifiedCover(
+                thumbnailURL: song.thumbnailUrl,
+                isVideo: song.isVideo,
+                musicVideoType: song.musicVideoType
+            )
     }
 
     var body: some View {
@@ -59,8 +60,7 @@ struct SongArtworkView: View {
                     return
                 }
                 guard needsVerifiedCover,
-                      song.contentKind == nil || song.contentKind == .music,
-                      !MusicPlaybackIdentity.isExternal(song.videoId) else { return }
+                      song.contentKind == nil || song.contentKind == .music else { return }
                 let identity = TrackIdentity.make(from: song)
                 let metadata = await MetadataResolver.enrich(
                     title: identity.title,
@@ -71,11 +71,9 @@ struct SongArtworkView: View {
                 guard !Task.isCancelled else { return }
                 let verified = metadata.flatMap { candidate -> ResolvedMetadata? in
                     guard TextMatch.recordingsMatch(candidate.title, identity.title),
-                          TextMatch.normalizeArtist(candidate.artist)
-                              == TextMatch.normalizeArtist(identity.artist),
-                          MusicArtworkSelectionPolicy.matchesRequestedRelease(
-                              requested: identity.album, candidate: candidate.album
-                          ) else { return nil }
+                          TextMatch.artistsMatch(candidate.artist, identity.artist) else {
+                        return nil
+                    }
                     return candidate
                 }
                 var coverURL = verified?.artworkURL
@@ -85,8 +83,11 @@ struct SongArtworkView: View {
                     )
                 }
                 guard !Task.isCancelled else { return }
-                resolvedURL = coverURL?.absoluteString
-                if let verified {
+                resolvedURL = ArtworkURLs.highRes(coverURL?.absoluteString)
+                if let verified,
+                   MusicArtworkSelectionPolicy.matchesRequestedRelease(
+                       requested: identity.album, candidate: verified.album
+                   ) {
                     NowPlaying.shared.acceptResolvedMetadata(verified, videoId: song.videoId)
                     onMetadataResolved?(verified)
                 }

@@ -1021,9 +1021,9 @@ final class NowPlaying {
 
         let kind = selectedSong?.contentKind
         let isPodcast = kind == .episode || kind == .podcast
-        let isMusic = !isPodcast
-            && playbackKind != .radio
-            && !MusicPlaybackIdentity.isExternal(videoId)
+        // External music providers (Qobuz/add-ons/Audius) still use the same
+        // catalogue artwork pipeline. Only radio and podcasts are special.
+        let isMusic = !isPodcast && playbackKind != .radio
         artworkLoadTask?.cancel()
         artworkLoadTask = Task {
             // For downloaded songs, try embedded artwork first.
@@ -1038,11 +1038,12 @@ final class NowPlaying {
                 // A YouTube still (or a video-classified row) is not proof
                 // of an album cover, even if the AUDIO stream is FLAC.
                 if let thumb, !thumb.isEmpty {
-                    let needsVerifiedCover = MusicArtworkSelectionPolicy.shouldResolveVerifiedCover(
-                        thumbnailURL: thumb,
-                        isVideo: selectedSong?.isVideo,
-                        musicVideoType: selectedSong?.musicVideoType
-                    )
+                    let needsVerifiedCover = MusicPlaybackIdentity.isExternal(videoId)
+                        || MusicArtworkSelectionPolicy.shouldResolveVerifiedCover(
+                            thumbnailURL: thumb,
+                            isVideo: selectedSong?.isVideo,
+                            musicVideoType: selectedSong?.musicVideoType
+                        )
                     if needsVerifiedCover {
                         let resolved = await resolveCanonicalArtwork(videoId: videoId)
                         guard !Task.isCancelled, lastLoadedVideoId == videoId else { return }
@@ -1103,7 +1104,6 @@ final class NowPlaying {
     /// Resolves the canonical cover (Apple → Deezer → CAA) with a hard timeout
     /// and publishes it if it clearly matches. Returns whether it published.
     private func resolveCanonicalArtwork(videoId: String, minimumArtworkSide: CGFloat = 0) async -> Bool {
-        guard !MusicPlaybackIdentity.isExternal(videoId) else { return false }
         let song = queueSongs.first { $0.videoId == videoId }
         let fallbackQuery = TextMatch.recordingQuery(title: title, artist: artist)
         let identity = song.map(TrackIdentity.make(from:)) ?? TrackIdentity(
@@ -1125,12 +1125,15 @@ final class NowPlaying {
         var coverURL: URL?
         if let resolved,
            TextMatch.recordingsMatch(resolved.title, title),
-           TextMatch.artistsMatch(resolved.artist, artist),
-           MusicArtworkSelectionPolicy.matchesRequestedRelease(
-               requested: album, candidate: resolved.album
-           ) {
+           TextMatch.artistsMatch(resolved.artist, artist) {
+            // Art belongs to the recording. Only rewrite text when the album
+            // is also the requested edition.
             coverURL = resolved.artworkURL
-            acceptResolvedMetadata(resolved, videoId: videoId, replaceExisting: true)
+            if MusicArtworkSelectionPolicy.matchesRequestedRelease(
+                requested: album, candidate: resolved.album
+            ) {
+                acceptResolvedMetadata(resolved, videoId: videoId, replaceExisting: true)
+            }
         }
         // Do not accept a same-named single/compilation for an album track.
         // A known release can still supply art without rewriting song text.

@@ -43,23 +43,24 @@ enum MetadataResolver {
     /// iTunes' musicArtist endpoint has no portraits. This lookup is only for
     /// actual album artwork and requires the album and performer to match.
     static func albumArtwork(title: String, artist: String) async -> URL? {
-        guard !title.isEmpty, !artist.isEmpty else { return nil }
-        let key = "album-v2|" + cacheKey(title: title, artist: artist)
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let artist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return nil }
+        let key = "album-v3|" + cacheKey(title: title, artist: artist)
         if let cached = await MetadataCache.shared.lookup(key) { return cached.value?.artworkURL }
         var components = URLComponents(string: "https://itunes.apple.com/search")
         components?.queryItems = [
-            URLQueryItem(name: "term", value: "\(artist) \(title)"),
+            URLQueryItem(name: "term", value: artist.isEmpty ? title : "\(artist) \(title)"),
             URLQueryItem(name: "entity", value: "album"),
             URLQueryItem(name: "limit", value: "10")
         ]
         guard let url = components?.url,
               let response: ITunesResponse = try? await decode(url, headers: [:]) else { return nil }
         let match = response.results.first {
-            MusicArtworkSelectionPolicy.matchesRequestedRelease(
-                requested: title, candidate: $0.collectionName
-            )
-                && TextMatch.normalizeArtist($0.artistName ?? "")
-                    == TextMatch.normalizeArtist(artist)
+            guard let found = $0.collectionName,
+                  TextMatch.albumsMatch(title, found) else { return false }
+            guard !artist.isEmpty else { return true }
+            return TextMatch.artistsMatch($0.artistName ?? "", artist)
         }
         let artwork = ArtworkURLs.highRes(match?.artworkUrl100).flatMap(URL.init(string:))
         let value = artwork.map {
@@ -247,17 +248,16 @@ enum MetadataResolver {
     private static func deezerAlbumArtwork(title: String, artist: String) async -> URL? {
         var components = URLComponents(string: "https://api.deezer.com/search/album")
         components?.queryItems = [
-            URLQueryItem(name: "q", value: "\(artist) \(title)"),
+            URLQueryItem(name: "q", value: artist.isEmpty ? title : "\(artist) \(title)"),
             URLQueryItem(name: "limit", value: "10")
         ]
         guard let url = components?.url,
               let response: DeezerAlbumResponse = try? await decode(url, headers: [:]),
               let match = response.data.first(where: { album in
-                  guard let albumTitle = album.title else { return false }
-                  return MusicArtworkSelectionPolicy.matchesRequestedRelease(
-                      requested: title,
-                      candidate: albumTitle
-                  ) && TextMatch.artistsMatch(album.artist?.name ?? "", artist)
+                  guard let albumTitle = album.title,
+                        TextMatch.albumsMatch(title, albumTitle) else { return false }
+                  guard !artist.isEmpty else { return true }
+                  return TextMatch.artistsMatch(album.artist?.name ?? "", artist)
               }) else {
             return nil
         }

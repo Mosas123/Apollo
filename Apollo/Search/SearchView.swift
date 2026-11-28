@@ -336,7 +336,15 @@ struct SearchView: View {
             )
         } label: {
             HStack(spacing: 12) {
-                AsyncImageView(url: track.artworkURL?.absoluteString)
+                SmartArtwork(
+                    url: track.artworkURL?.absoluteString,
+                    subject: .track(
+                        title: track.title,
+                        artist: track.artist,
+                        album: nil,
+                        duration: track.durationSeconds
+                    )
+                )
                     .frame(width: 52, height: 52)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                 VStack(alignment: .leading, spacing: 4) {
@@ -483,7 +491,11 @@ struct SearchView: View {
                                 thumbnailUrl: album.thumbnailUrl,
                                 title: album.title,
                                 subtitle: album.artists.map(\.name).joined(separator: ", "),
-                                size: 140
+                                size: 140,
+                                artworkSubject: .album(
+                                    title: album.title,
+                                    artist: album.artists.map(\.name).joined(separator: ", ")
+                                )
                             )
                         }
                         .buttonStyle(.plain)

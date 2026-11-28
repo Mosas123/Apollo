@@ -228,7 +228,10 @@ struct LibraryView: View {
                         ForEach(Array(recent), id: \.id) { album in
                             NavigationLink(value: DetailRoute.album(browseId: album.id)) {
                                 VStack(alignment: .leading, spacing: 6) {
-                                    AsyncImageView(url: album.thumbnailUrl)
+                                    SmartArtwork(
+                                        url: album.thumbnailUrl,
+                                        subject: .album(title: album.title, artist: "")
+                                    )
                                         .frame(maxWidth: .infinity)
                                         .aspectRatio(1, contentMode: .fit)
                                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -318,7 +321,8 @@ struct LibraryView: View {
                     itemCell(
                         url: album.thumbnailUrl,
                         title: album.title,
-                        subtitle: album.songCount > 0 ? AppStrings.songs(album.songCount) : nil
+                        subtitle: album.songCount > 0 ? AppStrings.songs(album.songCount) : nil,
+                        subject: .album(title: album.title, artist: "")
                     )
                 }
                 .buttonStyle(.plain)
@@ -335,7 +339,8 @@ struct LibraryView: View {
                     itemCell(
                         url: podcast.thumbnailUrl,
                         title: podcast.name,
-                        subtitle: nil
+                        subtitle: nil,
+                        subject: .podcast(show: podcast.name)
                     )
                 }
                 .buttonStyle(.plain)
@@ -413,9 +418,14 @@ struct LibraryView: View {
         )
     }
 
-    private func itemCell(url: String?, title: String, subtitle: String?) -> some View {
+    private func itemCell(
+        url: String?,
+        title: String,
+        subtitle: String? = nil,
+        subject: ArtworkSubject? = nil
+    ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            AsyncImageView(url: url)
+            SmartArtwork(url: url, subject: subject)
                 .frame(maxWidth: .infinity)
                 .aspectRatio(1, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 12))

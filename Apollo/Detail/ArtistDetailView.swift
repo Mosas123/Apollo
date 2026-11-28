@@ -60,17 +60,24 @@ final class ArtistDetailViewModel {
             isLoading = false
             // Preserve the requested profile's photo. A fallback must match
             // its recordings as well as the artist's display name.
-            let ytURL = ArtworkURLs.sized(parsed.thumbnailUrl, width: 1200, height: 1200)
-                .flatMap { URL(string: $0) }
+            let ytURL = parsed.thumbnailUrl.flatMap(URL.init(string:))
             let referenceTracks = parsed.songs.filter { song in
                 song.artists.contains { $0.id == browseId }
             }.map(\.title)
-            let resolved = await ArtistImageResolver.preferredImageURL(
-                name: parsed.name,
-                youTubeURL: ytURL,
-                artistID: browseId,
-                referenceTracks: referenceTracks
+            let highRes = await ArtworkResolver.upgrade(
+                .artist(name: parsed.name, spotifyID: browseId)
             )
+            let resolved: URL?
+            if let highRes {
+                resolved = highRes
+            } else {
+                resolved = await ArtistImageResolver.preferredImageURL(
+                    name: parsed.name,
+                    youTubeURL: ytURL,
+                    artistID: browseId,
+                    referenceTracks: referenceTracks
+                )
+            }
             guard !Task.isCancelled else { return }
             if let resolved {
                 artist?.heroImageURL = resolved.absoluteString
@@ -824,7 +831,13 @@ struct ArtistDetailView: View {
         ZStack(alignment: .trailing) {
             NavigationLink(value: DetailRoute.album(browseId: album.browseId)) {
                 HStack(spacing: 12) {
-                    AsyncImageView(url: album.thumbnailUrl)
+                    SmartArtwork(
+                        url: album.thumbnailUrl,
+                        subject: .album(
+                            title: album.title,
+                            artist: album.artists.map(\.name).joined(separator: ", ")
+                        )
+                    )
                         .frame(width: 96, height: 96)
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
@@ -928,7 +941,11 @@ struct ArtistDetailView: View {
                         thumbnailUrl: album.thumbnailUrl,
                         title: album.title,
                         subtitle: album.artists.map(\.name).joined(separator: ", "),
-                        size: 156
+                        size: 156,
+                        artworkSubject: .album(
+                            title: album.title,
+                            artist: album.artists.map(\.name).joined(separator: ", ")
+                        )
                     )
                 }
                 .buttonStyle(.plain)
@@ -946,7 +963,11 @@ struct ArtistDetailView: View {
                         thumbnailUrl: single.thumbnailUrl,
                         title: single.title,
                         subtitle: single.artists.map(\.name).joined(separator: ", "),
-                        size: 156
+                        size: 156,
+                        artworkSubject: .album(
+                            title: single.title,
+                            artist: single.artists.map(\.name).joined(separator: ", ")
+                        )
                     )
                 }
                 .buttonStyle(.plain)
@@ -961,7 +982,15 @@ struct ArtistDetailView: View {
             ForEach(videos, id: \.videoId) { video in
                 Button(action: { playVideo(video) }, label: {
                     VStack(alignment: .leading, spacing: 6) {
-                        AsyncImageView(url: video.thumbnailUrl)
+                        SmartArtwork(
+                            url: video.thumbnailUrl,
+                            subject: .track(
+                                title: video.title,
+                                artist: video.artists.map(\.name).joined(separator: ", "),
+                                album: video.album,
+                                duration: video.duration
+                            )
+                        )
                             .frame(width: 200, height: 112)
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         Text(video.title)
@@ -1005,7 +1034,11 @@ struct ArtistDetailView: View {
             ForEach(artists, id: \.browseId) { related in
                 NavigationLink(value: DetailRoute.artist(browseId: related.browseId)) {
                     VStack(spacing: 8) {
-                        AsyncImageView(url: related.thumbnailUrl)
+                        ArtistAvatarImageView(
+                            name: related.name,
+                            fallbackURL: related.thumbnailUrl,
+                            artistID: related.browseId
+                        )
                             .frame(width: 120, height: 120)
                             .clipShape(Circle())
                         Text(related.name)
