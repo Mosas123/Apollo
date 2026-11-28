@@ -1,12 +1,12 @@
 # Apollo
 
-A free and open source YouTube Music client for iOS.
+A free and open source music and podcast player for iOS.
 
 ## Features
 
 - No ads
 - SponsorBlock: skips sponsor reads, intros, outros and non-music sections (silence, talking)
-- Stream songs and videos from YouTube Music
+- Spotify-powered catalogue for songs, albums, artists and playlists
 - Synced lyrics (Musixmatch, Netease, Kugou, LRCLIB, Genius)
 - Library sync (playlists, albums, artists, podcasts)
 - Live radio (opt-in beta): native HLS/HTTP and ICY, reconnect handling and broadcaster metadata
@@ -41,7 +41,7 @@ fallback.
 
 ## Installation
 
-Requires iOS 26 or later and a YouTube Music account (sign in through the in-app web view).
+Requires iOS 26 or later. No account is required for the catalogue.
 
 ### Feather / AltStore / SideStore
 

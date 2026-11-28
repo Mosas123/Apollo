@@ -46,6 +46,18 @@ struct SongArtworkView: View {
             .task(id: taskKey) {
                 resolvedURL = nil
                 resolvedKey = taskKey
+                if song.contentKind == .episode || song.contentKind == .podcast {
+                    // Every episode should show the official show cover even
+                    // when the Spotify episode row has no artwork of its own.
+                    let existing = song.thumbnailUrl?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    guard existing.isEmpty else { return }
+                    let show = song.artists.first?.name ?? song.title
+                    guard !show.isEmpty else { return }
+                    let artwork = await PodcastAudioResolver.shared.artwork(for: show)
+                    guard !Task.isCancelled else { return }
+                    resolvedURL = artwork?.absoluteString
+                    return
+                }
                 guard needsVerifiedCover,
                       song.contentKind == nil || song.contentKind == .music,
                       !MusicPlaybackIdentity.isExternal(song.videoId) else { return }

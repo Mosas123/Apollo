@@ -58,10 +58,7 @@ final class SpotifyAudioResolver {
                 return nil
             }
             group.addTask {
-                let resolved = await Task { @MainActor in
-                    await PodcastYouTubeResolver.shared.resolve(for: song)
-                }.value
-                if let resolved {
+                if let resolved = await PodcastYouTubeResolver.shared.resolve(for: song) {
                     return .youtube(resolved)
                 }
                 return nil

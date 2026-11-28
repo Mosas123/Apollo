@@ -4,8 +4,7 @@ import Foundation
 /// Podcast episodes are rarely indexed by YouTube Music. This resolver uses
 /// normal YouTube web search and matches the show/channel, episode title and
 /// duration before handing the video id to the audio pipeline.
-@MainActor
-final class PodcastYouTubeResolver {
+actor PodcastYouTubeResolver {
     static let shared = PodcastYouTubeResolver()
 
     private struct Candidate {
@@ -48,6 +47,7 @@ final class PodcastYouTubeResolver {
 
         var candidates: [Candidate] = []
         for query in queries {
+            guard !Task.isCancelled else { break }
             guard let json = try? await SearchService.shared.search(query: query, client: .web),
                   !Task.isCancelled else { continue }
             for video in Self.videoRenderers(in: json) {

@@ -68,18 +68,34 @@ actor MusicBrainzCache {
 /// MusicBrainz allows one request per second; all lookups share one gate.
 actor MusicBrainzGate {
     static let shared = MusicBrainzGate()
-    private var lastRequest: Date?
+    private var lastRequest = Date.distantPast
+    private var isBusy = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
 
+    /// Serializes callers with a continuation queue. Sleeping inside the actor
+    /// alone is not enough: reentrancy lets concurrent waits wake together.
     func wait() async {
-        let interval: TimeInterval = 1.1
-        if let lastRequest {
-            let elapsed = Date().timeIntervalSince(lastRequest)
-            if elapsed < interval {
-                let nanoseconds = UInt64((interval - elapsed) * 1_000_000_000)
-                try? await Task.sleep(nanoseconds: nanoseconds)
+        if isBusy {
+            await withCheckedContinuation { continuation in
+                waiters.append(continuation)
             }
+        } else {
+            isBusy = true
+        }
+
+        let interval: TimeInterval = 1.1
+        let elapsed = Date().timeIntervalSince(lastRequest)
+        if elapsed < interval {
+            let nanoseconds = UInt64((interval - elapsed) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanoseconds)
         }
         lastRequest = Date()
+
+        if waiters.isEmpty {
+            isBusy = false
+        } else {
+            waiters.removeFirst().resume()
+        }
     }
 }
 

@@ -22,15 +22,20 @@ actor PodcastRSSFeedLoader {
     private struct Entry {
         let content: PodcastFeedContent?
         let at: Date
+        let negative: Bool
     }
 
     private var cache: [String: Entry] = [:]
     private let ttl: TimeInterval = 60 * 60
+    private let negativeTTL: TimeInterval = 5 * 60
 
     func content(for feedURL: URL) async -> PodcastFeedContent? {
         let key = feedURL.absoluteString
-        if let entry = cache[key], Date().timeIntervalSince(entry.at) < ttl {
-            return entry.content
+        if let entry = cache[key] {
+            let effective = entry.negative ? negativeTTL : ttl
+            if Date().timeIntervalSince(entry.at) < effective {
+                return entry.content
+            }
         }
 
         var request = URLRequest(url: feedURL)
@@ -44,7 +49,7 @@ actor PodcastRSSFeedLoader {
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               let http = response as? HTTPURLResponse,
               (200..<300).contains(http.statusCode) else {
-            cache[key] = Entry(content: nil, at: Date())
+            cache[key] = Entry(content: nil, at: Date(), negative: true)
             return nil
         }
 
@@ -52,7 +57,7 @@ actor PodcastRSSFeedLoader {
         let xml = XMLParser(data: data)
         xml.delegate = parser
         guard xml.parse(), !parser.episodes.isEmpty else {
-            cache[key] = Entry(content: nil, at: Date())
+            cache[key] = Entry(content: nil, at: Date(), negative: true)
             return nil
         }
 
@@ -62,7 +67,7 @@ actor PodcastRSSFeedLoader {
             artworkURL: parser.channelArtworkURL,
             episodes: parser.episodes
         )
-        cache[key] = Entry(content: content, at: Date())
+        cache[key] = Entry(content: content, at: Date(), negative: false)
         return content
     }
 }

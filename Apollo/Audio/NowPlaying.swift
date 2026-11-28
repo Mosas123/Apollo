@@ -1065,6 +1065,34 @@ final class NowPlaying {
                 if !resolved {
                     loadThumbnailFromCDN(videoId: videoId, thumbnailUrl: nil)
                 }
+            } else if isPodcast {
+                // Podcast art is the show cover, never a music release or a
+                // video still. Prefer the RSS/Spotify cover and only fall back
+                // to a YouTube frame when the show has no artwork at all.
+                let show = selectedSong?.artists.first?.name ?? selectedSong?.title
+                if let thumb, !thumb.isEmpty {
+                    loadThumbnailFromCDN(
+                        videoId: videoId,
+                        thumbnailUrl: thumb,
+                        preferSourceArtwork: true
+                    )
+                } else if let show, !show.isEmpty {
+                    Task {
+                        let artwork = await PodcastAudioResolver.shared.artwork(for: show)
+                        guard !Task.isCancelled, lastLoadedVideoId == videoId else { return }
+                        if let artwork {
+                            loadThumbnailFromCDN(
+                                videoId: videoId,
+                                thumbnailUrl: artwork.absoluteString,
+                                preferSourceArtwork: true
+                            )
+                        } else {
+                            loadThumbnailFromCDN(videoId: videoId, thumbnailUrl: nil)
+                        }
+                    }
+                } else {
+                    loadThumbnailFromCDN(videoId: videoId, thumbnailUrl: nil)
+                }
             } else {
                 enrichArtwork(videoId: videoId, replaceArtwork: true)
                 loadThumbnailFromCDN(videoId: videoId, thumbnailUrl: thumb)
