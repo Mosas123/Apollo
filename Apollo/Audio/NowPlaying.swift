@@ -1045,9 +1045,19 @@ final class NowPlaying {
                             musicVideoType: selectedSong?.musicVideoType
                         )
                     if needsVerifiedCover {
-                        let resolved = await resolveCanonicalArtwork(videoId: videoId)
-                        guard !Task.isCancelled, lastLoadedVideoId == videoId else { return }
-                        if resolved { return }
+                        // Paint the source immediately, then upgrade in the
+                        // background. A slow Apple/Deezer lookup must never
+                        // strand the player on a 640 px cover.
+                        loadThumbnailFromCDN(
+                            videoId: videoId,
+                            thumbnailUrl: thumb,
+                            preferSourceArtwork: !MusicArtworkSelectionPolicy.isVideoThumbnail(thumb)
+                        )
+                        Task {
+                            guard lastLoadedVideoId == videoId else { return }
+                            _ = await resolveCanonicalArtwork(videoId: videoId)
+                        }
+                        return
                     }
                     // Keep verified release art when available. For video
                     // previews, attempt maxres/sd variants before hqdefault;
@@ -1119,21 +1129,20 @@ final class NowPlaying {
         let duration = identity.durationSeconds
         guard !title.isEmpty else { return false }
         let resolved = await Self.resolveMetadataWithTimeout(
-            title: title, artist: artist, album: album, duration: duration, seconds: 4
+            title: title, artist: artist, album: album, duration: duration, seconds: 15
         )
         guard !Task.isCancelled, lastLoadedVideoId == videoId else { return false }
         var coverURL: URL?
         if let resolved,
            TextMatch.recordingsMatch(resolved.title, title),
            TextMatch.artistsMatch(resolved.artist, artist) {
-            let albumMatches = MusicArtworkSelectionPolicy.matchesRequestedRelease(
+            // Cover art belongs to the recording even when the album name
+            // differs (single vs deluxe, regional edition, compilation).
+            // Only the text metadata is gated by an album match.
+            coverURL = resolved.artworkURL
+            if MusicArtworkSelectionPolicy.matchesRequestedRelease(
                 requested: album, candidate: resolved.album
-            )
-            // Never replace a known album cover with a same-named single.
-            if album?.isEmpty != false || albumMatches {
-                coverURL = resolved.artworkURL
-            }
-            if albumMatches {
+            ) {
                 acceptResolvedMetadata(resolved, videoId: videoId, replaceExisting: true)
             }
         }
