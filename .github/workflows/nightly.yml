@@ -60,6 +60,9 @@ jobs:
       - name: Compile and run playback event policy checks
         run: bash scripts/test-playback-events.sh
 
+      - name: Compile and run playlist CSV importer checks
+        run: bash scripts/test-playlist-import.sh
+
       - name: Validate logging and source-scoped playback before IPA
         run: |
           bash scripts/test-apollo-log-session.sh

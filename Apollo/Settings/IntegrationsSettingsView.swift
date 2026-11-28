@@ -18,8 +18,11 @@ struct IntegrationsSettingsView: View {
                 SettingsNavigationRow("SponsorBlock", icon: "forward.end") {
                     SponsorBlockSettingsView()
                 }
+                SettingsNavigationRow("Import playlist", icon: "square.and.arrow.down") {
+                    PlaylistImportView()
+                }
             } footer: {
-                Text("Connect external services to enhance your experience.")
+                Text("Connect external services and bring your library from other platforms.")
             }
         }
         .navigationTitle("Integrations")
