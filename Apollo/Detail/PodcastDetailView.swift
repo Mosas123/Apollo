@@ -841,9 +841,13 @@ private struct EpisodeRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 12) {
-                AsyncImageView(url: PodcastEpisodeArtwork.url(
-                    episode: episode.thumbnailUrl, show: showArtworkURL
-                ))
+                SmartArtwork(
+                    url: PodcastEpisodeArtwork.url(
+                        episode: episode.thumbnailUrl,
+                        show: showArtworkURL
+                    ),
+                    subject: .podcast(show: episode.artists.first?.name ?? "")
+                )
                     .frame(width: 72, height: 72)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .onTapGesture(perform: onTap)

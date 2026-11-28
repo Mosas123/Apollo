@@ -63,6 +63,9 @@ jobs:
       - name: Compile and run playlist CSV importer checks
         run: bash scripts/test-playlist-import.sh
 
+      - name: Compile and run SponsorBlock source checks
+        run: bash scripts/test-sponsorblock-source-scope.sh
+
       - name: Validate logging and source-scoped playback before IPA
         run: |
           bash scripts/test-apollo-log-session.sh

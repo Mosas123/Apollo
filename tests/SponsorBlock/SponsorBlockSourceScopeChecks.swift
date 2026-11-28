@@ -42,6 +42,15 @@ struct SponsorBlockSourceScopeChecks {
         precondition(!SponsorBlockSkipPolicy.shouldSkip(
             start: 50, end: 50, position: 50, skipIntroAtStart: true
         ))
+        // A podcast sponsor can start at 0 and be longer than 25 s.
+        precondition(SponsorBlockSkipPolicy.shouldSkip(
+            start: 0, end: 40, position: 2,
+            skipIntroAtStart: false, allowAnyStartSegment: true
+        ))
+        precondition(!SponsorBlockSkipPolicy.shouldSkip(
+            start: 0, end: 40, position: 2,
+            skipIntroAtStart: false, allowAnyStartSegment: false
+        ))
         print("SponsorBlock source provenance scope checks passed")
     }
 }

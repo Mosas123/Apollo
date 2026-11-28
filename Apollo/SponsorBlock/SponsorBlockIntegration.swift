@@ -38,6 +38,7 @@ final class SponsorBlockIntegration {
     private struct Segment: Sendable {
         let start: Double
         let end: Double
+        let category: String
     }
 
     private var videoId: String?
@@ -69,7 +70,9 @@ final class SponsorBlockIntegration {
             return 0
         }
         guard SponsorBlock.isEnabled,
-              let first = found.min(by: { $0.start < $1.start }),
+              let first = found
+                  .filter({ $0.category == "music_offtopic" })
+                  .min(by: { $0.start < $1.start }),
               first.start < 0.5,
               first.end <= 25
         else { return 0 }
@@ -79,9 +82,9 @@ final class SponsorBlockIntegration {
     /// Called by NowPlaying's timer after it updates the position.
     func tick() {
         let nowPlaying = NowPlaying.shared
-        // Podcast episodes have their own editorial timeline and resume
-        // position; don't apply SponsorBlock music/video offsets to them.
-        guard nowPlaying.playbackKind == .music,
+        // Podcasts only participate when their audio is the YouTube carrier;
+        // RSS audio has a different ad layout and must never be seeked.
+        guard nowPlaying.playbackKind == .music || nowPlaying.playbackKind == .podcast,
               SponsorBlock.isEnabled,
               let id = nowPlaying.videoId else { return }
         if id != videoId {
@@ -110,17 +113,22 @@ final class SponsorBlockIntegration {
         let player = PlayerController.shared
         guard player.currentVideoId == id, player.pendingVideoId == nil else { return }
         let position = nowPlaying.currentTime
-        for (index, segment) in segments.enumerated() where !skipped.contains(index) {
+        let allowedCategories: Set<String> = nowPlaying.playbackKind == .podcast
+            ? ["sponsor", "selfpromo"]
+            : ["music_offtopic"]
+        for (index, segment) in segments.enumerated()
+        where !skipped.contains(index) && allowedCategories.contains(segment.category) {
             guard SponsorBlockSkipPolicy.shouldSkip(
                 start: segment.start,
                 end: segment.end,
                 position: position,
-                skipIntroAtStart: SponsorBlock.skipsIntroAtStart
+                skipIntroAtStart: SponsorBlock.skipsIntroAtStart,
+                allowAnyStartSegment: nowPlaying.playbackKind == .podcast
             ) else { continue }
             skipped.insert(index)
             Log.sponsorBlock.notice(
-                "musicOfftopic seek source=YouTube start=\(segment.start) "
-                    + "end=\(segment.end) observed=\(position)"
+                "SponsorBlock seek category=\(segment.category) source=YouTube "
+                    + "start=\(segment.start) end=\(segment.end) observed=\(position)"
             )
             player.seek(to: segment.end)
             return
@@ -179,7 +187,7 @@ final class SponsorBlockIntegration {
             .joined()
         var components = URLComponents(string: "https://sponsor.ajay.app/api/skipSegments/\(hash.prefix(4))")
         components?.queryItems = [
-            URLQueryItem(name: "categories", value: "[\"music_offtopic\"]"),
+            URLQueryItem(name: "categories", value: "[\"music_offtopic\",\"sponsor\",\"selfpromo\"]"),
             URLQueryItem(name: "actionTypes", value: "[\"skip\"]")
         ]
         guard let url = components?.url else {
@@ -200,14 +208,15 @@ final class SponsorBlockIntegration {
             }
             let videos = try JSONDecoder().decode([VideoSegments].self, from: data)
             guard let video = videos.first(where: { $0.videoID == videoId }) else { return [] }
+            let allowed: Set<String> = ["music_offtopic", "sponsor", "selfpromo"]
             return video.segments
             .filter {
-                $0.category == "music_offtopic"
+                allowed.contains($0.category)
                     && ($0.actionType ?? "skip") == "skip"
                     && $0.segment.count == 2
                     && $0.segment[1] > $0.segment[0]
             }
-            .map { Segment(start: $0.segment[0], end: $0.segment[1]) }
+            .map { Segment(start: $0.segment[0], end: $0.segment[1], category: $0.category) }
             .sorted { $0.start < $1.start }
         } catch {
             Log.sponsorBlock.error("SponsorBlock fetch failed videoId=\(videoId): \(error.localizedDescription)")

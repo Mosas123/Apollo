@@ -14,7 +14,8 @@ struct SongArtworkView: View {
     }
 
     private var needsVerifiedCover: Bool {
-        MusicPlaybackIdentity.isExternal(song.videoId)
+        song.contentKind == .podcast || song.contentKind == .episode
+            || MusicPlaybackIdentity.isExternal(song.videoId)
             || MusicArtworkSelectionPolicy.shouldResolveVerifiedCover(
                 thumbnailURL: song.thumbnailUrl,
                 isVideo: song.isVideo,
@@ -40,10 +41,8 @@ struct SongArtworkView: View {
                 resolvedURL = nil
                 resolvedKey = taskKey
                 if song.contentKind == .episode || song.contentKind == .podcast {
-                    // Every episode should show the official show cover even
-                    // when the Spotify episode row has no artwork of its own.
-                    let existing = song.thumbnailUrl?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                    guard existing.isEmpty else { return }
+                    // Every episode must show the official show cover, even
+                    // when the row has a video frame or a missing thumbnail.
                     let show = song.artists.first?.name ?? song.title
                     guard !show.isEmpty else { return }
                     let artwork = await PodcastAudioResolver.shared.artwork(for: show)

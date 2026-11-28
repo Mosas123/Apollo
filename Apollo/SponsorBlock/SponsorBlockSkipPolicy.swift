@@ -22,14 +22,18 @@ enum SponsorBlockSkipPolicy {
         start: Double,
         end: Double,
         position: Double,
-        skipIntroAtStart: Bool
+        skipIntroAtStart: Bool,
+        allowAnyStartSegment: Bool = false
     ) -> Bool {
         guard start.isFinite, end.isFinite, position.isFinite,
               start >= 0, end > start else { return false }
         if start < 0.5 {
             // Music intro boundaries can be inaccurate. Never skip these
             // without consent, and cap an opted-in intro at 25 seconds.
-            guard skipIntroAtStart, end <= 25 else { return false }
+            // A podcast sponsor may legitimately start at 0 and be longer.
+            if !allowAnyStartSegment {
+                guard skipIntroAtStart, end <= 25 else { return false }
+            }
         }
         return position >= start - 0.25 && position < end - 1
     }
