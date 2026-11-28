@@ -65,6 +65,7 @@ struct PlaylistImportService: Sendable {
         }
 
         guard !songs.isEmpty else { throw PlaylistImportError.noMatches }
+        let importedSongs = songs
 
         let playlistID = UUID().uuidString
         let playlist = PlaylistEntity(
@@ -74,13 +75,13 @@ struct PlaylistImportService: Sendable {
             thumbnailUrl: songs.first?.thumbnailUrl,
             isEditable: true,
             bookmarkedAt: Date(),
-            remoteSongCount: songs.count
+            remoteSongCount: importedSongs.count
         )
 
         do {
             try await DatabaseService.shared.write { db in
                 try playlist.save(db)
-                for (position, song) in songs.enumerated() {
+                for (position, song) in importedSongs.enumerated() {
                     let existing = try SongEntity.fetchOne(db, key: song.videoId)
                     let entity = SongEntity.merging(
                         existing: existing,
@@ -110,7 +111,7 @@ struct PlaylistImportService: Sendable {
         return PlaylistImportSummary(
             playlistID: playlistID,
             playlistName: file.name,
-            imported: songs.count,
+            imported: importedSongs.count,
             skipped: skipped
         )
     }
