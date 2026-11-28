@@ -2,6 +2,12 @@
 
 A free and open source music and podcast player for iOS.
 
+## Import playlists
+
+Settings → Integrations → **Import playlist** accepts CSV files from [Exportify](https://exportify.app) (Spotify) or any export with song title and artist columns. Apollo creates a local playlist and matches each row against its catalogue; nothing is uploaded.
+
+For Apple Music or YouTube Music, move the playlist to Spotify with a free transfer service first, then export it with Exportify.
+
 ## Features
 
 - No ads
