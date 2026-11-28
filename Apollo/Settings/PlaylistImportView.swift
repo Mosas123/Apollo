@@ -54,12 +54,20 @@ struct PlaylistImportView: View {
         .navigationBarTitleDisplayMode(.inline)
         .fileImporter(
             isPresented: $isPickingFile,
-            allowedContentTypes: [.commaSeparatedText, .plainText],
+            allowedContentTypes: csvTypes,
             allowsMultipleSelection: false
         ) { result in
             handle(result)
         }
         .miniPlayerTracksScroll()
+    }
+
+    private var csvTypes: [UTType] {
+        var types: [UTType] = [.commaSeparatedText, .text, .data]
+        if let csv = UTType(filenameExtension: "csv"), !types.contains(csv) {
+            types.insert(csv, at: 0)
+        }
+        return types
     }
 
     private func handle(_ result: Result<[URL], Error>) {
@@ -68,6 +76,11 @@ struct PlaylistImportView: View {
             errorMessage = error.localizedDescription
         case .success(let urls):
             guard let url = urls.first else { return }
+            let ext = url.pathExtension.lowercased()
+            guard ext == "csv" || ext == "txt" || ext.isEmpty else {
+                errorMessage = "Elige un archivo CSV de una sola playlist. Si Exportify descargó un ZIP, descomprímelo primero."
+                return
+            }
             isImporting = true
             errorMessage = nil
             summary = nil
