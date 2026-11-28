@@ -314,16 +314,9 @@ struct QueueView<ProgressSlider: View>: View {
             }
             let nextIndex = min(index, np.queueSongs.count - 1)
             np.queueIndex = nextIndex
-            let song = np.queueSongs[nextIndex]
-            np.bumpPlaybackIntent()
-            let intent = np.playbackGeneration
-            np.update(with: song)
-            loggedTask(Log.nowPlaying, "removeSong auto-play failed") {
-                try await PlaybackManager.shared.resolveAndPlay(
-                    videoId: song.videoId,
-                    intent: intent
-                )
-            }
+            // Handles Spotify catalogue ids instead of asking YouTube to
+            // resolve spotify:track:… as if it were a video.
+            np.playCurrentSong(logContext: "queueRemove")
         } else {
             np.repairQueueIndex()
         }

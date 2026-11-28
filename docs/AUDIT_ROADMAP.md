@@ -10,7 +10,7 @@ tests de CI y una IPA; no se marca como hecha sin probarla en dispositivo.
 - [x] Saneado del nombre de archivo de descargas (título y videoId con token base64url).
 - [x] Alinear `IPHONEOS_DEPLOYMENT_TARGET` 26.2 con `minOSVersion`/README (metadata a 26.2).
 - [x] Evitar que `SearchService` cancele búsquedas de otros consumidores.
-- [ ] IDs Spotify en todas las rutas de cola (quitar actual, autoplay, preload).
+- [x] IDs Spotify en todas las rutas de cola (quitar actual, autoplay, surprise; ahora pasan por `playCurrentSong`).
 - [ ] JioSaavn fuera del camino crítico o en paralelo con YouTube.
 
 ## P1 — playback y datos

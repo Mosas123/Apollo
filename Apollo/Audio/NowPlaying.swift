@@ -857,15 +857,10 @@ final class NowPlaying {
             queueIndex = 0
             isShuffleOn = false
             queueDidChange()
-            let first = items[0]
-            bumpPlaybackIntent()
-            let intent = playbackGeneration
-            update(with: first)
-            try? await PlaybackManager.shared.resolveAndPlay(
-                videoId: first.videoId,
-                intent: intent
-            )
-            persistQueueState()
+            // playCurrentSong owns Spotify→carrier resolution and the
+            // generation fence. Calling resolveAndPlay here would send a
+            // spotify:track id straight to the YouTube resolver.
+            self.playCurrentSong(logContext: "continueSurprise")
         }
     }
 
@@ -889,15 +884,8 @@ final class NowPlaying {
                 self.queueIndex = 0
                 self.isShuffleOn = false
                 self.queueDidChange()
-                let first = songs[0]
-                bumpPlaybackIntent()
-                let intent = playbackGeneration
-                update(with: first)
-                try await PlaybackManager.shared.resolveAndPlay(
-                    videoId: first.videoId,
-                    intent: intent
-                )
-                self.persistQueueState()
+                // Same Spotify-safe path as every other queue start.
+                self.playCurrentSong(logContext: "autoplaySimilar")
             } catch {
                 guard generation == playbackGeneration else { return }
                 Log.nowPlaying.error("Autoplay similar failed: \(error)")
