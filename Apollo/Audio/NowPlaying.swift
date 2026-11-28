@@ -805,7 +805,8 @@ final class NowPlaying {
         }
         if let finishedId = videoId,
            duration >= 600 || musicVideoType == "MUSIC_VIDEO_TYPE_PODCAST_EPISODE" {
-            Task { await EpisodePlaybackStore.shared.markPlayed(videoId: finishedId) }
+            let episodeKey = queueSongs.first { $0.videoId == finishedId }?.catalogID ?? finishedId
+            Task { await EpisodePlaybackStore.shared.markPlayed(videoId: episodeKey) }
         }
         // EOF can arrive after a user paused or while Apolo was preparing
         // the next item. It must never consume the queue behind a Pause.
@@ -1465,7 +1466,10 @@ final class NowPlaying {
             refreshRadioMetadataIfNeeded()
         }
         if let videoId, duration >= 600 || musicVideoType == "MUSIC_VIDEO_TYPE_PODCAST_EPISODE" {
-            let vid = videoId
+            // Progress/played rows are keyed by the catalogue episode id. The
+            // playable carrier may be podcast:<url> or a YouTube id, so using
+            // videoId here would never be found by PodcastDetailView again.
+            let vid = queueSongs.first { $0.videoId == videoId }?.catalogID ?? videoId
             let pos = currentTime
             let dur = duration
             Task {
