@@ -38,13 +38,18 @@ enum AddonSourceResolver {
         let artist: String
         let album: String?
         let duration: Int?
+        let isExplicit: Bool
         let queries: [String]
     }
 
     /// Every addon entry point (search, album cache, lossless and AAC) must
     /// pass the same identity test before a URL or quality tier is considered.
     private static func verified(_ track: AddonTrack, for criteria: Criteria) -> Bool {
-        TextMatch.verifiedAudioSource(
+        guard MusicVersionPolicy.isCompatible(
+            candidateTitle: track.title,
+            requestedExplicit: criteria.isExplicit
+        ) else { return false }
+        return TextMatch.verifiedAudioSource(
             wantedTitle: criteria.title,
             wantedArtist: criteria.artist,
             wantedAlbum: criteria.album,
@@ -85,6 +90,7 @@ enum AddonSourceResolver {
             artist: artist,
             album: song.album,
             duration: song.duration > 0 ? song.duration : nil,
+            isExplicit: song.isExplicit,
             queries: queries
         )
 
@@ -196,6 +202,7 @@ enum AddonSourceResolver {
             artist: artist,
             album: song.album,
             duration: song.duration > 0 ? song.duration : nil,
+            isExplicit: song.isExplicit,
             queries: queries
         )
 

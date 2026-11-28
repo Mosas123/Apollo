@@ -153,6 +153,10 @@ final class SpotifyAudioResolver {
 
         let registry = AudioProviderRegistry.forQuality(SettingsStore.shared.activeStreamingMode)
         guard let match = await registry.bestCandidate(for: song, isrc: isrc) else { return nil }
+        guard MusicVersionPolicy.isCompatible(
+            candidateTitle: match.song.title,
+            requestedExplicit: song.isExplicit
+        ) else { return nil }
 
         var resolved = match.song
         resolved.title = song.title
@@ -178,6 +182,14 @@ final class SpotifyAudioResolver {
         let wantedArtist = song.artists.first.map { TextMatch.normalizeArtist($0.name) } ?? ""
 
         let scored = candidates.compactMap { candidate -> (SongItem, Int)? in
+            // Never let a labelled clean carrier satisfy an explicit track (or
+            // the reverse). Unlabelled uploads stay eligible because most
+            // official YouTube audio has no version tag.
+            guard MusicVersionPolicy.isCompatible(
+                candidateTitle: candidate.title,
+                requestedExplicit: song.isExplicit
+            ) else { return nil }
+
             let title = TextMatch.normalizeTitle(candidate.title)
             let artist = candidate.artists.first.map { TextMatch.normalizeArtist($0.name) } ?? ""
 
@@ -204,6 +216,10 @@ final class SpotifyAudioResolver {
             }
 
             if candidate.isVideo == true { score -= 5 }
+            score += MusicVersionPolicy.scoreBonus(
+                candidateTitle: candidate.title,
+                requestedExplicit: song.isExplicit
+            )
             return (candidate, score)
         }
 

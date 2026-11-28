@@ -15,4 +15,16 @@ swiftc \
   "$ROOT/Apollo/Radio/StationIntentMix.swift" \
   "$ROOT/tests/Radio/StationIntentMixChecks.swift" \
   -o "$OUT.intent"
+
+swiftc \
+  "$ROOT/Apollo/Core/Metadata/MusicVersionPolicy.swift" \
+  "$ROOT/tests/Metadata/MusicVersionPolicyChecks.swift" \
+  -o "$OUT.version"
+"$OUT.version"
 "$OUT.intent"
+
+swiftc \
+  "$ROOT/Apollo/Core/Metadata/MusicVersionPolicy.swift" \
+  "$ROOT/tests/Metadata/MusicVersionPolicyChecks.swift" \
+  -o "$OUT.version"
+"$OUT.version"
