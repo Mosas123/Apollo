@@ -51,9 +51,13 @@ enum PlaybackQueue {
             play([song], log: Log.player, context: "Start radio seed")
         }
 
+        // If the user picks another song while the station is being built,
+        // its generation changes and the late station must not replace it.
+        let generation = NowPlaying.shared.playbackGeneration
         Task {
             let station = await StationService.shared.radio(for: song, options: options)
-            guard !station.isEmpty, isRadioSeedCurrent(song) else { return }
+            guard generation == NowPlaying.shared.playbackGeneration,
+                  !station.isEmpty, isRadioSeedCurrent(song) else { return }
 
             let seed = NowPlaying.shared.queueSongs.first ?? song
             let seedKey = seed.catalogID ?? seed.videoId

@@ -1290,7 +1290,8 @@ actor PlaybackManager {
         // No addon preference: Auto/High still search the verified 320 pool
         // (JioSaavn / AAC 320) before YouTube.
         if addonPreference == nil, prefers320Lossy,
-           let lossy = await resolveLossyBest(videoId: videoId) {
+           await StreamCache.shared.get(videoId: videoId) == nil,
+           let lossy = await resolveLossyBestWithinBudget(videoId: videoId, seconds: 1.5) {
             if upgradeResultCache.count >= 100 {
                 upgradeResultCache.removeAll(keepingCapacity: true)
             }

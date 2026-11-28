@@ -11,13 +11,13 @@ tests de CI y una IPA; no se marca como hecha sin probarla en dispositivo.
 - [x] Alinear `IPHONEOS_DEPLOYMENT_TARGET` 26.2 con `minOSVersion`/README (metadata a 26.2).
 - [x] Evitar que `SearchService` cancele búsquedas de otros consumidores.
 - [x] IDs Spotify en todas las rutas de cola (quitar actual, autoplay, surprise; ahora pasan por `playCurrentSong`).
-- [ ] JioSaavn fuera del camino crítico o en paralelo con YouTube.
+- [~] JioSaavn: caché de stream antes y presupuesto de 1.5 s; el resto pasa a YouTube y se mejora en background.
 
 ## P1 — playback y datos
 
 - [ ] Carrera RSS/YouTube: no esperar al perdedor; no cachear cancelaciones.
-- [ ] `startRadio` no debe pisar una cola que ya está reproduciendo.
-- [ ] `disableShuffle` debe restaurar el índice correcto.
+- [x] `startRadio` no pisa una cola si cambia la generación.
+- [x] `disableShuffle` restaura por catalogID o videoId.
 - [ ] Evitar doble conteo en upgrade en caliente / Apolo→mpv.
 - [ ] `SponsorBlockIntegration`: resetear `skipped` al repetir videoId.
 - [ ] Podcast: `bestEpisode` con desempate y tolerancia de duración estricta.

@@ -382,11 +382,14 @@ final class NowPlaying {
     func disableShuffle() {
         guard queueSongs.indices.contains(queueIndex) else { return }
         if let orig = originalQueue {
-            let currentVideoId = queueSongs[queueIndex].videoId
+            let current = queueSongs[queueIndex]
+            let currentKey = current.catalogID ?? current.videoId
             queueSongs = orig
-            // The shuffled index is meaningless against the original array
-            // (radio appends, deletes and reorders change lengths).
-            let restored = orig.firstIndex(where: { $0.videoId == currentVideoId }) ?? queueIndex
+            // Match by catalogue identity too: Spotify rows are replaced by
+            // their playable carrier, so videoId alone no longer matches.
+            let restored = orig.firstIndex {
+                ($0.catalogID ?? $0.videoId) == currentKey || $0.videoId == current.videoId
+            } ?? queueIndex
             queueIndex = min(restored, max(orig.count - 1, 0))
         }
         originalQueue = nil
