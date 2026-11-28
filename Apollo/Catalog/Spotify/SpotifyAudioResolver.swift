@@ -133,6 +133,15 @@ final class SpotifyAudioResolver {
         resolved.album = song.album
         resolved.albumId = song.albumId
         resolved.duration = song.duration > 0 ? song.duration : best.duration
+        // The playable carrier is usually a YouTube upload, but the visible
+        // artwork must stay the catalogue cover. Otherwise the player shows a
+        // 480p video still instead of the release art.
+        resolved.thumbnailUrl = song.thumbnailUrl ?? best.thumbnailUrl
+        resolved.catalogID = song.catalogID
+        resolved.isrc = song.isrc ?? best.isrc
+        resolved.isExplicit = song.isExplicit
+        resolved.contentKind = song.contentKind ?? best.contentKind
+        resolved.recordingPreference = song.recordingPreference ?? best.recordingPreference
         resolved.thumbnailUrl = song.thumbnailUrl
         resolved.isExplicit = song.isExplicit
         resolved.viewCount = nil

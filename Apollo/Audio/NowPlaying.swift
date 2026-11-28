@@ -1119,13 +1119,13 @@ final class NowPlaying {
         let duration = identity.durationSeconds
         guard !title.isEmpty else { return false }
         let resolved = await Self.resolveMetadataWithTimeout(
-            title: title, artist: artist, album: album, duration: duration, seconds: 2.5
+            title: title, artist: artist, album: album, duration: duration, seconds: 4
         )
         guard !Task.isCancelled, lastLoadedVideoId == videoId else { return false }
         var coverURL: URL?
         if let resolved,
            TextMatch.recordingsMatch(resolved.title, title),
-           TextMatch.normalizeArtist(resolved.artist) == TextMatch.normalizeArtist(artist),
+           TextMatch.artistsMatch(resolved.artist, artist),
            MusicArtworkSelectionPolicy.matchesRequestedRelease(
                requested: album, candidate: resolved.album
            ) {

@@ -161,7 +161,9 @@ enum MusicArtworkSelectionPolicy {
     static func isSpotifyArtwork(_ thumbnailURL: String?) -> Bool {
         guard let thumbnailURL, let url = URL(string: thumbnailURL),
               let host = url.host?.lowercased() else { return false }
-        return host == "i.scdn.co" || host.hasSuffix(".scdn.co")
+        return host == "i.scdn.co"
+            || host.hasSuffix(".scdn.co")
+            || host.hasSuffix(".spotifycdn.com")
     }
 
     /// A known official ATV/release image can be rendered immediately.

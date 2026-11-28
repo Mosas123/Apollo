@@ -65,8 +65,27 @@ enum MetadataResolver {
         let value = artwork.map {
             ResolvedMetadata(title: title, artist: artist, album: title, year: nil, artworkURL: $0, source: "iTunes")
         }
-        await MetadataCache.shared.store(key, value)
-        return artwork
+        if let value {
+            await MetadataCache.shared.store(key, value)
+            return artwork
+        }
+
+        // Apple can miss regional or collaborative releases. Deezer's 1000 px
+        // album art is the next best source for the large player canvas.
+        if let fallback = await deezerAlbumArtwork(title: title, artist: artist) {
+            let fallbackValue = ResolvedMetadata(
+                title: title,
+                artist: artist,
+                album: title,
+                year: nil,
+                artworkURL: fallback,
+                source: "Deezer"
+            )
+            await MetadataCache.shared.store(key, fallbackValue)
+            return fallback
+        }
+        await MetadataCache.shared.store(key, nil)
+        return nil
     }
 
     private static func cacheKey(title: String, artist: String) -> String {
@@ -212,6 +231,37 @@ enum MetadataResolver {
             let duration: Int?
         }
         let data: [Track]
+    }
+
+    private struct DeezerAlbumResponse: Decodable {
+        struct Album: Decodable {
+            struct Artist: Decodable { let name: String? }
+            let title: String?
+            let artist: Artist?
+            let cover_xl: String?
+            let cover_big: String?
+        }
+        let data: [Album]
+    }
+
+    private static func deezerAlbumArtwork(title: String, artist: String) async -> URL? {
+        var components = URLComponents(string: "https://api.deezer.com/search/album")
+        components?.queryItems = [
+            URLQueryItem(name: "q", value: "\(artist) \(title)"),
+            URLQueryItem(name: "limit", value: "10")
+        ]
+        guard let url = components?.url,
+              let response: DeezerAlbumResponse = try? await decode(url, headers: [:]),
+              let match = response.data.first(where: { album in
+                  guard let albumTitle = album.title else { return false }
+                  return MusicArtworkSelectionPolicy.matchesRequestedRelease(
+                      requested: title,
+                      candidate: albumTitle
+                  ) && TextMatch.artistsMatch(album.artist?.name ?? "", artist)
+              }) else {
+            return nil
+        }
+        return (match.cover_xl ?? match.cover_big).flatMap(URL.init(string:))
     }
 
     private static func deezer(title: String, artist: String, album: String?, duration: Int?) async -> ResolvedMetadata? {
