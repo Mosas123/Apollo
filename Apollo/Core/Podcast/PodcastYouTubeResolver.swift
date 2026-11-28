@@ -7,7 +7,7 @@ import Foundation
 actor PodcastYouTubeResolver {
     static let shared = PodcastYouTubeResolver()
 
-    private struct Candidate {
+    private struct Candidate: Sendable {
         let videoId: String
         let title: String
         let channel: String
@@ -45,18 +45,7 @@ actor PodcastYouTubeResolver {
             "\(show) podcast \(song.title)"
         ].filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
 
-        var candidates: [Candidate] = []
-        for query in queries {
-            guard !Task.isCancelled else { break }
-            guard let json = try? await SearchService.shared.search(query: query, client: .web),
-                  !Task.isCancelled else { continue }
-            for video in Self.videoRenderers(in: json) {
-                if let candidate = Self.candidate(from: video, show: show, song: song) {
-                    candidates.append(candidate)
-                }
-            }
-            if candidates.contains(where: { $0.score >= 120 }) { break }
-        }
+        let candidates = await Self.searchCandidates(show: show, song: song, queries: queries)
 
         guard let best = candidates.max(by: { $0.score < $1.score }), best.score >= 70 else {
             cache[cacheKey] = Entry(song: nil, at: Date(), negative: true)
@@ -69,6 +58,30 @@ actor PodcastYouTubeResolver {
         resolved.sourceAttribution = "Podcast audio · YouTube"
         cache[cacheKey] = Entry(song: resolved, at: Date(), negative: false)
         return resolved
+    }
+
+    /// SearchService is MainActor-isolated and returns a non-Sendable JSON
+    /// dictionary. Parse it on the main actor and only hand the Sendable
+    /// candidates back to this resolver.
+    @MainActor
+    private static func searchCandidates(
+        show: String,
+        song: SongItem,
+        queries: [String]
+    ) async -> [Candidate] {
+        var candidates: [Candidate] = []
+        for query in queries {
+            guard !Task.isCancelled else { break }
+            guard let json = try? await SearchService.shared.search(query: query, client: .web),
+                  !Task.isCancelled else { continue }
+            for video in Self.videoRenderers(in: json) {
+                if let candidate = Self.candidate(from: video, show: show, song: song) {
+                    candidates.append(candidate)
+                }
+            }
+            if candidates.contains(where: { $0.score >= 120 }) { break }
+        }
+        return candidates
     }
 
     private static func candidate(from video: [String: Any], show: String, song: SongItem) -> Candidate? {
