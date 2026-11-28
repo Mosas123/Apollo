@@ -155,6 +155,15 @@ enum MusicArtworkSelectionPolicy {
         return host == "ytimg.com" || host.hasSuffix(".ytimg.com")
     }
 
+    /// Spotify serves 640 px covers/avatars. They are fine for rows but look
+    /// soft on the player and artist hero, so prefer a verified Apple cover
+    /// when the catalogue can match the recording.
+    static func isSpotifyArtwork(_ thumbnailURL: String?) -> Bool {
+        guard let thumbnailURL, let url = URL(string: thumbnailURL),
+              let host = url.host?.lowercased() else { return false }
+        return host == "i.scdn.co" || host.hasSuffix(".scdn.co")
+    }
+
     /// A known official ATV/release image can be rendered immediately.
     /// Video stills and unknown covers should FIRST try a catalogue-verified
     /// album cover, but retain the original as fallback when offline.
@@ -167,7 +176,7 @@ enum MusicArtworkSelectionPolicy {
             return true
         }
         guard let thumbnailURL, !thumbnailURL.isEmpty else { return true }
-        return isVideoThumbnail(thumbnailURL)
+        return isVideoThumbnail(thumbnailURL) || isSpotifyArtwork(thumbnailURL)
     }
 
     static func matchesRequestedRelease(

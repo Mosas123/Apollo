@@ -67,6 +67,16 @@ enum ArtistImageResolver {
         let key = "spotify-first-v1|\(artistID ?? "")|\(normalizedName)|\(tracks.sorted().joined(separator: "|"))"
         if let cached = await Cache.shared.entry(key) { return cached.url }
 
+        // Resolve a Spotify artist by id first so the page header, cards and
+        // song rows all use the exact same official profile photo.
+        if let artistID, SpotifyCatalogID.isSpotify(artistID),
+           let rawID = SpotifyCatalogID.rawID(artistID),
+           let spotifyByID = await spotifyArtistImage(id: rawID) {
+            guard !Task.isCancelled else { return nil }
+            await Cache.shared.store(key, spotifyByID)
+            return spotifyByID
+        }
+
         if let spotify = await spotifyImage(name: name) {
             guard !Task.isCancelled else { return nil }
             await Cache.shared.store(key, spotify)
@@ -89,6 +99,10 @@ enum ArtistImageResolver {
     }
 
     // MARK: - Spotify first
+
+    private static func spotifyArtistImage(id: String) async -> URL? {
+        try? await SpotifyStationSource().snapshot(artistID: id).artist.artworkURL
+    }
 
     private static func spotifyImage(name: String) async -> URL? {
         guard let results = try? await SpotifyCatalogProvider().search(name, limit: 6) else {
